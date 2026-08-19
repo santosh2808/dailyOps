@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# Build
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# macOS
+.DS_Store

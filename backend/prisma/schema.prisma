@@ -1,0 +1,616 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  // Legacy free-text role label — left in place and still populated/returned
+  // exactly as before (see AuthService/JwtStrategy) so nothing that already
+  // reads it breaks. Real authorization now flows through `roles` below
+  // (UserRole -> Role -> RolePermission -> Permission), never through this
+  // string.
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+
+  // Additive for Enterprise RBAC.
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  roles        UserRole[]
+  isActive     Boolean     @default(true)
+  updatedAt    DateTime    @updatedAt
+
+  // Login credential alongside `email` — AuthService accepts either as the
+  // login identifier (see LoginDto). Always stored lowercased, same
+  // convention as `email`.
+  username String @unique
+
+  // Set to true whenever an Administrator resets this user's password (or
+  // when the user is first created); cleared only by the user successfully
+  // completing POST /auth/change-password themselves. ProtectedRoute on the
+  // frontend redirects to /change-password for as long as this is true,
+  // regardless of what URL is requested.
+  mustChangePassword Boolean @default(false)
+}
+
+// Enterprise RBAC — additive models only; nothing above this comment was
+// restructured. A user can hold multiple Roles (UserRole is the join table);
+// a Role can hold multiple Permissions (RolePermission is the join table).
+// Authorization is always resolved as the union of permissions across every
+// Role a user currently holds — there is no special-cased "admin" bypass
+// anywhere in guard/service code. The Administrator role simply gets every
+// Permission row assigned to it via RolePermission at seed time, like any
+// other role.
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+// One row per (module, action) — e.g. (Lead, View), (Quotation, Approve).
+// `code` is the lowercased "module.action" string that the backend
+// PermissionsGuard and the frontend hasPermission(module, action) helper
+// both match against; `module`/`action` are kept as their own columns (as
+// specified) for display in the Permissions/Role screens.
+model Permission {
+  id          String           @id @default(uuid())
+  module      String
+  action      String
+  code        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  companyName   String
+  contactPerson String
+  phone         String
+  email         String?
+  gstNumber     String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Back-relations required by Prisma for Quotation.customer,
+  // SalesOrder.customer, ProformaInvoice.customer, and
+  // JobExecutionOrder.customer. Additive only — no existing Customer fields,
+  // validation, or behavior changed.
+  quotations          Quotation[]
+  salesOrders         SalesOrder[]
+  proformaInvoices    ProformaInvoice[]
+  jobExecutionOrders  JobExecutionOrder[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  sku         String?
+  description String?
+  price       Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Back-relations required by Prisma for LeadProduct.product,
+  // QuotationItem.product, and SalesOrderItem.product. Additive only — no
+  // existing Product fields, validation, or behavior changed.
+  leadProducts     LeadProduct[]
+  quotationItems   QuotationItem[]
+  salesOrderItems  SalesOrderItem[]
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  SITE_VISIT
+  QUOTATION_SENT
+  NEGOTIATION
+  WON
+  LOST
+  NOT_INTERESTED
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum LeadSource {
+  WEBSITE
+  LINKEDIN
+  REFERENCE
+  TRADE_SHOW
+  COLD_CALL
+  DISTRIBUTOR
+  WALK_IN
+  EMAIL
+  PHONE
+  OTHER
+}
+
+model Lead {
+  id                String       @id @default(uuid())
+  leadNumber        String       @unique
+  // Set only by LeadsService.convertToCustomer() when a WON lead is
+  // converted. Plain scalar (no Customer relation) — consistent with how
+  // this schema avoids cross-module FKs unless Prisma requires one.
+  customerId        String?
+  companyName       String
+  contactPerson     String
+  designation       String?
+  email             String?
+  phone             String
+  alternatePhone    String?
+  title             String
+  description       String?
+  status            LeadStatus   @default(NEW)
+  priority          LeadPriority @default(MEDIUM)
+  source            LeadSource   @default(OTHER)
+  estimatedValue    Float?
+  expectedCloseDate DateTime?
+  nextFollowUp      DateTime?
+  // Plain scalar (no User relation) — no user-management module exists yet.
+  assignedTo        String?
+  city              String?
+  state             String?
+  country           String?
+  // Additive column for the Lead Import feature — the import template's
+  // "Industry" column has no home in the pre-existing field list, and
+  // silently dropping user-provided data on import would be unprofessional.
+  // Nullable/optional everywhere (manual Lead creation via the form still
+  // works unchanged without it).
+  industry          String?
+  remarks           String?
+  isConverted       Boolean      @default(false)
+  convertedAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+  products          LeadProduct[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([source])
+  @@index([assignedTo])
+  @@index([deletedAt])
+}
+
+model LeadProduct {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  unitPrice Float?
+  remarks   String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([productId])
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Quotation {
+  id              String          @id @default(uuid())
+  quotationNumber String          @unique
+  customerId      String
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  status          QuotationStatus @default(DRAFT)
+  subtotal        Float           @default(0)
+  gstPercent      Float           @default(18)
+  gstAmount       Float           @default(0)
+  grandTotal      Float           @default(0)
+  validUntil      DateTime?
+  notes           String?
+  terms           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+  items           QuotationItem[]
+
+  // Back-relation required by Prisma for SalesOrder.quotation. Additive
+  // only — a Quotation doesn't otherwise know about the Sales Order module.
+  salesOrder SalesOrder?
+
+  // Back-relation required by Prisma for JobExecutionOrder.quotation.
+  // Additive only — same pattern as `salesOrder` above.
+  jobExecutionOrders JobExecutionOrder[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  description String?
+  quantity    Int       @default(1)
+  unitPrice   Float      @default(0)
+  lineTotal   Float      @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+  @@index([productId])
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  PRODUCTION_STARTED
+  READY_FOR_DISPATCH
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+}
+
+// The Sales Order is the central business document in DailyOps: it is
+// created only from an ACCEPTED Quotation (enforced in
+// SalesOrdersService.create(), not at the schema level), and is the anchor
+// point for downstream documents. Proforma Invoice and JEO (Job Execution
+// Order, the production-floor document, below) are both generated from a
+// Sales Order this same way. Still to come: Material Planning / BOM,
+// Production Tracking, and Dispatch — see the doc comment on
+// JobExecutionOrder for how those are designed to slot in without a
+// database change.
+// No PDF generation is implemented yet — this comment only documents that
+// extension point per "Future Ready" scope (see ProformaInvoice below).
+model SalesOrder {
+  id                  String           @id @default(uuid())
+  salesOrderNumber    String           @unique
+  quotationId         String           @unique
+  quotation           Quotation        @relation(fields: [quotationId], references: [id])
+  customerId          String
+  customer            Customer         @relation(fields: [customerId], references: [id])
+  orderDate           DateTime         @default(now())
+  deliveryDate        DateTime?
+  paymentTerms        String?
+  advancePercentage   Float?
+  status              SalesOrderStatus @default(DRAFT)
+  subtotal            Float            @default(0)
+  discount            Float            @default(0)
+  tax                 Float            @default(0)
+  grandTotal          Float            @default(0)
+  billingAddress      String?
+  shippingAddress     String?
+  specialInstructions String?
+  remarks             String?
+  // Plain scalar (the authenticated user's name from the JWT payload) — no
+  // enforced User relation, consistent with how Lead.assignedTo avoids a
+  // cross-module FK to the Users module.
+  createdBy           String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  deletedAt           DateTime?
+  items               SalesOrderItem[]
+
+  // Back-relations required by Prisma for ProformaInvoice.salesOrder and
+  // JobExecutionOrder.salesOrder. Additive only — no existing SalesOrder
+  // fields, validation, or behavior changed.
+  proformaInvoices    ProformaInvoice[]
+  jobExecutionOrders  JobExecutionOrder[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([quotationId])
+  @@index([deletedAt])
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  description  String?
+  quantity     Int        @default(1)
+  unitPrice    Float      @default(0)
+  discount     Float      @default(0)
+  tax          Float      @default(0)
+  lineTotal    Float      @default(0)
+
+  @@index([salesOrderId])
+  @@index([productId])
+}
+
+enum ProformaInvoiceStatus {
+  DRAFT
+  SENT
+  EXPIRED
+  CANCELLED
+}
+
+// A Proforma Invoice is always machine-generated from an existing
+// SalesOrder (ProformaInvoicesService.create()): customer, and amounts
+// (subtotal/discount/tax/grandTotal) are copied at generation time and
+// never re-entered by hand. There is intentionally no ProformaInvoiceItem
+// table — line items are not duplicated; they are read through the
+// `salesOrder` relation (salesOrder.items) for display, since this exact
+// field list didn't call for a separate item table. One consequence: the
+// displayed item list follows the live Sales Order, not a frozen snapshot
+// (unlike subtotal/discount/tax/grandTotal, which ARE snapshotted columns).
+//
+// Future Ready: PDF generation (Smart Rotamac's existing Proforma Invoice
+// layout) is intentionally NOT implemented here — no layout is hardcoded.
+// The natural extension point is a `GET /api/v1/proforma-invoices/:id/pdf`
+// endpoint added to ProformaInvoicesController, backed by a
+// ProformaInvoicesService.renderPdf(id) method that loads this row (already
+// including everything the layout needs: invoice/customer/amounts/bank
+// details, plus salesOrder.items for line items) and feeds it into a PDF
+// templating step — added later without touching this model.
+model ProformaInvoice {
+  id            String                @id @default(uuid())
+  invoiceNumber String                @unique
+  salesOrderId  String
+  salesOrder    SalesOrder            @relation(fields: [salesOrderId], references: [id])
+  customerId    String
+  customer      Customer              @relation(fields: [customerId], references: [id])
+  invoiceDate   DateTime              @default(now())
+  validUntil    DateTime?
+  subtotal      Float                 @default(0)
+  discount      Float                 @default(0)
+  tax           Float                 @default(0)
+  grandTotal    Float                 @default(0)
+  paymentTerms  String?
+  bankName      String?
+  accountNumber String?
+  ifscCode      String?
+  branch        String?
+  notes         String?
+  status        ProformaInvoiceStatus @default(DRAFT)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([status])
+  @@index([salesOrderId])
+  @@index([customerId])
+}
+
+// Scoped to JobExecutionOrder only (not shared with LeadPriority), the same
+// way ProformaInvoiceStatus/SalesOrderStatus are each scoped to their own
+// model even though the values look similar — keeps this module's priority
+// scale independent from Lead's, so a future change to one never silently
+// changes the other.
+enum JeoPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum JeoStatus {
+  PENDING
+  MATERIAL_READY
+  ASSEMBLY_STARTED
+  QC
+  READY_FOR_DISPATCH
+  COMPLETED
+}
+
+// A Job Execution Order (JEO) is always machine-generated from an existing
+// SalesOrder (JobExecutionOrdersService.create()) — never created by typing
+// customer/product/quotation details by hand. customerId, quotationId, and
+// deliveryDate are copied from the Sales Order at generation time. Like
+// ProformaInvoice, there is intentionally no JobExecutionOrderItem table —
+// products are not duplicated; they are read through the `salesOrder`
+// relation (salesOrder.items) for display. There is also no `deletedAt` on
+// this model, per the given field list, so there is no edit/delete
+// capability for a JEO at all.
+//
+// Future Ready: Material Planning / BOM, Production Tracking, and Dispatch
+// are all designed to attach to this model via new tables referencing
+// `jobExecutionOrderId` (the same additive-FK pattern used throughout this
+// schema) — none of that is implemented here, and no columns were added in
+// anticipation of it, so today's schema doesn't need to change when those
+// modules are eventually built.
+model JobExecutionOrder {
+  id           String      @id @default(uuid())
+  jeoNumber    String      @unique
+  salesOrderId String
+  salesOrder   SalesOrder  @relation(fields: [salesOrderId], references: [id])
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  quotationId  String
+  quotation    Quotation   @relation(fields: [quotationId], references: [id])
+  deliveryDate DateTime?
+  priority     JeoPriority @default(MEDIUM)
+  status       JeoStatus   @default(PENDING)
+  // Plain scalar (no User relation) — same convention as Lead.assignedTo
+  // and SalesOrder.createdBy; no user-management module exists yet.
+  assignedTo   String?
+  remarks      String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // One Production Checklist per JEO, created alongside it.
+  checklist ProductionChecklist?
+
+  @@index([status])
+  @@index([priority])
+  @@index([salesOrderId])
+  @@index([customerId])
+  @@index([quotationId])
+}
+
+// Always created together with its JobExecutionOrder (one row each, all
+// flags false) — never created standalone. Each boolean is an independently
+// toggleable production step; `completedAt` is set once the JEO's status is
+// moved to COMPLETED (see JobExecutionOrdersService.updateStatus()), not
+// automatically inferred from the booleans, so a supervisor always makes
+// the final call rather than the last checkbox silently finishing the job.
+model ProductionChecklist {
+  id                 String            @id @default(uuid())
+  jeoId              String            @unique
+  jeo                JobExecutionOrder @relation(fields: [jeoId], references: [id], onDelete: Cascade)
+  materialIssued     Boolean           @default(false)
+  assemblyStarted    Boolean           @default(false)
+  controllerInstalled Boolean          @default(false)
+  wiringCompleted    Boolean           @default(false)
+  qcPassed           Boolean           @default(false)
+  packed             Boolean           @default(false)
+  readyForDispatch   Boolean           @default(false)
+  completedAt        DateTime?
+}
+
+// Simple lookup table for Material.categoryId — deliberately its own model
+// (rather than a free-text field like Product.category) because the
+// Material Master spec calls for a "Required Category" validation against
+// an actual foreign key, not just a non-empty string.
+model MaterialCategory {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  materials   Material[]
+}
+
+// Simple lookup table for Material.unitId (e.g. "Kg", "Pcs", "Meter").
+model MaterialUnit {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  symbol    String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  materials Material[]
+}
+
+// The Material Master is a standalone catalog entity, following the same
+// isActive-soft-delete convention as Customer/Product (not the
+// deletedAt convention used by Lead/Quotation/SalesOrder), since its given
+// field list includes `isActive` rather than `deletedAt`.
+model Material {
+  id           String            @id @default(uuid())
+  materialCode String            @unique
+  name         String
+  description  String?
+  categoryId   String
+  category     MaterialCategory  @relation(fields: [categoryId], references: [id])
+  unitId       String
+  unit         MaterialUnit      @relation(fields: [unitId], references: [id])
+  // Plain scalars (no Supplier/Warehouse relation) — no Supplier or
+  // Warehouse module exists yet in this schema, the same convention already
+  // used for Lead.assignedTo / SalesOrder.createdBy / JobExecutionOrder.assignedTo.
+  // A future Supplier/Warehouse module could turn these into real relations
+  // without renaming either column.
+  supplierId   String?
+  cost         Float?
+  minimumStock Int               @default(0)
+  maximumStock Int?
+  reorderLevel Int               @default(0)
+  currentStock Int               @default(0)
+  warehouseId  String?
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([categoryId])
+  @@index([unitId])
+  @@index([isActive])
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Supplier Master: a standalone catalog entity, same additive convention as
+// Material Master above — Material.supplierId already anticipated this
+// module as a plain scalar (not a real relation), so no existing Material
+// column changes here. Uses Lead's deletedAt-soft-delete + separate status
+// field convention (not Material/Customer's single isActive flag) because
+// the given field list calls out "Status" as its own field, distinct from
+// whether the record has been deleted.
+model Supplier {
+  id            String         @id @default(uuid())
+  supplierCode  String         @unique
+  supplierName  String
+  gstNumber     String?
+  panNumber     String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  website       String?
+  address       String?
+  city          String?
+  state         String?
+  country       String?
+  pinCode       String?
+  paymentTerms  String?
+  // Days until goods/materials arrive after an order is placed.
+  leadTime      Int?
+  currency      String?
+  remarks       String?
+  status        SupplierStatus @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+
+  @@index([status])
+  @@index([deletedAt])
+}
