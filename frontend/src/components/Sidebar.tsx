@@ -194,12 +194,9 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
-      <div className="flex flex-col items-center gap-2 px-6 py-6 text-center">
-        <img src="/logo-smart-rotamach.jpg" alt="Smart Rotamach" className="h-20 w-20 rounded-md object-contain" />
-        <div className="flex flex-col items-center leading-tight">
-          <span className="text-xl font-semibold">DailyOps</span>
-          <span className="text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
-        </div>
+      <div className="flex flex-col items-center gap-1 px-6 py-6 text-center">
+        <span className="text-xl font-semibold">DailyOps</span>
+        <span className="text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
@@ -254,6 +251,13 @@ export default function Sidebar() {
           <LogOut className="h-4 w-4" />
           Logout
         </button>
+      </div>
+
+      <div className="flex flex-col items-center gap-1 border-t border-slate-200 px-3 py-3 text-center">
+        <img src="/logo-smart-rotamach.jpg" alt="Smart Rotamach" className="h-6 w-6 rounded object-contain" />
+        <span className="text-[10px] text-sidebar-foreground/50">
+          &copy; {new Date().getFullYear()} Smart Rotamach
+        </span>
       </div>
     </aside>
   );
