@@ -12,7 +12,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import ParticlesBackground from "@/components/ParticlesBackground";
-import ProcessWheel from "@/components/ProcessWheel";
 
 export default function Login() {
   // Enterprise RBAC: login accepts either Username or Email in this one
@@ -42,19 +41,21 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8">
       <ParticlesBackground />
 
-      <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:justify-between">
-        {/* Process wheel — hidden on small screens to keep mobile clean */}
-        <div className="hidden w-full max-w-md flex-col items-center gap-4 lg:flex">
-          <ProcessWheel />
-          <p className="max-w-sm text-center text-sm text-slate-500">
-            From Lead to Dispatch — one connected workflow across Sales, Finance, and Production.
-          </p>
+      <div className="relative z-10 flex w-full max-w-6xl flex-col items-center gap-10 lg:flex-row lg:items-center lg:justify-center">
+        {/* Business overview infographic — a separate section, hidden on small screens to keep mobile clean */}
+        <div className="hidden w-full max-w-xl flex-shrink-0 lg:block">
+          <img
+            src="/dailyops-overview.jpg"
+            alt="DailyOps — all your business operations in one place"
+            className="w-full rounded-xl shadow-lg"
+          />
         </div>
 
-        <Card className="w-full max-w-sm border-none shadow-lg">
+        {/* Login — its own section, to the right of the overview */}
+        <Card className="w-full max-w-sm flex-shrink-0 border-none shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <img
               src="/logo-smart-rotamach.jpg"
