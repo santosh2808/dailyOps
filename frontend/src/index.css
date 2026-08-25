@@ -45,12 +45,9 @@ body {
   @apply bg-background text-foreground;
 }
 
-/* Post-login app shell background — faint green-tinted grid, replacing the
-   previous flat bg-slate-50 on every authenticated page's root wrapper. */
+/* Post-login app shell background — flat off-white, replacing the previous
+   bg-slate-50 (and the grid-pattern version tried before this) on every
+   authenticated page's root wrapper. */
 .bg-app-grid {
-  background-color: #ffffff;
-  background-image:
-    linear-gradient(to right, rgba(23, 48, 28, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(23, 48, 28, 0.05) 1px, transparent 1px);
-  background-size: 44px 44px;
+  background-color: #fafafa;
 }
