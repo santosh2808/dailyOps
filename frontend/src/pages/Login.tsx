@@ -44,18 +44,19 @@ export default function Login() {
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8">
       <ParticlesBackground />
 
-      <div className="relative z-10 flex w-full max-w-6xl flex-col items-center gap-10 lg:flex-row lg:items-center lg:justify-center">
-        {/* Business overview infographic — a separate section, hidden on small screens to keep mobile clean */}
-        <div className="hidden w-full max-w-xl flex-shrink-0 lg:block">
+      <div className="relative z-10 flex w-full max-w-7xl flex-col items-center gap-10 lg:flex-row lg:items-center">
+        {/* Business overview infographic — pinned to the left edge, its own section */}
+        <div className="hidden w-full max-w-2xl flex-shrink-0 lg:block">
           <img
             src="/dailyops-overview.jpg"
             alt="DailyOps — all your business operations in one place"
-            className="w-full rounded-xl shadow-lg"
+            className="w-full rounded-2xl shadow-2xl"
           />
         </div>
 
-        {/* Login — its own section, to the right of the overview */}
-        <Card className="w-full max-w-sm flex-shrink-0 border-none shadow-lg">
+        {/* Login — its own section, centered in the remaining space */}
+        <div className="flex w-full flex-1 justify-center">
+          <Card className="w-full max-w-sm flex-shrink-0 border-none shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <img
               src="/logo-smart-rotamach.jpg"
@@ -94,7 +95,8 @@ export default function Login() {
               </Button>
             </form>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
     </div>
   );
