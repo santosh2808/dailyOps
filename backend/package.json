@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
-    "seed:hvls-products": "ts-node prisma/seed-hvls-products.ts"
+    "seed:hvls-products": "ts-node prisma/seed-hvls-products.ts",
+    "db:ensure": "ts-node prisma/ensure-database.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
