@@ -252,13 +252,6 @@ export default function Sidebar() {
           Logout
         </button>
       </div>
-
-      <div className="flex flex-col items-center gap-1 border-t border-slate-200 px-3 py-3 text-center">
-        <img src="/logo-smart-rotamach.jpg" alt="Smart Rotamach" className="h-6 w-6 rounded object-contain" />
-        <span className="text-[10px] text-sidebar-foreground/50">
-          &copy; {new Date().getFullYear()} Smart Rotamach
-        </span>
-      </div>
     </aside>
   );
 }
