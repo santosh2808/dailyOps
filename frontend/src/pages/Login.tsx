@@ -59,7 +59,7 @@ export default function Login() {
             <img
               src="/logo-smart-rotamach.jpg"
               alt="Smart Rotamach"
-              className="mx-auto mb-2 h-12 w-12 rounded-md object-contain"
+              className="mx-auto mb-2 h-24 w-24 rounded-md object-contain"
             />
             <CardTitle className="text-2xl">DailyOps</CardTitle>
             <p className="text-xs font-medium text-slate-400">by Smart Rotamach</p>
