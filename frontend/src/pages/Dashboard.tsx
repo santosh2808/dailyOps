@@ -121,7 +121,7 @@ export default function Dashboard() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">
                     {label}
                   </CardTitle>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-orange/10 text-orange">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-srm-green/10 text-srm-green">
                     <Icon className="h-4 w-4" />
                   </div>
                 </CardHeader>
@@ -163,7 +163,7 @@ export default function Dashboard() {
                           </span>
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                             <div
-                              className="h-full rounded-full bg-orange"
+                              className="h-full rounded-full bg-srm-green"
                               style={{ width: `${(entry.count / maxCount) * 100}%` }}
                             />
                           </div>
@@ -204,7 +204,7 @@ export default function Dashboard() {
                           </span>
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                             <div
-                              className="h-full rounded-full bg-orange"
+                              className="h-full rounded-full bg-srm-green"
                               style={{ width: `${(entry.totalValue / maxValue) * 100}%` }}
                             />
                           </div>

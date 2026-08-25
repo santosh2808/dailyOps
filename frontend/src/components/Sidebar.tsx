@@ -195,10 +195,11 @@ export default function Sidebar() {
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-6 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-srm-red text-sm font-bold text-white">
-          D
+        <img src="/logo-smart-rotamach.jpg" alt="Smart Rotamach" className="h-8 w-8 rounded-md object-contain" />
+        <div className="flex flex-col leading-tight">
+          <span className="text-lg font-semibold">DailyOps</span>
+          <span className="text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
         </div>
-        <span className="text-lg font-semibold">DailyOps</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">

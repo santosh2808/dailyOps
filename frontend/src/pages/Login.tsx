@@ -56,10 +56,13 @@ export default function Login() {
 
         <Card className="w-full max-w-sm border-none shadow-lg">
           <CardHeader className="space-y-1 text-center">
-            <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-srm-red font-bold text-white">
-              D
-            </div>
+            <img
+              src="/logo-smart-rotamach.jpg"
+              alt="Smart Rotamach"
+              className="mx-auto mb-2 h-12 w-12 rounded-md object-contain"
+            />
             <CardTitle className="text-2xl">DailyOps</CardTitle>
+            <p className="text-xs font-medium text-slate-400">by Smart Rotamach</p>
             <CardDescription>Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent>
