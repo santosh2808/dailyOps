@@ -11,6 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import ParticlesBackground from "@/components/ParticlesBackground";
+import ProcessWheel from "@/components/ProcessWheel";
 
 export default function Login() {
   // Enterprise RBAC: login accepts either Username or Email in this one
@@ -40,44 +42,56 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-sm border-none shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground">
-            D
-          </div>
-          <CardTitle className="text-2xl">DailyOps</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="identifier">Username or Email</Label>
-              <Input
-                id="identifier"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="admin"
-                required
-              />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4">
+      <ParticlesBackground />
+
+      <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:justify-between">
+        {/* Process wheel — hidden on small screens to keep mobile clean */}
+        <div className="hidden w-full max-w-md flex-col items-center gap-4 lg:flex">
+          <ProcessWheel />
+          <p className="max-w-sm text-center text-sm text-slate-500">
+            From Lead to Dispatch — one connected workflow across Sales, Finance, and Production.
+          </p>
+        </div>
+
+        <Card className="w-full max-w-sm border-none shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-srm-red font-bold text-white">
+              D
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            <CardTitle className="text-2xl">DailyOps</CardTitle>
+            <CardDescription>Sign in to your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="identifier">Username or Email</Label>
+                <Input
+                  id="identifier"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="admin"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

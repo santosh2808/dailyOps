@@ -284,7 +284,7 @@ export default function QuotationForm() {
   const grandTotal = subtotal + installationChargeNum + transportationChargeNum + gstAmount;
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title={isEdit ? "Edit Quotation" : "Create Quotation"} />

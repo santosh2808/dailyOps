@@ -29,14 +29,28 @@
   --ring: 217 91% 60%;
   --radius: 0.5rem;
 
-  /* Dark sidebar */
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
+  /* Sidebar: white with dark text (was dark navy) */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
 
-  /* Orange highlight */
+  /* Orange highlight (still used elsewhere — status badges/buttons) */
   --orange: 25 95% 53%;
+
+  /* SRM brand colors — currently used on the sidebar only */
+  --srm-green: 75 51% 49%; /* #9BBB3D */
+  --srm-red: 5 85% 54%; /* #ED3525 */
 }
 
 body {
   @apply bg-background text-foreground;
+}
+
+/* Post-login app shell background — faint green-tinted grid, replacing the
+   previous flat bg-slate-50 on every authenticated page's root wrapper. */
+.bg-app-grid {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(to right, rgba(23, 48, 28, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(23, 48, 28, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
 }

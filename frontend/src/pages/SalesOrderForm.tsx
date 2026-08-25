@@ -214,7 +214,7 @@ export default function SalesOrderForm() {
   const grandTotal = subtotal - totalDiscount + tax;
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title={isEdit ? "Edit Sales Order" : "Create Sales Order"} />

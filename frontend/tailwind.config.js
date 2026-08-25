@@ -46,6 +46,12 @@ export default {
         orange: {
           DEFAULT: "hsl(var(--orange))",
         },
+        "srm-green": {
+          DEFAULT: "hsl(var(--srm-green))",
+        },
+        "srm-red": {
+          DEFAULT: "hsl(var(--srm-red))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

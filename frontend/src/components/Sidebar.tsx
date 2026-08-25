@@ -153,8 +153,8 @@ function navLinkClasses(isActive: boolean) {
   return cn(
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
     isActive
-      ? "bg-orange text-white"
-      : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-white"
+      ? "bg-srm-green text-white"
+      : "text-sidebar-foreground/80 hover:bg-srm-green/10 hover:text-sidebar-foreground"
   );
 }
 
@@ -193,9 +193,9 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+    <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-6 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange text-sm font-bold text-white">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-srm-red text-sm font-bold text-white">
           D
         </div>
         <span className="text-lg font-semibold">DailyOps</span>
@@ -214,7 +214,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={() => toggleGroup(group.key)}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-white/10 hover:text-white"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-srm-green/10 hover:text-sidebar-foreground"
               aria-expanded={!!openGroups[group.key]}
             >
               <group.icon className="h-4 w-4" />
@@ -245,10 +245,10 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 px-3 py-4">
+      <div className="border-t border-slate-200 px-3 py-4">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-srm-red/10 hover:text-srm-red"
         >
           <LogOut className="h-4 w-4" />
           Logout
