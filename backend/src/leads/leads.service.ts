@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { LeadSource, LeadStatus, Prisma } from '@prisma/client';
+import { LeadHistoryAction, LeadSource, LeadStatus, Prisma } from '@prisma/client';
 import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +15,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
+import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 
 const LEAD_NUMBER_PREFIX = 'LD-';
 const LEAD_NUMBER_PAD = 6;
@@ -132,8 +133,21 @@ const SORTABLE_FIELDS = [
   'status',
 ] as const;
 
+// `select` (not the full row) on assignedToUser everywhere it's included —
+// never expose the password hash or any other User column beyond what the
+// Lead Assignment picker/display actually needs.
+const ASSIGNED_TO_USER_SELECT = { id: true, name: true, email: true } satisfies Prisma.UserSelect;
+
 const LEAD_DETAIL_INCLUDE = {
   products: { include: { product: true } },
+  assignedToUser: { select: ASSIGNED_TO_USER_SELECT },
+  // Lead Management Phase 1 (requirement #12) — lets the frontend show
+  // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once
+  // one already exists for this lead, and avoid ever creating duplicates.
+  quotations: {
+    select: { id: true, quotationNumber: true, status: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  },
 } satisfies Prisma.LeadInclude;
 
 @Injectable()
@@ -152,7 +166,7 @@ export class LeadsService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.source ? { source: query.source } : {}),
-      ...(query.assignedTo ? { assignedTo: { equals: query.assignedTo } } : {}),
+      ...(query.assignedToUserId ? { assignedToUserId: query.assignedToUserId } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
             createdAt: {
@@ -186,7 +200,10 @@ export class LeadsService {
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: { _count: { select: { products: true } } },
+        include: {
+          _count: { select: { products: true } },
+          assignedToUser: { select: ASSIGNED_TO_USER_SELECT },
+        },
       }),
       this.prisma.lead.count({ where }),
     ]);
@@ -214,21 +231,25 @@ export class LeadsService {
     return lead;
   }
 
-  async create(dto: CreateLeadDto) {
+  async create(dto: CreateLeadDto, actorName?: string) {
     const { products, expectedCloseDate, nextFollowUp, ...leadData } = dto;
 
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
       try {
-        return await this.prisma.lead.create({
-          data: {
-            ...leadData,
-            leadNumber,
-            expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
-            nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : undefined,
-            products: this.buildProductsCreateInput(products),
-          },
-          include: LEAD_DETAIL_INCLUDE,
+        return await this.prisma.$transaction(async (tx) => {
+          const lead = await tx.lead.create({
+            data: {
+              ...leadData,
+              leadNumber,
+              expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
+              nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : undefined,
+              products: this.buildProductsCreateInput(products),
+            },
+            include: LEAD_DETAIL_INCLUDE,
+          });
+          await this.logHistory(tx, lead.id, 'CREATED', `Lead ${lead.leadNumber} created`, actorName);
+          return lead;
         });
       } catch (error) {
         if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) {
@@ -242,19 +263,20 @@ export class LeadsService {
     throw new Error('Failed to generate a unique lead number');
   }
 
-  async update(id: string, dto: UpdateLeadDto) {
-    await this.findOne(id);
-    const { products, expectedCloseDate, nextFollowUp, ...leadData } = dto;
+  async update(id: string, dto: UpdateLeadDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const { products, expectedCloseDate, nextFollowUp, assignedToUserId, ...leadData } = dto;
 
     return this.prisma.$transaction(async (tx) => {
       if (products) {
         await tx.leadProduct.deleteMany({ where: { leadId: id } });
       }
 
-      return tx.lead.update({
+      const updated = await tx.lead.update({
         where: { id },
         data: {
           ...leadData,
+          ...(assignedToUserId !== undefined ? { assignedToUserId } : {}),
           ...(expectedCloseDate !== undefined
             ? { expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null }
             : {}),
@@ -265,18 +287,117 @@ export class LeadsService {
         },
         include: LEAD_DETAIL_INCLUDE,
       });
+
+      // Assignment change gets its own structured LeadAssignmentHistory row
+      // plus a dedicated ASSIGNED timeline entry — kept separate from the
+      // generic "Edited" entry below so the Assign action is always
+      // individually traceable, per requirement #7. LeadAssignmentHistory
+      // stores display names (not raw ids), so the new user's name is
+      // resolved here rather than trusting anything from the request body.
+      if (assignedToUserId !== undefined && assignedToUserId !== existing.assignedToUserId) {
+        const newUserName = assignedToUserId
+          ? (await tx.user.findUnique({ where: { id: assignedToUserId }, select: { name: true } }))
+              ?.name ?? null
+          : null;
+        const previousUserName = existing.assignedToUser?.name ?? null;
+
+        await tx.leadAssignmentHistory.create({
+          data: {
+            leadId: id,
+            previousUser: previousUserName,
+            newUser: newUserName,
+            changedBy: actorName,
+          },
+        });
+        await this.logHistory(
+          tx,
+          id,
+          'ASSIGNED',
+          `Reassigned from ${previousUserName || 'Unassigned'} to ${newUserName || 'Unassigned'}`,
+          actorName,
+        );
+      }
+
+      // Follow-up scheduling gets its own dedicated Timeline entry
+      // (requirement #3's "Follow-up Added") rather than being folded into
+      // the generic "Edited" bucket below — deliberately fires on every
+      // change to nextFollowUp/reminderNote/priority together, since in
+      // practice a salesperson updates them as one "schedule a follow-up"
+      // action, not three separate edits.
+      const newNextFollowUp =
+        nextFollowUp !== undefined ? (nextFollowUp ? new Date(nextFollowUp) : null) : undefined;
+      const followUpFieldsChanged = this.diffLeadFields(existing, {
+        nextFollowUp: newNextFollowUp,
+        priority: leadData.priority,
+        reminderNote: leadData.reminderNote,
+      });
+      if (followUpFieldsChanged.length > 0) {
+        const description = newNextFollowUp
+          ? `Follow-up scheduled for ${newNextFollowUp.toLocaleDateString()}${
+              leadData.reminderNote ? ` — ${leadData.reminderNote}` : ''
+            }`
+          : 'Follow-up details updated';
+        await this.logHistory(tx, id, 'FOLLOWUP_ADDED', description, actorName);
+      }
+
+      // Any other field that actually changed value (compared against the
+      // pre-update snapshot, not just "was this key sent") gets folded into
+      // one generic "Edited" timeline entry, so re-saving a form with
+      // unchanged values doesn't spam the timeline. Follow-up fields are
+      // excluded here since they were already logged as their own
+      // dedicated entry above.
+      const { priority: _priority, reminderNote: _reminderNote, ...leadDataForEditDiff } = leadData;
+      const changedFields = this.diffLeadFields(existing, {
+        ...leadDataForEditDiff,
+        expectedCloseDate:
+          expectedCloseDate !== undefined
+            ? expectedCloseDate
+              ? new Date(expectedCloseDate)
+              : null
+            : undefined,
+      });
+      const editedParts = [...changedFields, ...(products ? ['products'] : [])];
+      if (editedParts.length > 0) {
+        await this.logHistory(tx, id, 'EDITED', `Updated: ${editedParts.join(', ')}`, actorName);
+      }
+
+      return updated;
     });
   }
 
-  async updateStatus(id: string, dto: UpdateLeadStatusDto) {
-    await this.findOne(id);
-    // This endpoint only ever updates the status field. Setting status to
-    // WON does not create a Customer — that only happens when the user
-    // explicitly calls convertToCustomer() via POST /:id/convert below.
-    return this.prisma.lead.update({
-      where: { id },
-      data: { status: dto.status },
-      include: LEAD_DETAIL_INCLUDE,
+  async updateStatus(id: string, dto: UpdateLeadStatusDto, actorName?: string) {
+    const existing = await this.findOne(id);
+
+    return this.prisma.$transaction(async (tx) => {
+      // This endpoint only ever updates the status field. Setting status to
+      // WON does not create a Customer — that only happens when the user
+      // explicitly calls convertToCustomer() via POST /:id/convert below.
+      const updated = await tx.lead.update({
+        where: { id },
+        data: { status: dto.status },
+        include: LEAD_DETAIL_INCLUDE,
+      });
+
+      if (dto.status !== existing.status) {
+        await tx.leadStatusHistory.create({
+          data: {
+            leadId: id,
+            oldStatus: existing.status,
+            newStatus: dto.status,
+            remarks: dto.remarks,
+            changedBy: actorName,
+          },
+        });
+        await this.logHistory(
+          tx,
+          id,
+          'STATUS_CHANGED',
+          `Status changed from ${existing.status} to ${dto.status}`,
+          actorName,
+        );
+      }
+
+      return updated;
     });
   }
 
@@ -288,7 +409,7 @@ export class LeadsService {
     });
   }
 
-  async convertToCustomer(id: string) {
+  async convertToCustomer(id: string, actorName?: string) {
     const lead = await this.findOne(id);
 
     if (lead.status !== 'WON') {
@@ -320,8 +441,307 @@ export class LeadsService {
         include: LEAD_DETAIL_INCLUDE,
       });
 
+      // BUG FIX: any Quotation generated from this lead (Lead Management
+      // Phase 1's "Generate Quotation" — Quotation.leadId set, customerId
+      // still null) was permanently stuck once the lead reached WON: the
+      // ACCEPTED transition is refused for any quotation with no
+      // customerId (see QuotationsService.updateStatus()), and nothing
+      // ever backfilled customerId once the lead was converted, so the
+      // workflow had no way to continue past this point. Backfilling it
+      // here — the moment a real Customer starts existing for this lead —
+      // is exactly the case the schema comment on Quotation.leadId already
+      // anticipated ("When Phase 2's Customer Acceptance eventually
+      // converts the lead, that step is expected to backfill customerId
+      // onto any of its quotations"). This only ever touches quotations
+      // that still have no customerId, so it never reassigns one that's
+      // already linked elsewhere, and it does not change the quotation's
+      // status — Sales Order / Proforma Invoice / JEO generation remain
+      // explicit actions the user takes from Customer Details.
+      await tx.quotation.updateMany({
+        where: { leadId: id, customerId: null },
+        data: { customerId: customer.id },
+      });
+
+      await this.logHistory(
+        tx,
+        id,
+        'CUSTOMER_CONVERTED',
+        `Converted to Customer "${customer.companyName}"`,
+        actorName,
+      );
+
       return { lead: updatedLead, customer };
     });
+  }
+
+  // Lead Management Phase 1 (requirement #8) — gates the "Generate
+  // Quotation" button/endpoint. Called by QuotationsService.create() before
+  // it does anything else, so a rejected generation never creates a
+  // half-formed Quotation. Returns the lead (with its products already
+  // included via findOne()) so the caller doesn't need a second query.
+  async getLeadForQuotationGeneration(leadId: string) {
+    const lead = await this.findOne(leadId);
+    if (lead.status !== 'QUALIFIED') {
+      throw new BadRequestException(
+        'Generate Quotation is only available once this lead is Qualified.',
+      );
+    }
+    if (!lead.products || lead.products.length === 0) {
+      throw new BadRequestException(
+        'This lead has no products linked yet. Add products to the lead before generating a quotation.',
+      );
+    }
+    return lead;
+  }
+
+  // Called by QuotationsService.create() immediately after a Quotation is
+  // successfully generated from this lead. Deliberately not run inside the
+  // Quotation's own transaction — if this write fails, the Quotation still
+  // exists; only the Timeline entry would be missing, which is preferable
+  // to rolling back an otherwise-successful Generate Quotation.
+  async recordQuotationGenerated(leadId: string, quotationNumber: string, actorName?: string) {
+    await this.prisma.leadHistory.create({
+      data: {
+        leadId,
+        action: 'QUOTATION_CREATED',
+        description: `Quotation ${quotationNumber} generated`,
+        performedBy: actorName,
+      },
+    });
+  }
+
+  // Called by QuotationsService.sendQuotation() when the quotation being
+  // sent is lead-originated (requirement #10: sending a quotation advances
+  // the Lead to QUOTATION_SENT). Guarded so it never fires on a lead that's
+  // already WON/LOST, or already QUOTATION_SENT (e.g. a re-send of the
+  // same quotation) — mirrors the same "don't regress a further-along
+  // lead" caution used throughout this module.
+  async recordQuotationSent(leadId: string, quotationNumber: string, actorName?: string) {
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead || (['WON', 'LOST', 'QUOTATION_SENT'] as string[]).includes(lead.status)) {
+      return;
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.lead.update({ where: { id: leadId }, data: { status: 'QUOTATION_SENT' } });
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId,
+          oldStatus: lead.status,
+          newStatus: 'QUOTATION_SENT',
+          remarks: `Automatically advanced — Quotation ${quotationNumber} was sent`,
+          changedBy: actorName,
+        },
+      });
+      await tx.leadHistory.create({
+        data: {
+          leadId,
+          action: 'QUOTATION_SENT',
+          description: `Quotation ${quotationNumber} sent`,
+          performedBy: actorName,
+        },
+      });
+    });
+  }
+
+  // Merges the persisted LeadHistory log with synthesized entries for
+  // everything downstream of a converted Lead's Customer — Quotation
+  // Created/Sent, Sales Order Created, Proforma Invoice Generated, JEO
+  // Generated — newest first. None of these are ever stored on LeadHistory
+  // — Quotation/SalesOrder/ProformaInvoice/JobExecutionOrder have no FK
+  // back to Lead (see the schema.prisma comment on Quotation) — so they're
+  // derived here at read time via a join on Lead.customerId, which is only
+  // ever set once the lead has been converted. This keeps every one of
+  // those modules completely untouched while still satisfying the Sales
+  // Automation Lead History requirement's full action list.
+  async getHistory(id: string) {
+    const lead = await this.findOne(id);
+
+    const historyRows = await this.prisma.leadHistory.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const entries = historyRows.map((row) => ({
+      id: row.id,
+      action: row.action as LeadHistoryAction,
+      description: row.description,
+      performedBy: row.performedBy,
+      createdAt: row.createdAt,
+    }));
+
+    if (lead.customerId) {
+      const quotations = await this.prisma.quotation.findMany({
+        where: { customerId: lead.customerId, deletedAt: null },
+        select: {
+          id: true,
+          quotationNumber: true,
+          createdAt: true,
+          sentAt: true,
+          sentToEmail: true,
+          salesOrder: {
+            select: {
+              id: true,
+              salesOrderNumber: true,
+              createdAt: true,
+              proformaInvoices: { select: { invoiceNumber: true, createdAt: true } },
+              jobExecutionOrders: { select: { jeoNumber: true, createdAt: true } },
+            },
+          },
+        },
+      });
+      for (const quotation of quotations) {
+        entries.push({
+          id: `quotation-${quotation.id}`,
+          action: 'QUOTATION_CREATED' as LeadHistoryAction,
+          description: `Quotation ${quotation.quotationNumber} created`,
+          performedBy: null,
+          createdAt: quotation.createdAt,
+        });
+        if (quotation.sentAt) {
+          entries.push({
+            id: `quotation-sent-${quotation.id}`,
+            action: 'QUOTATION_SENT' as LeadHistoryAction,
+            description: `Quotation ${quotation.quotationNumber} sent to ${quotation.sentToEmail || 'customer'}`,
+            performedBy: null,
+            createdAt: quotation.sentAt,
+          });
+        }
+        if (quotation.salesOrder) {
+          entries.push({
+            id: `sales-order-${quotation.salesOrder.id}`,
+            action: 'SALES_ORDER_CREATED' as LeadHistoryAction,
+            description: `Sales Order ${quotation.salesOrder.salesOrderNumber} created`,
+            performedBy: null,
+            createdAt: quotation.salesOrder.createdAt,
+          });
+          for (const pi of quotation.salesOrder.proformaInvoices) {
+            entries.push({
+              id: `pi-${pi.invoiceNumber}`,
+              action: 'PROFORMA_INVOICE_GENERATED' as LeadHistoryAction,
+              description: `Proforma Invoice ${pi.invoiceNumber} generated`,
+              performedBy: null,
+              createdAt: pi.createdAt,
+            });
+          }
+          for (const jeo of quotation.salesOrder.jobExecutionOrders) {
+            entries.push({
+              id: `jeo-${jeo.jeoNumber}`,
+              action: 'JEO_GENERATED' as LeadHistoryAction,
+              description: `Job Execution Order ${jeo.jeoNumber} generated`,
+              performedBy: null,
+              createdAt: jeo.createdAt,
+            });
+          }
+        }
+      }
+    }
+
+    return entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getNotes(id: string) {
+    await this.findOne(id);
+    return this.prisma.leadNote.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addNote(id: string, dto: CreateLeadNoteDto, actorName?: string) {
+    await this.findOne(id);
+    return this.prisma.$transaction(async (tx) => {
+      const note = await tx.leadNote.create({
+        data: { leadId: id, note: dto.note, createdBy: actorName },
+      });
+      // Lead Management Phase 1 (requirement #3/#4) — "Note Added" is now
+      // its own Timeline entry, not just visible in the separate Notes tab.
+      await this.logHistory(
+        tx,
+        id,
+        'NOTE_ADDED',
+        dto.note.length > 120 ? `${dto.note.slice(0, 120)}…` : dto.note,
+        actorName,
+      );
+      return note;
+    });
+  }
+
+  // Dedicated Assignment History / Status History reads (requirement —
+  // "Show Assignment History. Show Status History." as their own tabs,
+  // distinct from the merged Timeline above). The underlying
+  // LeadAssignmentHistory/LeadStatusHistory tables already existed and were
+  // already written to by update()/updateStatus() — this just exposes them
+  // for the first time.
+  async getAssignmentHistory(id: string) {
+    await this.findOne(id);
+    return this.prisma.leadAssignmentHistory.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getStatusHistory(id: string) {
+    await this.findOne(id);
+    return this.prisma.leadStatusHistory.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Email History tab (requirement #16) — every email ever sent about
+  // Quotations/Sales Orders/Proforma Invoices/JEOs tied to this lead's
+  // Customer, via the same Lead.customerId join used by getHistory() above.
+  async getEmailHistory(id: string) {
+    const lead = await this.findOne(id);
+    if (!lead.customerId) {
+      return [];
+    }
+    return this.prisma.emailHistory.findMany({
+      where: {
+        OR: [
+          { quotation: { customerId: lead.customerId } },
+          { salesOrder: { customerId: lead.customerId } },
+          { proformaInvoice: { customerId: lead.customerId } },
+          { jobExecutionOrder: { customerId: lead.customerId } },
+        ],
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  // Appends one append-only LeadHistory row. Every write path above calls
+  // this from inside its own $transaction so the history entry can never be
+  // left behind by a failed/partial update.
+  private async logHistory(
+    tx: Prisma.TransactionClient,
+    leadId: string,
+    action: LeadHistoryAction,
+    description: string,
+    performedBy?: string,
+  ) {
+    await tx.leadHistory.create({
+      data: { leadId, action, description, performedBy },
+    });
+  }
+
+  // Generic "did this field's value actually change" diff used by update()
+  // to decide whether an EDITED timeline entry is warranted. Only keys
+  // present (and not undefined) in `incoming` are compared — a PATCH that
+  // never sent a field can't have "changed" it.
+  private diffLeadFields(
+    existing: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+  ): string[] {
+    const changed: string[] = [];
+    for (const [key, value] of Object.entries(incoming)) {
+      if (value === undefined) continue;
+      const before = existing[key] instanceof Date ? existing[key].toISOString() : existing[key];
+      const after = value instanceof Date ? value.toISOString() : value;
+      if (before !== after) {
+        changed.push(key);
+      }
+    }
+    return changed;
   }
 
   getLeadImportTemplate(): Buffer {

@@ -1,6 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
+import { PdfService } from '../pdf/pdf.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
 import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
@@ -37,7 +40,14 @@ const PROFORMA_INVOICE_LIST_INCLUDE = {
 
 @Injectable()
 export class ProformaInvoicesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ProformaInvoicesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailerService: MailerService,
+    private pdfService: PdfService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll(query: QueryProformaInvoiceDto) {
     const page = query.page ?? 1;
@@ -104,7 +114,7 @@ export class ProformaInvoicesService {
     return invoice;
   }
 
-  async create(dto: CreateProformaInvoiceDto) {
+  async create(dto: CreateProformaInvoiceDto, actorName?: string) {
     const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
@@ -128,7 +138,7 @@ export class ProformaInvoicesService {
     for (let attempt = 1; attempt <= MAX_INVOICE_NUMBER_ATTEMPTS; attempt++) {
       const invoiceNumber = await this.generateInvoiceNumber();
       try {
-        return await this.prisma.proformaInvoice.create({
+        const created = await this.prisma.proformaInvoice.create({
           data: {
             invoiceNumber,
             salesOrderId: salesOrder.id,
@@ -148,6 +158,24 @@ export class ProformaInvoicesService {
           },
           include: PROFORMA_INVOICE_DETAIL_INCLUDE,
         });
+
+        await this.auditLogService
+          .record({
+            module: 'ProformaInvoice',
+            recordId: created.id,
+            action: 'Created',
+            actorName,
+            newValue: { invoiceNumber: created.invoiceNumber, grandTotal: created.grandTotal },
+          })
+          .catch((error) => this.logger.error('AuditLog record failed', error));
+
+        // Requirement #12: generate PDF, email customer, CC Finance,
+        // record Email History — every time a Proforma Invoice is
+        // generated, manual or automatic (both run through this one
+        // create() method).
+        await this.sendInvoiceEmail(created, actorName);
+
+        return created;
       } catch (error) {
         if (this.isInvoiceNumberConflict(error) && attempt < MAX_INVOICE_NUMBER_ATTEMPTS) {
           continue; // Another request took this number first — retry with a fresh one.
@@ -160,13 +188,96 @@ export class ProformaInvoicesService {
     throw new Error('Failed to generate a unique invoice number');
   }
 
-  async updateStatus(id: string, dto: UpdateProformaInvoiceStatusDto) {
-    await this.findOne(id);
-    return this.prisma.proformaInvoice.update({
+  // Automatic-cascade entry point (requirement — Sales Order ->
+  // automatically generate Proforma Invoice), invoked from
+  // QuotationsService.performAccept(). Idempotent: if an active
+  // (non-CANCELLED) Proforma Invoice already exists for this Sales Order,
+  // it's returned as-is rather than throwing create()'s ConflictException
+  // — this path must never surface a scary error to the person who just
+  // approved a quotation.
+  async createFromSalesOrder(salesOrderId: string, actorName?: string) {
+    const existing = await this.prisma.proformaInvoice.findFirst({
+      where: { salesOrderId, status: { not: 'CANCELLED' } },
+    });
+    if (existing) {
+      return this.findOne(existing.id);
+    }
+    return this.create({ salesOrderId }, actorName);
+  }
+
+  async updateStatus(id: string, dto: UpdateProformaInvoiceStatusDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.proformaInvoice.update({
       where: { id },
       data: { status: dto.status },
       include: PROFORMA_INVOICE_DETAIL_INCLUDE,
     });
+    await this.auditLogService
+      .record({
+        module: 'ProformaInvoice',
+        recordId: id,
+        action: 'Status Changed',
+        actorName,
+        oldValue: { status: existing.status },
+        newValue: { status: dto.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
+  getEmailHistory(id: string) {
+    return this.prisma.emailHistory.findMany({
+      where: { proformaInvoiceId: id },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  private async sendInvoiceEmail(
+    invoice: Prisma.ProformaInvoiceGetPayload<{ include: typeof PROFORMA_INVOICE_DETAIL_INCLUDE }>,
+    actorName?: string,
+  ) {
+    try {
+      const pdf = await this.pdfService.render({
+        documentTitle: 'PROFORMA INVOICE',
+        documentNumber: invoice.invoiceNumber,
+        documentDate: invoice.invoiceDate,
+        customerName: invoice.customer.companyName,
+        customerContact: `${invoice.customer.contactPerson} · ${invoice.customer.phone}`,
+        items: invoice.salesOrder.items.map((item) => ({
+          name: item.product.name,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        })),
+        subtotal: invoice.subtotal,
+        discount: invoice.discount,
+        tax: invoice.tax,
+        grandTotal: invoice.grandTotal,
+        notes: invoice.notes,
+      });
+
+      await this.mailerService.send({
+        templateKey: 'PROFORMA_INVOICE',
+        fallbackSubject: `Proforma Invoice ${invoice.invoiceNumber}`,
+        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached Proforma Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p>`,
+        vars: {
+          customerName: invoice.customer.contactPerson,
+          invoiceNumber: invoice.invoiceNumber,
+          salesOrderNumber: invoice.salesOrder.salesOrderNumber,
+          grandTotal: invoice.grandTotal.toFixed(2),
+        },
+        to: invoice.customer.email,
+        // "CC Finance" (requirement #12) — env-configurable so this isn't a
+        // hardcoded address; unset simply means no CC is added.
+        cc: process.env.FINANCE_TEAM_EMAIL || undefined,
+        attachments: [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdf }],
+        actorName,
+        link: { module: 'ProformaInvoice', proformaInvoiceId: invoice.id },
+      });
+    } catch (error) {
+      this.logger.error(`Proforma Invoice email failed for ${invoice.id}`, error);
+    }
   }
 
   private async generateInvoiceNumber(): Promise<string> {

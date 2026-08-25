@@ -7,8 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaInvoiceStatusBadge";
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
-import { getProformaInvoice, updateProformaInvoiceStatus } from "@/api/proforma-invoices";
-import type { ProformaInvoice, ProformaInvoiceStatus } from "@/types";
+import EmailHistoryCard from "@/components/EmailHistoryCard";
+import {
+  getProformaInvoice,
+  getProformaInvoiceEmailHistory,
+  updateProformaInvoiceStatus,
+} from "@/api/proforma-invoices";
+import type { EmailHistoryEntry, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -42,6 +47,8 @@ export default function ProformaInvoiceDetails() {
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [pdfNotice, setPdfNotice] = useState(false);
+  const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
+  const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
   const fetchInvoice = useCallback(async () => {
     if (!id) return;
@@ -60,6 +67,15 @@ export default function ProformaInvoiceDetails() {
   useEffect(() => {
     fetchInvoice();
   }, [fetchInvoice]);
+
+  useEffect(() => {
+    if (!id) return;
+    setEmailHistoryLoading(true);
+    getProformaInvoiceEmailHistory(id)
+      .then(setEmailHistory)
+      .catch(() => {})
+      .finally(() => setEmailHistoryLoading(false));
+  }, [id]);
 
   async function handleStatusConfirm(status: ProformaInvoiceStatus) {
     if (!id) return;
@@ -219,6 +235,8 @@ export default function ProformaInvoiceDetails() {
                   </div>
                 </CardContent>
               </Card>
+
+              <EmailHistoryCard loading={emailHistoryLoading} entries={emailHistory} />
             </div>
           )}
         </main>

@@ -1,16 +1,18 @@
+import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { STATUS_OPTIONS, PRIORITY_OPTIONS, SOURCE_OPTIONS } from "./leadOptions";
-import type { LeadPriority, LeadSource, LeadStatus } from "@/types";
+import { listAssignableUsers } from "@/api/users";
+import type { AssignableUser, LeadPriority, LeadSource, LeadStatus } from "@/types";
 
 export interface LeadFilters {
   search: string;
   status: LeadStatus | "";
   priority: LeadPriority | "";
   source: LeadSource | "";
-  assignedTo: string;
+  assignedToUserId: string;
   dateFrom: string;
   dateTo: string;
 }
@@ -25,17 +27,29 @@ export const emptyLeadFilters: LeadFilters = {
   status: "",
   priority: "",
   source: "",
-  assignedTo: "",
+  assignedToUserId: "",
   dateFrom: "",
   dateTo: "",
 };
 
 export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProps) {
+  // Lead Assignment enhancement: this filter used to be free text; it's now
+  // a select over the same active Sales Executive/Sales Manager users the
+  // Lead Assignment picker itself uses, since assignment is now a real user
+  // reference rather than a name string to substring-match against.
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  useEffect(() => {
+    listAssignableUsers()
+      .then(setAssignableUsers)
+      .catch(() => setAssignableUsers([]));
+  }, []);
+
   const hasActiveFilters =
     !!filters.status ||
     !!filters.priority ||
     !!filters.source ||
-    !!filters.assignedTo ||
+    !!filters.assignedToUserId ||
     !!filters.dateFrom ||
     !!filters.dateTo;
 
@@ -95,12 +109,18 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
           ))}
         </Select>
 
-        <Input
-          className="w-40"
-          placeholder="Assigned to"
-          value={filters.assignedTo}
-          onChange={(e) => update("assignedTo", e.target.value)}
-        />
+        <Select
+          className="w-44"
+          value={filters.assignedToUserId}
+          onChange={(e) => update("assignedToUserId", e.target.value)}
+        >
+          <option value="">All assignees</option>
+          {assignableUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </Select>
 
         <Input
           type="date"

@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { PaginatedResponse, RbacUser } from "@/types";
+import type { AssignableUser, PaginatedResponse, RbacUser } from "@/types";
 
 export interface UserListParams {
   page?: number;
@@ -16,13 +16,41 @@ export interface UserPayload {
   name: string;
   username: string;
   email: string;
+  phone?: string;
   departmentId?: string;
   roleIds?: string[];
   isActive?: boolean;
 }
 
+// Lead Assignment "+ Add User" modal payload — a smaller field set than
+// UserPayload (no username/roleIds array): username and a temporary
+// password are auto-generated server-side, and exactly one role is chosen
+// (restricted to Sales Executive / Sales Manager — see quickCreateUser()).
+export interface QuickCreateUserPayload {
+  name: string;
+  email: string;
+  phone?: string;
+  departmentId?: string;
+  roleId: string;
+  isActive?: boolean;
+}
+
 export async function listUsers(params: UserListParams) {
   const res = await api.get<PaginatedResponse<RbacUser>>("/api/v1/users", { params });
+  return res.data;
+}
+
+// Lead Assignment dropdown — active Sales Executive / Sales Manager users
+// only (filtered server-side, see UsersService.findAssignable()).
+export async function listAssignableUsers() {
+  const res = await api.get<AssignableUser[]>("/api/v1/users/assignable");
+  return res.data;
+}
+
+// "+ Add User" from the Lead Assignment picker. Returns the full RbacUser
+// (its id/name are what the picker needs to auto-select the new user).
+export async function quickCreateUser(payload: QuickCreateUserPayload) {
+  const res = await api.post<RbacUser>("/api/v1/users/quick-create", payload);
   return res.data;
 }
 

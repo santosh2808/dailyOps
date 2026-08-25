@@ -67,12 +67,24 @@ export class ProductsService {
   }
 
   create(dto: CreateProductDto) {
-    return this.prisma.product.create({ data: dto });
+    // technicalSpec is a plain TS interface (ProductTechnicalSpec), not
+    // Prisma's generated InputJsonValue — Prisma requires an explicit index
+    // signature for JSON input types, which a named interface doesn't
+    // structurally provide even though every field it holds really is
+    // JSON-safe (strings and one array of plain objects). Cast just this
+    // field rather than the whole dto, so everything else stays type-checked
+    // normally.
+    return this.prisma.product.create({
+      data: { ...dto, technicalSpec: dto.technicalSpec as Prisma.InputJsonValue | undefined },
+    });
   }
 
   async update(id: string, dto: UpdateProductDto) {
     await this.findOne(id);
-    return this.prisma.product.update({ where: { id }, data: dto });
+    return this.prisma.product.update({
+      where: { id },
+      data: { ...dto, technicalSpec: dto.technicalSpec as Prisma.InputJsonValue | undefined },
+    });
   }
 
   async deactivate(id: string) {

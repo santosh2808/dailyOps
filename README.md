@@ -263,10 +263,29 @@ Click **Administration** in the sidebar (a fifth collapsible nav group, alongsid
 - The Dashboard's Leads count is a live `count()` of non-soft-deleted leads (unchanged from before this feature), so newly imported leads are reflected the moment the Dashboard is next viewed/refocused — no Dashboard code needed to change for this feature.
 - Not changed by this update, but worth flagging: `LeadsService.convertToCustomer()` copies `contactPerson`/`phone` straight from the Lead onto the new Customer, and `Customer.contactPerson`/`Customer.phone` are themselves non-nullable. Converting an imported lead that has either field blank will create a Customer with an empty Contact Person/Phone rather than fail — no guard was added against this, since it's outside this update's scope; fill in those fields via Edit Lead before converting if that matters for a given lead.
 
+## Business Rules (Lead History, Notes & Follow-ups)
+
+See `LEAD_ENHANCEMENT_CHECKLIST.md` for the full Files Modified / Database Changes / Testing Checklist for this feature.
+
+## Business Rules (Lead Assignment)
+
+See `LEAD_ASSIGNMENT_ENHANCEMENT_CHECKLIST.md` for the full Files Modified / Database Changes / Testing Checklist for this feature.
+
+- `Lead.assignedTo` (free text) has been replaced by `Lead.assignedToUserId`, a real foreign key to `User`. The Lead Assignment dropdown (Create/Edit Lead, and the List's filter bar) is populated from `GET /api/v1/users/assignable`, which returns only **active** users holding the **Sales Executive** or **Sales Manager** role — no other role, and no disabled user, ever appears there.
+- The "+ Add User" button beside the dropdown is gated by the `User.Create` permission (the same one the full Administration → Users screen requires) — it's hidden entirely for a user who doesn't hold it. The modal it opens collects Full Name, Email, Phone, Department, Role (restricted to the same two roles), and Status; `POST /api/v1/users/quick-create` auto-generates a unique username and a random temporary password server-side (never returned to the client) and forces `mustChangePassword`, so every existing User invariant from the RBAC work still holds — use Reset Password from Administration → Users if this person needs to log in themselves.
+- Reassigning a lead (including via the quick-add flow) still writes a `LeadAssignmentHistory` row and a matching "Reassigned from X to Y" `LeadHistory` timeline entry, same as before — only the source of "who" changed (a real `User` lookup instead of free text).
+
+- `LeadHistory` is an append-only audit log of six action types (`CREATED`, `EDITED`, `ASSIGNED`, `STATUS_CHANGED`, `QUOTATION_CREATED`, `CUSTOMER_CONVERTED`) surfaced as the chronological timeline on the Lead Details "History" tab. `Create`, `Edit`, `Change Status`, and `Convert to Customer` each log their own entry automatically — nothing changed about how those actions themselves behave.
+- `QUOTATION_CREATED` entries are the one exception: they're never written to `LeadHistory` at all. `Quotation` has no foreign key back to `Lead` (a deliberate earlier decision, to avoid a cross-module FK), so `GET /api/v1/leads/:id/history` instead joins on `Lead.customerId` (only set once a lead is converted) to find that customer's quotations and folds them into the returned timeline at read time. A lead that hasn't been converted yet will never show this entry type.
+- `LeadAssignmentHistory` (previous user, new user, changed by, date) and `LeadStatusHistory` (old status, new status, remarks, changed by, date) are separate structured tables written whenever `PATCH /api/v1/leads/:id` changes `assignedTo`, or `PATCH /api/v1/leads/:id/status` changes `status`, respectively — both also produce a matching `LeadHistory` timeline entry. Re-saving the same value (no actual change) writes nothing to either table.
+- `LeadNote` is a separate, simpler append-only table (`GET`/`POST /api/v1/leads/:id/notes`) — free-text notes a user can add to a lead, unlimited, never edited or deleted through the API. Notes are not folded into the History timeline; they have their own tab.
+- Dashboard additions: **Today's Follow-ups** and **Overdue Follow-ups** both count open leads only (status not `WON`/`LOST`/`NOT_INTERESTED`) by `nextFollowUp` against the server's current calendar day; **Lead Source Summary** counts every non-deleted lead (any status) grouped by `source`. None of the existing Dashboard counts changed.
+
 ## Business Rules (Quotations)
 
 - Every quotation belongs to exactly one `Customer` (`customerId` is a required, enforced foreign key) and has one or more `QuotationItem` rows, each tied to a `Product` (also an enforced foreign key).
-- `quotationNumber` is auto-generated in the format `QT-<year>-<6-digit-sequence>` (e.g. `QT-2026-000001`). The sequence is scoped per calendar year and generated with a retry-on-conflict loop, the same pattern used for `Lead.leadNumber`.
+- `quotationNumber` is auto-generated in the format `SR|SPYRO|QTN|<sequence>|<year>` (e.g. `SR|SPYRO|QTN|1|2026`) — a single running sequence across all years, not one that resets each January. Quotations created before this format change keep their old `QT-<year>-<6-digit-sequence>` numbers forever; nothing renumbers them. Generated with a retry-on-conflict loop, the same pattern used for `Lead.leadNumber`.
+- The Quotation PDF (Get PDF / Send Quotation) is a branded 4-page "Techno-Commercial Offer" template with a per-product Annexure-I technical specification table (from `Product.technicalSpec`) — see `QUOTATION_PDF_TEMPLATE_CHECKLIST.md` for the full write-up.
 - Every new quotation starts life with `status = DRAFT`. Status only moves to `SENT` / `ACCEPTED` / `REJECTED` / `EXPIRED` via the dedicated `PATCH /api/v1/quotations/:id/status` endpoint (or the "Change Status" dialog in the UI) — never as a side effect of editing the quotation.
 - `subtotal`, `gstAmount`, and `grandTotal` are always computed and stored server-side from the submitted items and `gstPercent` (default 18%); the frontend's live totals are a preview only and are never sent to or trusted by the backend.
 - If an item's `unitPrice` is omitted, it defaults to that product's current catalog price (`Product.price`) at the time the quotation is created or the items are replaced.
@@ -274,7 +293,8 @@ Click **Administration** in the sidebar (a fifth collapsible nav group, alongsid
 
 ## Business Rules (Sales Orders)
 
-- A Sales Order can **only** be created from a Quotation whose status is `ACCEPTED` (`POST /api/v1/sales-orders` returns `400` otherwise), and only once per quotation — attempting to create a second one for the same quotation returns `409 Conflict`. `SalesOrder.quotationId` is a unique foreign key enforcing this at the database level too.
+- Approving a Quotation (`PATCH /api/v1/quotations/:id/status` with `status: "ACCEPTED"`) automatically creates its Sales Order and the API response includes it (`{ ...quotation, salesOrder }`) so the UI can redirect straight to the Sales Order's detail page — see `WORKFLOW_AUTOMATION_CHECKLIST.md` for the full write-up. This only fires on the transition **into** `ACCEPTED`; the manual "Create Sales Order" button on Quotation Details still exists as a fallback for any quotation that was already `ACCEPTED` before this automation shipped.
+- A Sales Order can **only** be created from a Quotation whose status is `ACCEPTED` (`POST /api/v1/sales-orders` returns `400` otherwise), and only once per quotation — attempting to create a second one for the same quotation returns `409 Conflict`. `SalesOrder.quotationId` is a unique foreign key enforcing this at the database level too. The automatic creation path above reuses this exact same guard internally, and is additionally idempotent (returns the existing Sales Order instead of erroring if one already exists).
 - Customer information always auto-populates from the linked quotation's customer — `customerId` is not accepted in the request body at all, so it can never drift from the quotation's customer.
 - Every item must already exist on the linked quotation (matched by `productId`); submitting a product that isn't on the quotation returns `400`. Unit price and description default to what the quotation recorded, not the live product catalog price, so the order reflects what was actually quoted. Quantity (and, if needed, a per-line discount) is what a user is expected to edit before saving.
 - `salesOrderNumber` is auto-generated in the format `SO-<year>-<6-digit-sequence>` (e.g. `SO-2026-000001`), year-scoped with a retry-on-conflict loop — the same pattern as `Quotation.quotationNumber` and `Lead.leadNumber`.
@@ -296,7 +316,7 @@ The Sales Order is designed as the central business document everything downstre
 - `invoiceNumber` is auto-generated in the format `PI-<year>-<6-digit-sequence>` (e.g. `PI-2026-000001`), year-scoped with a retry-on-conflict loop — the same pattern as `SalesOrder.salesOrderNumber`, `Quotation.quotationNumber`, and `Lead.leadNumber`.
 - Every new Proforma Invoice starts as `DRAFT`. Status only moves through `SENT` / `EXPIRED` / `CANCELLED` via the dedicated `PATCH /api/v1/proforma-invoices/:id/status` endpoint or the "Change Status" dialog. Cancelling is also what unlocks generating a fresh invoice for the same Sales Order.
 - There is no edit and no delete for this module (no `deletedAt`/`isActive` column exists on `ProformaInvoice`, per the given field list) — the correction path for a wrong invoice is to cancel it and generate a new one.
-- PDF generation is a placeholder only: "Download PDF" in the UI shows an inline notice and makes no network call. The backend has no PDF-related endpoint or logic — only a doc comment on the `ProformaInvoice` model and a comment in the controller marking the intended future extension point (`GET /api/v1/proforma-invoices/:id/pdf` plus a `renderPdf()` service method) so a future step can wire in Smart Rotamac's existing Proforma Invoice layout without restructuring the data that already exists.
+- **Updated (Sales Automation):** PDF generation now exists, but only internally — `create()` renders a PDF via `PdfService` purely to attach to the automatic "PROFORMA_INVOICE" email sent to the customer (CC finance, see the Sales Automation section below). There is still no standalone download endpoint or "Download PDF" network call in the UI (that button's inline notice is unchanged) — nothing in scope called for a separate download button on this module the way Quotation's `GET :id/pdf` exists.
 
 ## Business Rules (Job Execution Orders)
 
@@ -314,6 +334,65 @@ The Sales Order is designed as the central business document everything downstre
   - **Lead Created** — there is no foreign key from `Quotation` back to the `Lead` that produced its `Customer` (a Customer can exist from direct entry or from converting any number of unrelated Leads). The timeline finds the earliest `Lead` with `customerId` equal to this JEO's customer and treats that as "the" originating lead; if none exists (the customer wasn't created via lead conversion), this step is simply shown as not reached rather than guessed at.
   - **Production Started / QC / Dispatch** — `JobExecutionOrder.status` is a single mutable column, not a history log, so there's no stored timestamp for exactly when an earlier transition happened. These three steps are marked done/not-done from the JEO's *current* status and Production Checklist flags, and only get a timestamp when they equal the JEO's current status (using `updatedAt` as an approximation) — earlier steps that have already been passed show as done with no timestamp. "Dispatch" maps to the `READY_FOR_DISPATCH` status, since `JeoStatus` has no separate `DISPATCHED` value the way `SalesOrderStatus` does.
   - The other seven steps (Customer Created, Quotation Created, Sales Order Created, Proforma Invoice Generated, JEO Generated, and Completed) all use a real stored `createdAt`/`completedAt` timestamp.
+
+## Business Rules (Sales Automation)
+
+Full write-up in `SALES_AUTOMATION_CHECKLIST.md`. Summary of the rules that govern this
+extension of the Quotation/Sales Order/Proforma Invoice/JEO chain above:
+
+- **Price Validation** — `Product.minPrice` is a hard floor. Accepting a Quotation
+  (`PATCH /api/v1/quotations/:id/status` with `status: "ACCEPTED"`) is blocked with a `400`
+  (`code: "PRICE_BELOW_MINIMUM"`, with the offending items' entered/minimum/difference) if any
+  item's `unitPrice` is below its product's `minPrice`. Administrators bypass this check
+  entirely, the same "Administrator always wins" convention already used for permissions.
+- **Approval Matrix** — a reusable, configurable engine (`ApprovalMatrix` table: module,
+  min%/max% bracket, required Role) rather than a hardcoded threshold. `QuotationsService`
+  computes the highest per-item discount % against each item's product `standardPrice` and
+  looks up the bracket for the `Quotation` module; if the current user doesn't hold the
+  required role (and isn't Administrator), acceptance is blocked with `400`
+  (`code: "APPROVAL_REQUIRED"`, with the computed discount % and required role name). The same
+  `resolveRequiredRole(module, percent)` method is written to be reused by any future module
+  without new code — only new seed rows.
+- **Approval Requests** — the only way past either block besides fixing the price. Submitting
+  one (`POST /api/v1/quotations/:id/request-approval`) snapshots the discount %/below-minimum
+  flag at request time. Deciding it (`PATCH /api/v1/quotations/approval-requests/:requestId/decide`,
+  or the Quotation Approvals page) as the required role or Administrator performs the full
+  ACCEPTED transition directly on approval — the requester never has to separately click Accept
+  again. Only one `PENDING` request may exist per quotation at a time (`409` otherwise).
+- **Send Quotation** — `POST /api/v1/quotations/:id/send` renders a PDF (`PdfService`), sends it
+  as an email attachment (`MailerService`, template key `QUOTATION`), records an `EmailHistory`
+  row, and sets `status="SENT"` plus `sentAt`/`sentBy`/`sentToEmail` — all as one atomic
+  operation. It's available from Quotation Details whenever status is `DRAFT` or `READY`.
+- **Email Templates & Mailer** — `EmailTemplate` rows (Quotation, Order Confirmation, Proforma
+  Invoice, JEO Notification, Dispatch) are matched by a fixed `key` and support `{{token}}`
+  substitution. `MailerService` builds a real SMTP transport from `SMTP_HOST/PORT/USER/PASS/SECURE/FROM`
+  env vars when set; if `SMTP_HOST` is unset, it logs a `"SIMULATED"` send instead of throwing —
+  mirroring this codebase's existing "Future Ready placeholder" convention rather than
+  introducing a new one. Every send, real or simulated, writes an `EmailHistory` row and never
+  throws back into the caller (a failed/simulated email never blocks the business transaction
+  that triggered it).
+- **Cascade automation** — accepting a Quotation (directly or via an approved request) converts
+  the Lead to a Customer if not already one, creates the Sales Order, then the Proforma Invoice
+  (customer + `FINANCE_TEAM_EMAIL` CC), then the JEO (factory notification to
+  `FACTORY_NOTIFICATION_EMAIL`) — each step reuses that module's own `create()`/`createFromX()`
+  method (see `SalesOrdersService.createFromQuotation()`, `ProformaInvoicesService.createFromSalesOrder()`,
+  `JobExecutionOrdersService.createFromSalesOrder()`), so manual creation via each module's
+  existing UI button and this automatic path share identical behavior — including the existing
+  duplicate-prevention guards, which make every step in the cascade idempotent.
+- **Audit Log** — a generic, append-only log (`AuditLog`: module, `recordId` as a plain string,
+  action, actor, old/new value, remarks) records every Create/Update/Delete/Assign/Send
+  Email/Generate JEO/Generate PI action across Quotation, Sales Order, Proforma Invoice, and JEO.
+  `recordId` is the one deliberate exception to "use foreign keys, not denormalization" in this
+  schema — a generic log needs to reference arbitrary entity types, which a real FK can't do.
+  `EmailHistory`, by contrast, only ever needs one of a small fixed set of document types, so it
+  does use real (nullable) foreign keys.
+- **Lead history additions** — `QUOTATION_SENT`, `SALES_ORDER_CREATED`,
+  `PROFORMA_INVOICE_GENERATED`, and `JEO_GENERATED` are synthesized into `getHistory()`'s
+  response the same way the pre-existing `QUOTATION_CREATED`/`CUSTOMER_CONVERTED` entries are —
+  never persisted directly, always derived from the linked Quotation/Sales Order/Proforma
+  Invoice/JEO records at read time. Assignment History and Status History had storage tables
+  from an earlier session but no read endpoint until now; both are exposed as their own tabs on
+  Lead Details alongside the existing History/Notes tabs, plus a new Email History tab.
 
 ## Business Rules (Materials)
 

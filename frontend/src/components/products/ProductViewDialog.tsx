@@ -63,7 +63,15 @@ export default function ProductViewDialog({
               </Badge>
             }
           />
+          <Field label="Standard Price" value={formatPrice(product.standardPrice)} />
+          <Field label="Minimum Price" value={formatPrice(product.minPrice)} />
+          <Field
+            label="Max Discount %"
+            value={product.maxDiscountPercent != null ? `${product.maxDiscountPercent}%` : null}
+          />
           <Field label="Last Updated" value={new Date(product.updatedAt).toLocaleDateString()} />
+          <Field label="Model No. (Quotation PDF)" value={product.technicalSpec?.modelNo} />
+          <Field label="Fan Size (Quotation PDF)" value={product.technicalSpec?.fanSize} />
         </div>
 
         {product.description && (

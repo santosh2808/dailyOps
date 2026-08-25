@@ -1,6 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
+import { PdfService } from '../pdf/pdf.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
 import { UpdateProductionChecklistDto } from './dto/update-production-checklist.dto';
@@ -96,7 +99,14 @@ const EMPTY_DASHBOARD_COUNTS: ProductionDashboardCounts = {
 
 @Injectable()
 export class JobExecutionOrdersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(JobExecutionOrdersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailerService: MailerService,
+    private pdfService: PdfService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll(query: QueryJeoDto) {
     const page = query.page ?? 1;
@@ -164,7 +174,7 @@ export class JobExecutionOrdersService {
     return jeo;
   }
 
-  async create(dto: CreateJeoDto) {
+  async create(dto: CreateJeoDto, actorName?: string) {
     const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
@@ -190,7 +200,7 @@ export class JobExecutionOrdersService {
     for (let attempt = 1; attempt <= MAX_JEO_NUMBER_ATTEMPTS; attempt++) {
       const jeoNumber = await this.generateJeoNumber();
       try {
-        return await this.prisma.jobExecutionOrder.create({
+        const created = await this.prisma.jobExecutionOrder.create({
           data: {
             jeoNumber,
             salesOrderId: salesOrder.id,
@@ -206,6 +216,17 @@ export class JobExecutionOrdersService {
           },
           include: JEO_DETAIL_INCLUDE,
         });
+
+        await this.auditLogService
+          .record({ module: 'JEO', recordId: created.id, action: 'Generated', actorName })
+          .catch((error) => this.logger.error('AuditLog record failed', error));
+
+        // Requirement #13 / "Notify Factory": every JEO generation — manual
+        // or automatic (both run through this one create() method) —
+        // emails the Production Team with the JEO PDF attached.
+        await this.sendFactoryNotificationEmail(created, actorName);
+
+        return created;
       } catch (error) {
         if (this.isJeoNumberConflict(error) && attempt < MAX_JEO_NUMBER_ATTEMPTS) {
           continue; // Another request took this number first — retry with a fresh one.
@@ -218,9 +239,25 @@ export class JobExecutionOrdersService {
     throw new Error('Failed to generate a unique JEO number');
   }
 
-  async updateStatus(id: string, dto: UpdateJeoStatusDto) {
-    await this.findOne(id);
-    return this.prisma.jobExecutionOrder.update({
+  // Automatic-cascade entry point (Sales Order -> automatically generate
+  // JEO), invoked from QuotationsService.performAccept(). Idempotent: if
+  // an active (not yet COMPLETED) JEO already exists for this Sales Order,
+  // it's returned as-is rather than throwing create()'s
+  // ConflictException — same pattern as
+  // ProformaInvoicesService.createFromSalesOrder().
+  async createFromSalesOrder(salesOrderId: string) {
+    const existing = await this.prisma.jobExecutionOrder.findFirst({
+      where: { salesOrderId, status: { not: 'COMPLETED' } },
+    });
+    if (existing) {
+      return this.findOne(existing.id);
+    }
+    return this.create({ salesOrderId, priority: 'MEDIUM' });
+  }
+
+  async updateStatus(id: string, dto: UpdateJeoStatusDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.jobExecutionOrder.update({
       where: { id },
       data: {
         status: dto.status,
@@ -234,6 +271,77 @@ export class JobExecutionOrdersService {
       },
       include: JEO_DETAIL_INCLUDE,
     });
+    await this.auditLogService
+      .record({
+        module: 'JEO',
+        recordId: id,
+        action: 'Status Changed',
+        actorName,
+        oldValue: { status: existing.status },
+        newValue: { status: dto.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
+  getEmailHistory(id: string) {
+    return this.prisma.emailHistory.findMany({
+      where: { jobExecutionOrderId: id },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  private async sendFactoryNotificationEmail(
+    jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
+    actorName?: string,
+  ) {
+    try {
+      const pdf = await this.pdfService.render({
+        documentTitle: 'JOB EXECUTION ORDER',
+        documentNumber: jeo.jeoNumber,
+        documentDate: jeo.createdAt,
+        customerName: jeo.customer.companyName,
+        items: jeo.salesOrder.items.map((item) => ({
+          name: item.product.name,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+        })),
+        subtotal: jeo.salesOrder.subtotal,
+        tax: jeo.salesOrder.tax,
+        grandTotal: jeo.salesOrder.grandTotal,
+        fields: [
+          { label: 'Sales Order', value: jeo.salesOrder.salesOrderNumber },
+          { label: 'Priority', value: jeo.priority },
+          ...(jeo.deliveryDate ? [{ label: 'Delivery Date', value: jeo.deliveryDate.toLocaleDateString() }] : []),
+        ],
+        notes: jeo.remarks,
+      });
+
+      // "Notify Factory" — env-configurable Production Team recipient
+      // (there's no per-user Production distribution list modeled yet), so
+      // this is never a hardcoded address; unset simply skips the send
+      // (logged as FAILED "no recipient" in EmailHistory, exactly like any
+      // other missing-recipient case).
+      await this.mailerService.send({
+        templateKey: 'JEO_NOTIFICATION',
+        fallbackSubject: `New Job Execution Order ${jeo.jeoNumber}`,
+        fallbackBodyHtml: `<p>A new Job Execution Order {{jeoNumber}} has been generated for Sales Order {{salesOrderNumber}} (Customer: {{customerName}}). Priority: {{priority}}.</p>`,
+        vars: {
+          jeoNumber: jeo.jeoNumber,
+          salesOrderNumber: jeo.salesOrder.salesOrderNumber,
+          customerName: jeo.customer.companyName,
+          priority: jeo.priority,
+        },
+        to: process.env.FACTORY_NOTIFICATION_EMAIL,
+        attachments: [{ filename: `${jeo.jeoNumber}.pdf`, content: pdf }],
+        actorName,
+        link: { module: 'JEO', jobExecutionOrderId: jeo.id },
+      });
+    } catch (error) {
+      this.logger.error(`Factory notification email failed for JEO ${jeo.id}`, error);
+    }
   }
 
   // Production Dashboard: six status counts (across ALL JEOs, including

@@ -18,6 +18,11 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { ApprovalMatrixModule } from './approval-matrix/approval-matrix.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
+import { MailerModule } from './mailer/mailer.module';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -40,6 +45,12 @@ import { DepartmentsModule } from './departments/departments.module';
     MaterialUnitsModule,
     MaterialsModule,
     SuppliersModule,
+    // Sales Automation (continuation of the DailyOps project) — additive.
+    AuditLogModule,
+    ApprovalMatrixModule,
+    EmailTemplatesModule,
+    MailerModule,
+    PdfModule,
   ],
 })
 export class AppModule {}

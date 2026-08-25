@@ -11,6 +11,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Min,
   ValidateNested,
@@ -115,13 +116,22 @@ export class CreateLeadDto {
   @IsDateString()
   nextFollowUp?: string;
 
+  // Lead Management Phase 1 (requirement #5) — short free-text reminder
+  // alongside the follow-up date, e.g. "Call before 3pm".
+  @ApiPropertyOptional({ example: 'Call before 3pm' })
+  @IsOptional()
+  @IsString()
+  reminderNote?: string;
+
   @ApiPropertyOptional({ example: 'Interested but needs board approval' })
   @IsOptional()
   @IsString()
   remarks?: string;
 
-  @ApiPropertyOptional({ example: 'Priya Sharma' })
+  // Lead Assignment enhancement: a real FK to User, restricted client-side
+  // to Sales Executive / Sales Manager users (see UsersService.findAssignable()).
+  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   @IsOptional()
-  @IsString()
-  assignedTo?: string;
+  @IsUUID(undefined, { message: 'A valid user is required' })
+  assignedToUserId?: string;
 }

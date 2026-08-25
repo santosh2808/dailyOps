@@ -1,5 +1,10 @@
 import api from "@/lib/api";
-import type { PaginatedResponse, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
+import type {
+  EmailHistoryEntry,
+  PaginatedResponse,
+  ProformaInvoice,
+  ProformaInvoiceStatus,
+} from "@/types";
 
 export interface ProformaInvoiceListParams {
   page?: number;
@@ -45,5 +50,10 @@ export async function createProformaInvoice(payload: ProformaInvoicePayload) {
 
 export async function updateProformaInvoiceStatus(id: string, status: ProformaInvoiceStatus) {
   const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/status`, { status });
+  return res.data;
+}
+
+export async function getProformaInvoiceEmailHistory(id: string) {
+  const res = await api.get<EmailHistoryEntry[]>(`/api/v1/proforma-invoices/${id}/email-history`);
   return res.data;
 }

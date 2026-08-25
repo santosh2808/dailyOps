@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { STATUS_OPTIONS } from "./leadOptions";
 import type { Lead, LeadStatus } from "@/types";
 
@@ -17,7 +18,7 @@ interface ChangeStatusDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead: Lead | null;
-  onConfirm: (status: LeadStatus) => Promise<void>;
+  onConfirm: (status: LeadStatus, remarks?: string) => Promise<void>;
 }
 
 export default function ChangeStatusDialog({
@@ -27,12 +28,17 @@ export default function ChangeStatusDialog({
   onConfirm,
 }: ChangeStatusDialogProps) {
   const [status, setStatus] = useState<LeadStatus>("NEW");
+  // Additive: recorded on Lead Status History (and the History timeline)
+  // alongside this change — entirely optional, existing callers/tests that
+  // never touch this field are unaffected.
+  const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open && lead) {
       setStatus(lead.status);
+      setRemarks("");
       setError("");
     }
   }, [open, lead]);
@@ -41,7 +47,7 @@ export default function ChangeStatusDialog({
     setSubmitting(true);
     setError("");
     try {
-      await onConfirm(status);
+      await onConfirm(status, remarks.trim() || undefined);
       onOpenChange(false);
     } catch {
       setError("Could not update the lead status. Please try again.");
@@ -77,6 +83,16 @@ export default function ChangeStatusDialog({
               </option>
             ))}
           </Select>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="lead-status-remarks">Remarks (optional)</Label>
+          <Textarea
+            id="lead-status-remarks"
+            placeholder="Add a note about this status change..."
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+          />
         </div>
 
         {status === "WON" && (

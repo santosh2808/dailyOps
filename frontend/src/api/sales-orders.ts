@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { PaginatedResponse, SalesOrder, SalesOrderStatus } from "@/types";
+import type { EmailHistoryEntry, PaginatedResponse, SalesOrder, SalesOrderStatus } from "@/types";
 
 export interface SalesOrderListParams {
   page?: number;
@@ -64,5 +64,10 @@ export async function updateSalesOrderStatus(id: string, status: SalesOrderStatu
 
 export async function deleteSalesOrder(id: string) {
   const res = await api.delete<SalesOrder>(`/api/v1/sales-orders/${id}`);
+  return res.data;
+}
+
+export async function getSalesOrderEmailHistory(id: string) {
+  const res = await api.get<EmailHistoryEntry[]>(`/api/v1/sales-orders/${id}/email-history`);
   return res.data;
 }

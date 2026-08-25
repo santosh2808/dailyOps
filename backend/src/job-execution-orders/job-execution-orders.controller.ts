@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
@@ -43,16 +43,22 @@ export class JobExecutionOrdersController {
     return this.jobExecutionOrdersService.getTimeline(id);
   }
 
+  @Get(':id/email-history')
+  @RequirePermission('JEO', 'View')
+  getEmailHistory(@Param('id') id: string) {
+    return this.jobExecutionOrdersService.getEmailHistory(id);
+  }
+
   @Post()
   @RequirePermission('JEO', 'Create')
-  create(@Body() dto: CreateJeoDto) {
-    return this.jobExecutionOrdersService.create(dto);
+  create(@Body() dto: CreateJeoDto, @Req() req: any) {
+    return this.jobExecutionOrdersService.create(dto, req.user?.name);
   }
 
   @Patch(':id/status')
   @RequirePermission('JEO', 'Update')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateJeoStatusDto) {
-    return this.jobExecutionOrdersService.updateStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateJeoStatusDto, @Req() req: any) {
+    return this.jobExecutionOrdersService.updateStatus(id, dto, req.user?.name);
   }
 
   // Partial update of one or more Production Checklist booleans — the "Start

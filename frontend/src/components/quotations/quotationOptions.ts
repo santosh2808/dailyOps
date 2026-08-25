@@ -7,6 +7,7 @@ import type { QuotationStatus } from "@/types";
 
 export const STATUS_OPTIONS: { value: QuotationStatus; label: string; badge: BadgeProps["variant"] }[] = [
   { value: "DRAFT", label: "Draft", badge: "muted" },
+  { value: "READY", label: "Ready", badge: "warning" },
   { value: "SENT", label: "Sent", badge: "info" },
   { value: "ACCEPTED", label: "Accepted", badge: "success" },
   { value: "REJECTED", label: "Rejected", badge: "destructive" },

@@ -10,13 +10,21 @@ import JeoPriorityBadge from "@/components/job-execution-orders/JeoPriorityBadge
 import ChangeJeoStatusDialog from "@/components/job-execution-orders/ChangeJeoStatusDialog";
 import ProductionChecklistCard from "@/components/job-execution-orders/ProductionChecklistCard";
 import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
+import EmailHistoryCard from "@/components/EmailHistoryCard";
 import {
+  getJeoEmailHistory,
   getJeoTimeline,
   getJobExecutionOrder,
   updateJeoStatus,
   updateProductionChecklist,
 } from "@/api/job-execution-orders";
-import type { JeoStatus, JeoTimelineStep, JobExecutionOrder, ProductionChecklist } from "@/types";
+import type {
+  EmailHistoryEntry,
+  JeoStatus,
+  JeoTimelineStep,
+  JobExecutionOrder,
+  ProductionChecklist,
+} from "@/types";
 
 type ChecklistKey = keyof Omit<ProductionChecklist, "id" | "jeoId" | "completedAt">;
 
@@ -54,6 +62,8 @@ export default function JobExecutionOrderDetails() {
   const [actionBusy, setActionBusy] = useState(false);
   const [timelineSteps, setTimelineSteps] = useState<JeoTimelineStep[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
+  const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
+  const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
   const fetchJeo = useCallback(async () => {
     if (!id) return;
@@ -89,6 +99,15 @@ export default function JobExecutionOrderDetails() {
     fetchJeo();
     fetchTimeline();
   }, [fetchJeo, fetchTimeline]);
+
+  useEffect(() => {
+    if (!id) return;
+    setEmailHistoryLoading(true);
+    getJeoEmailHistory(id)
+      .then(setEmailHistory)
+      .catch(() => {})
+      .finally(() => setEmailHistoryLoading(false));
+  }, [id]);
 
   async function handleStatusConfirm(status: JeoStatus) {
     if (!id) return;
@@ -293,6 +312,8 @@ export default function JobExecutionOrderDetails() {
                   <JeoTimeline steps={timelineSteps} loading={timelineLoading} />
                 </CardContent>
               </Card>
+
+              <EmailHistoryCard loading={emailHistoryLoading} entries={emailHistory} />
             </div>
           )}
         </main>

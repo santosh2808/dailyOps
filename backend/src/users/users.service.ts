@@ -1,19 +1,27 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { QuickCreateUserDto } from './dto/quick-create-user.dto';
 
 const USER_LIST_INCLUDE = {
   department: true,
   roles: { include: { role: true } },
 };
+
+// Lead Assignment dropdown is scoped to exactly these two roles (requirement
+// #3 of the Lead Assignment enhancement) — used by both findAssignable()
+// and quickCreate()'s role restriction below.
+const ASSIGNABLE_ROLE_NAMES = ['Sales Executive', 'Sales Manager'];
 
 @Injectable()
 export class UsersService {
@@ -148,6 +156,7 @@ export class UsersService {
         username,
         email,
         password: hashed,
+        phone: dto.phone?.trim() || undefined,
         departmentId: dto.departmentId,
         // Every user created here (there's no other way to create one —
         // "All other users must be created dynamically through
@@ -161,6 +170,77 @@ export class UsersService {
       },
       include: USER_LIST_INCLUDE,
     });
+  }
+
+  // Lead Assignment dropdown — active users holding either Sales role.
+  // Deliberately returns only the fields needed to display/select a user
+  // (never the password hash).
+  findAssignable() {
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        roles: { some: { role: { name: { in: ASSIGNABLE_ROLE_NAMES } } } },
+      },
+      select: { id: true, name: true, email: true, username: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // "+ Add User" quick-create, opened from the Lead Assignment picker.
+  // Deliberately a smaller field set than create() above (no
+  // username/password collected from whoever is filling this in), but
+  // preserves every existing User invariant: unique username (generated
+  // from the email, with a numeric-suffix retry on conflict — same retry
+  // convention used for Lead/Quotation number generation), a hashed random
+  // temporary password, and mustChangePassword forced true. Restricted to
+  // the two roles the Lead Assignment dropdown is scoped to — use the full
+  // Administration -> Users screen to create a user with any other role.
+  async quickCreate(dto: QuickCreateUserDto) {
+    const email = dto.email.trim().toLowerCase();
+    const existingEmail = await this.findByEmail(email);
+    if (existingEmail) {
+      throw new ConflictException('A user with this email already exists');
+    }
+
+    const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
+    if (!role || !ASSIGNABLE_ROLE_NAMES.includes(role.name)) {
+      throw new BadRequestException('Role must be Sales Executive or Sales Manager');
+    }
+
+    const username = await this.generateUniqueUsername(email);
+    // Never returned to the client — this account's real password is meant
+    // to be set via the normal Reset Password action if/when this person
+    // needs to log in themselves; mustChangePassword ensures that's forced
+    // regardless.
+    const temporaryPassword = crypto.randomBytes(9).toString('base64url');
+    const hashed = await bcrypt.hash(temporaryPassword, 10);
+
+    return this.prisma.user.create({
+      data: {
+        name: dto.name.trim(),
+        username,
+        email,
+        password: hashed,
+        phone: dto.phone?.trim() || undefined,
+        departmentId: dto.departmentId,
+        isActive: dto.isActive ?? true,
+        mustChangePassword: true,
+        roles: { create: [{ roleId: dto.roleId }] },
+      },
+      include: USER_LIST_INCLUDE,
+    });
+  }
+
+  private async generateUniqueUsername(email: string): Promise<string> {
+    const base = email.split('@')[0].replace(/[^a-z0-9_.]/g, '').slice(0, 28) || 'user';
+    const seed = base.length >= 3 ? base : `${base}user`.slice(0, 32);
+    let candidate = seed;
+    let suffix = 1;
+    while (await this.findByUsername(candidate)) {
+      suffix += 1;
+      candidate = `${seed}${suffix}`.slice(0, 32);
+    }
+    return candidate;
   }
 
   async update(id: string, dto: UpdateUserDto) {
@@ -195,6 +275,7 @@ export class UsersService {
           ...(dto.name ? { name: dto.name.trim() } : {}),
           ...(dto.email ? { email: dto.email.trim().toLowerCase() } : {}),
           ...(dto.username ? { username: dto.username.trim().toLowerCase() } : {}),
+          ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
           ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           ...(dto.roleIds

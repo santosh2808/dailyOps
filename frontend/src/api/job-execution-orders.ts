@@ -1,5 +1,6 @@
 import api from "@/lib/api";
 import type {
+  EmailHistoryEntry,
   JeoDashboardResponse,
   JeoPriority,
   JeoStatus,
@@ -78,5 +79,10 @@ export async function getProductionDashboard() {
 
 export async function getJeoTimeline(id: string) {
   const res = await api.get<JeoTimelineResponse>(`/api/v1/job-execution-orders/${id}/timeline`);
+  return res.data;
+}
+
+export async function getJeoEmailHistory(id: string) {
+  const res = await api.get<EmailHistoryEntry[]>(`/api/v1/job-execution-orders/${id}/email-history`);
   return res.data;
 }

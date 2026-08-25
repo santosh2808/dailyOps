@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -26,6 +27,7 @@ import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
+import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 
 @ApiTags('leads')
 @ApiBearerAuth()
@@ -78,20 +80,20 @@ export class LeadsController {
 
   @Post()
   @RequirePermission('Lead', 'Create')
-  create(@Body() dto: CreateLeadDto) {
-    return this.leadsService.create(dto);
+  create(@Body() dto: CreateLeadDto, @Req() req: any) {
+    return this.leadsService.create(dto, req.user?.name);
   }
 
   @Patch(':id')
   @RequirePermission('Lead', 'Edit')
-  update(@Param('id') id: string, @Body() dto: UpdateLeadDto) {
-    return this.leadsService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateLeadDto, @Req() req: any) {
+    return this.leadsService.update(id, dto, req.user?.name);
   }
 
   @Patch(':id/status')
   @RequirePermission('Lead', 'Edit')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateLeadStatusDto) {
-    return this.leadsService.updateStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateLeadStatusDto, @Req() req: any) {
+    return this.leadsService.updateStatus(id, dto, req.user?.name);
   }
 
   @Delete(':id')
@@ -102,7 +104,49 @@ export class LeadsController {
 
   @Post(':id/convert')
   @RequirePermission('Lead', 'Edit')
-  convert(@Param('id') id: string) {
-    return this.leadsService.convertToCustomer(id);
+  convert(@Param('id') id: string, @Req() req: any) {
+    return this.leadsService.convertToCustomer(id, req.user?.name);
+  }
+
+  // Lead History / Notes — additive, read-only history + append-only notes.
+  // Gated by the existing Lead.View/Lead.Edit permission codes; no new
+  // Permission rows introduced for this.
+  @Get(':id/history')
+  @RequirePermission('Lead', 'View')
+  getHistory(@Param('id') id: string) {
+    return this.leadsService.getHistory(id);
+  }
+
+  @Get(':id/notes')
+  @RequirePermission('Lead', 'View')
+  getNotes(@Param('id') id: string) {
+    return this.leadsService.getNotes(id);
+  }
+
+  @Post(':id/notes')
+  @RequirePermission('Lead', 'Edit')
+  addNote(@Param('id') id: string, @Body() dto: CreateLeadNoteDto, @Req() req: any) {
+    return this.leadsService.addNote(id, dto, req.user?.name);
+  }
+
+  // Sales Automation requirement #16 ("Show Assignment History. Show
+  // Status History. Show Email History.") — each as its own dedicated tab
+  // on Lead Details, distinct from the merged Timeline above.
+  @Get(':id/assignment-history')
+  @RequirePermission('Lead', 'View')
+  getAssignmentHistory(@Param('id') id: string) {
+    return this.leadsService.getAssignmentHistory(id);
+  }
+
+  @Get(':id/status-history')
+  @RequirePermission('Lead', 'View')
+  getStatusHistory(@Param('id') id: string) {
+    return this.leadsService.getStatusHistory(id);
+  }
+
+  @Get(':id/email-history')
+  @RequirePermission('Lead', 'View')
+  getEmailHistory(@Param('id') id: string) {
+    return this.leadsService.getEmailHistory(id);
   }
 }

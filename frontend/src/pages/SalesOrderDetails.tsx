@@ -10,9 +10,11 @@ import ChangeSalesOrderStatusDialog from "@/components/sales-orders/ChangeSalesO
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
 import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/GenerateProformaInvoiceDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
+import EmailHistoryCard from "@/components/EmailHistoryCard";
 import {
   deleteSalesOrder,
   getSalesOrder,
+  getSalesOrderEmailHistory,
   updateSalesOrderStatus,
 } from "@/api/sales-orders";
 import {
@@ -25,7 +27,7 @@ import {
   listJobExecutionOrders,
   type JeoPayload,
 } from "@/api/job-execution-orders";
-import type { SalesOrder, SalesOrderStatus } from "@/types";
+import type { EmailHistoryEntry, SalesOrder, SalesOrderStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -63,6 +65,8 @@ export default function SalesOrderDetails() {
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
   const [generateJeoOpen, setGenerateJeoOpen] = useState(false);
   const [activeJeoId, setActiveJeoId] = useState<string | null>(null);
+  const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
+  const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
   const fetchSalesOrder = useCallback(async () => {
     if (!id) return;
@@ -118,6 +122,15 @@ export default function SalesOrderDetails() {
   useEffect(() => {
     checkActiveJeo();
   }, [checkActiveJeo]);
+
+  useEffect(() => {
+    if (!id) return;
+    setEmailHistoryLoading(true);
+    getSalesOrderEmailHistory(id)
+      .then(setEmailHistory)
+      .catch(() => {})
+      .finally(() => setEmailHistoryLoading(false));
+  }, [id]);
 
   async function handleGenerateInvoiceConfirm(payload: Omit<ProformaInvoicePayload, "salesOrderId">) {
     if (!id) return;
@@ -321,6 +334,8 @@ export default function SalesOrderDetails() {
                   </p>
                 </CardContent>
               </Card>
+
+              <EmailHistoryCard loading={emailHistoryLoading} entries={emailHistory} />
             </div>
           )}
         </main>

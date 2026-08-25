@@ -38,6 +38,14 @@ model User {
   // frontend redirects to /change-password for as long as this is true,
   // regardless of what URL is requested.
   mustChangePassword Boolean @default(false)
+
+  // Additive: Lead Assignment enhancement. Optional contact number, shown
+  // on the quick "+ Add User" flow used from the Lead Assignment picker.
+  phone String?
+
+  // Back-relation for Lead.assignedToUserId below — a User can have many
+  // Leads assigned to them.
+  assignedLeads Lead[]
 }
 
 // Enterprise RBAC — additive models only; nothing above this comment was
@@ -65,6 +73,10 @@ model Role {
   updatedAt   DateTime         @updatedAt
   permissions RolePermission[]
   users       UserRole[]
+
+  // Additive: Sales Automation Approval Matrix — a Role can be the required
+  // approver for zero or more ApprovalMatrix brackets (see that model).
+  approvalMatrixEntries ApprovalMatrix[]
 }
 
 // One row per (module, action) — e.g. (Lead, View), (Quotation, Approve).
@@ -142,6 +154,34 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Additive: Sales Automation price validation (requirement #8). All three
+  // are optional — a product created before this feature (or one that's
+  // simply never had its price floor/ceiling set) behaves exactly as before:
+  // no minimum-price or discount-bracket check ever fires for it (see
+  // QuotationsService's price validation gate).
+  standardPrice      Float?
+  minPrice           Float?
+  maxDiscountPercent Float?
+
+  // Additive: Techno-Commercial Offer PDF (branded Quotation template).
+  // Every field the Annexure-I "Scope of Supply | Technical Specifications"
+  // table needs, for whichever fan size/model this Product row represents
+  // (e.g. "SPYRO 14"). A single flexible JSON blob rather than ~25 flat
+  // columns — same convention already used for AuditLog.oldValue/newValue —
+  // since this is purely descriptive spec-sheet data with no query/filter
+  // requirement of its own. Optional: a product with this unset simply
+  // renders a spec table with blank values rather than blocking PDF
+  // generation. Shape (all fields optional strings unless noted):
+  //   modelNo, fanSize, noOfBlades, airVolume, coverageArea, motorRating,
+  //   speed, noise, weight, threePhaseVoltage, threePhaseCurrent,
+  //   onePhaseVoltage, onePhaseCurrent, frequency, frameStructure,
+  //   hangingStructure, fasteners, bladeDesign, bladeMoc,
+  //   bladeSectionalWidth, driveType, controlPanelMounting,
+  //   controlPanelDrive, controlPanelEnclosure, bmsCompatibility,
+  //   safetyCertification, boltedJoints, warrantyMotor, warrantyDrive,
+  //   warrantyOther, scopeOfSupply: { item: string; quantityPerFan: string }[]
+  technicalSpec      Json?
+
   // Back-relations required by Prisma for LeadProduct.product,
   // QuotationItem.product, and SalesOrderItem.product. Additive only — no
   // existing Product fields, validation, or behavior changed.
@@ -150,16 +190,20 @@ model Product {
   salesOrderItems  SalesOrderItem[]
 }
 
+// Lead Management Phase 1 — replaced wholesale per the new required
+// workflow (Create -> Assign -> Contacted -> Site Visit -> Qualified ->
+// Quotation Sent -> Won/Lost). NEGOTIATION and NOT_INTERESTED are dropped;
+// the hand-authored migration remaps any existing rows (NEGOTIATION ->
+// QUOTATION_SENT, NOT_INTERESTED -> LOST) rather than losing data.
 enum LeadStatus {
   NEW
+  ASSIGNED
   CONTACTED
-  QUALIFIED
   SITE_VISIT
+  QUALIFIED
   QUOTATION_SENT
-  NEGOTIATION
   WON
   LOST
-  NOT_INTERESTED
 }
 
 enum LeadPriority {
@@ -203,8 +247,19 @@ model Lead {
   estimatedValue    Float?
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
-  // Plain scalar (no User relation) — no user-management module exists yet.
-  assignedTo        String?
+  // Lead Management Phase 1 (requirement #5) — a short free-text reminder
+  // note attached to the next follow-up (e.g. "Call before 3pm"). The
+  // Today's/Overdue/Upcoming Follow-up widgets are still purely date-driven
+  // off `nextFollowUp` above; this is just displayed alongside it, not used
+  // in any query.
+  reminderNote      String?
+  // Lead Assignment enhancement: a real FK to User (Enterprise RBAC's User
+  // model didn't exist yet when Lead was first designed, hence this being
+  // a relation now rather than the plain scalar convention used elsewhere).
+  // SetNull on delete — if the assigned user is ever removed, the lead just
+  // becomes unassigned rather than blocking the delete.
+  assignedToUserId  String?
+  assignedToUser    User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
   city              String?
   state             String?
   country           String?
@@ -222,11 +277,109 @@ model Lead {
   deletedAt         DateTime?
   products          LeadProduct[]
 
+  // Additive: Lead History/Notes/Assignment/Status audit trail. Every row
+  // is append-only (created, never updated/deleted) and cascades away if
+  // the parent Lead is ever hard-deleted (soft delete via deletedAt never
+  // triggers this).
+  history           LeadHistory[]
+  notes             LeadNote[]
+  assignmentHistory LeadAssignmentHistory[]
+  statusHistory     LeadStatusHistory[]
+  // Lead Management Phase 1 (requirement #8) — Quotations generated
+  // directly from a Lead before it's been converted to a Customer. Unlike
+  // the customerId-join synthesis used elsewhere in this schema, this is a
+  // real FK because a lead-originated Quotation has no Customer to join
+  // through yet (that conversion is explicitly out of scope this phase).
+  quotations        Quotation[]
+
   @@index([status])
   @@index([priority])
   @@index([source])
-  @@index([assignedTo])
+  @@index([assignedToUserId])
   @@index([deletedAt])
+}
+
+// Tracks every action listed in the Lead History requirement. "Quotation
+// Created" is deliberately NOT persisted here — Quotation has no FK back to
+// Lead (see Quotation model comment), so LeadsService synthesizes those
+// entries at read time by joining on Lead.customerId once a lead has been
+// converted, rather than adding a cross-module write into the Quotations
+// module.
+enum LeadHistoryAction {
+  CREATED
+  EDITED
+  ASSIGNED
+  STATUS_CHANGED
+  QUOTATION_CREATED
+  CUSTOMER_CONVERTED
+  // Additive: Sales Automation workflow (requirement #1). Like
+  // QUOTATION_CREATED above, these are synthesized at read time in
+  // LeadsService.getHistory() by walking Lead.customerId -> Quotation(s) ->
+  // SalesOrder -> ProformaInvoice/JobExecutionOrder — never written directly
+  // — but are real enum values so the synthesized rows are type-correct.
+  QUOTATION_SENT
+  SALES_ORDER_CREATED
+  PROFORMA_INVOICE_GENERATED
+  JEO_GENERATED
+  // Additive: Lead Management Phase 1 (requirement #3). Unlike the four
+  // above, these ARE written directly by LeadsService — see addNote() and
+  // the follow-up branch of update().
+  NOTE_ADDED
+  FOLLOWUP_ADDED
+}
+
+model LeadHistory {
+  id          String            @id @default(uuid())
+  leadId      String
+  lead        Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  action      LeadHistoryAction
+  description String
+  // Actor display name captured from the authenticated request at the time
+  // of the action (same convention as SalesOrder.createdBy) — never
+  // accepted from the request body.
+  performedBy String?
+  createdAt   DateTime          @default(now())
+
+  @@index([leadId])
+  @@index([action])
+}
+
+// Free-text notes a user can add to a lead — unlimited, append-only, never
+// edited or deleted through the API.
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  note      String
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model LeadAssignmentHistory {
+  id           String   @id @default(uuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  previousUser String?
+  newUser      String?
+  changedBy    String?
+  createdAt    DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model LeadStatusHistory {
+  id        String     @id @default(uuid())
+  leadId    String
+  lead      Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  oldStatus LeadStatus?
+  newStatus LeadStatus
+  remarks   String?
+  changedBy String?
+  createdAt DateTime   @default(now())
+
+  @@index([leadId])
 }
 
 model LeadProduct {
@@ -246,6 +399,11 @@ model LeadProduct {
 
 enum QuotationStatus {
   DRAFT
+  // Additive: Sales Automation Quotation workflow (requirement #6) — sits
+  // between DRAFT and SENT, marking pricing as reviewed/finalized and ready
+  // to go out. Purely a status value; no behavior is keyed off it other
+  // than being selectable via the existing PATCH .../status endpoint.
+  READY
   SENT
   ACCEPTED
   REJECTED
@@ -255,16 +413,53 @@ enum QuotationStatus {
 model Quotation {
   id              String          @id @default(uuid())
   quotationNumber String          @unique
-  customerId      String
-  customer        Customer        @relation(fields: [customerId], references: [id])
+  // Lead Management Phase 1 (requirement #8/#9): a Quotation can now be
+  // generated directly from a QUALIFIED Lead, before any Customer exists —
+  // "Generate Quotation" must NOT trigger Customer conversion this phase.
+  // customerId is therefore nullable; exactly one of customerId/leadId is
+  // set at creation (enforced in QuotationsService.create(), not the DB).
+  // When Phase 2's Customer Acceptance eventually converts the lead, that
+  // step is expected to backfill customerId onto any of its quotations —
+  // leadId is never cleared, so the originating lead stays traceable.
+  customerId      String?
+  customer        Customer?       @relation(fields: [customerId], references: [id])
+  leadId          String?
+  lead            Lead?           @relation(fields: [leadId], references: [id])
   status          QuotationStatus @default(DRAFT)
   subtotal        Float           @default(0)
   gstPercent      Float           @default(18)
   gstAmount       Float           @default(0)
+  // Additive: real currency amounts (not just Annexure-II descriptive text)
+  // that feed into grandTotal. installationCharge defaults to Rs.8,000 per
+  // fan (auto-computed from item quantities at create/update time) unless a
+  // quotation explicitly overrides it; transportationCharge has no sensible
+  // default — it varies by site/distance and is filled in by staff per
+  // quotation, defaulting to 0 until set. GST is charged on
+  // subtotal + installationCharge + transportationCharge (see
+  // QuotationsService.computeTotals()).
+  installationCharge   Float @default(0)
+  transportationCharge Float @default(0)
   grandTotal      Float           @default(0)
+  // Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms
+  // (price basis, GST Included/Extra wording, transportation, payment,
+  // delivery, offer validity, optional unloading/installation-schedule
+  // lines, and an optional regionCode inserted into quotationNumber at
+  // creation) turned out to genuinely vary order to order rather than being
+  // fixed boilerplate — see QuotationPdfService's QuotationCommercialTerms.
+  // Optional: a quotation with this unset just renders the PDF with the
+  // service's sensible defaults, exactly like Product.technicalSpec.
+  commercialTerms Json?
   validUntil      DateTime?
   notes           String?
   terms           String?
+  // Additive: Send Quotation (requirement #6). Populated by
+  // QuotationsService.sendQuotation() the moment an email actually goes
+  // out (or is at least attempted) — never set any other way, and never
+  // cleared once set (a quotation can be re-sent, which just overwrites
+  // these with the latest send).
+  sentAt          DateTime?
+  sentBy          String?
+  sentToEmail     String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   deletedAt       DateTime?
@@ -278,8 +473,14 @@ model Quotation {
   // Additive only — same pattern as `salesOrder` above.
   jobExecutionOrders JobExecutionOrder[]
 
+  // Additive: Sales Automation — Email History (requirement #7/#12) and the
+  // Price Validation / Approval Matrix escalation flow (requirements #8/#9).
+  emailHistory      EmailHistory[]
+  approvalRequests  QuotationApprovalRequest[]
+
   @@index([status])
   @@index([customerId])
+  @@index([leadId])
   @@index([deletedAt])
 }
 
@@ -355,6 +556,10 @@ model SalesOrder {
   proformaInvoices    ProformaInvoice[]
   jobExecutionOrders  JobExecutionOrder[]
 
+  // Additive: Sales Automation Email History (Order Confirmation / Dispatch
+  // notifications sent from this Sales Order — see SalesOrdersService).
+  emailHistory        EmailHistory[]
+
   @@index([status])
   @@index([customerId])
   @@index([quotationId])
@@ -426,6 +631,10 @@ model ProformaInvoice {
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
+  // Additive: Sales Automation Email History (requirement #12 — Proforma
+  // Invoice is emailed to the customer, CC Finance, on generation).
+  emailHistory  EmailHistory[]
+
   @@index([status])
   @@index([salesOrderId])
   @@index([customerId])
@@ -489,6 +698,10 @@ model JobExecutionOrder {
 
   // One Production Checklist per JEO, created alongside it.
   checklist ProductionChecklist?
+
+  // Additive: Sales Automation Email History (requirement #13 — Production
+  // Team / Factory is emailed on generation, with the JEO PDF attached).
+  emailHistory EmailHistory[]
 
   @@index([status])
   @@index([priority])
@@ -613,4 +826,133 @@ model Supplier {
 
   @@index([status])
   @@index([deletedAt])
+}
+
+// ===========================================================================
+// Sales Automation (continuation of the DailyOps project) — additive models
+// only. Nothing above this line was restructured; every model below is new.
+// ===========================================================================
+
+// Editable-by-Administrator email templates (requirement #7). `key` is one
+// of a fixed, seeded set (QUOTATION / ORDER_CONFIRMATION / PROFORMA_INVOICE
+// / JEO_NOTIFICATION / DISPATCH) that the mailer service looks up by;
+// Administrators edit the subject/body of the existing rows rather than
+// invent new keys, though the model itself doesn't hardcode the set of keys
+// (no enum), so a future template can be added without a schema change.
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  subject   String
+  // Simple {{placeholder}} tokens (e.g. {{customerName}}, {{quotationNumber}})
+  // are substituted by MailerService.render() — deliberately not a full
+  // templating engine, per "no hardcoding" without over-building.
+  bodyHtml  String
+  isActive  Boolean  @default(true)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Append-only record of every email this system has sent (or attempted to
+// send / simulated) — requirement #7/#12/#13/#16 ("Show Email History").
+// Exactly one of quotationId/proformaInvoiceId/jobExecutionOrderId/
+// salesOrderId is ever populated on a given row (enforced in
+// MailerService, not at the schema level) — real foreign keys to whichever
+// module triggered the email, per "Do NOT denormalize. Use foreign keys."
+model EmailHistory {
+  id                  String             @id @default(uuid())
+  module              String
+  quotationId         String?
+  quotation           Quotation?         @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  salesOrderId        String?
+  salesOrder          SalesOrder?        @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  proformaInvoiceId   String?
+  proformaInvoice     ProformaInvoice?   @relation(fields: [proformaInvoiceId], references: [id], onDelete: Cascade)
+  jobExecutionOrderId String?
+  jobExecutionOrder   JobExecutionOrder? @relation(fields: [jobExecutionOrderId], references: [id], onDelete: Cascade)
+  templateKey         String?
+  subject             String
+  recipientEmail      String
+  ccEmails            String?
+  // SENT (actually handed to a configured SMTP transport), SIMULATED (no
+  // SMTP configured — logged here only, see MailerService), or FAILED.
+  status              String
+  errorMessage        String?
+  sentBy              String?
+  sentAt              DateTime           @default(now())
+
+  @@index([quotationId])
+  @@index([salesOrderId])
+  @@index([proformaInvoiceId])
+  @@index([jobExecutionOrderId])
+}
+
+// Configurable Approval Matrix engine (requirement #9) — "No hardcoding."
+// One row per (module, discount-percent bracket) -> the Role required to
+// approve at that bracket. Seeded with the Quotation example from scope
+// (0-5% Sales Executive, 5-10% Sales Manager, >10% Administrator), but any
+// module name can add its own brackets later and reuse the exact same
+// ApprovalMatrixService.resolveRequiredRole(module, percent) engine.
+model ApprovalMatrix {
+  id           String   @id @default(uuid())
+  module       String
+  minPercent   Float
+  maxPercent   Float
+  requiredRoleId String
+  requiredRole Role     @relation(fields: [requiredRoleId], references: [id])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([module])
+}
+
+// Sales rep escalation when a Quotation can't be self-approved — either
+// because an item is priced below Product.minPrice (requirement #8's
+// "Request Approval" button) or because its discount bracket requires a
+// higher role than the requester holds (requirement #9). Deciding a request
+// (see QuotationsService.decideApprovalRequest()) performs the ACCEPTED
+// transition itself when approved, so the requester doesn't have to
+// separately re-click Approve afterwards.
+model QuotationApprovalRequest {
+  id              String    @id @default(uuid())
+  quotationId     String
+  quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  requestedBy     String?
+  requestedAt     DateTime  @default(now())
+  reason          String?
+  discountPercent Float?
+  belowMinPrice   Boolean   @default(false)
+  status          String    @default("PENDING")
+  decidedBy       String?
+  decidedAt       DateTime?
+  decisionRemarks String?
+
+  @@index([quotationId])
+  @@index([status])
+}
+
+// Generic, cross-module audit trail (requirement #15). Deliberately NOT
+// foreign-keyed to any single parent table — unlike EmailHistory (which
+// always belongs to one of a small, known set of documents), an audit log
+// entry can reference literally any record in the system (a Lead, a User, a
+// Quotation, a Role, ...), so `module` + `recordId` is a plain descriptive
+// pair rather than a real relation. This is the one deliberate exception to
+// "use foreign keys" in this schema, and is the standard, conventional shape
+// for a system-wide audit log.
+model AuditLog {
+  id        String   @id @default(uuid())
+  module    String
+  recordId  String?
+  action    String
+  actorName String?
+  oldValue  Json?
+  newValue  Json?
+  remarks   String?
+  createdAt DateTime @default(now())
+
+  @@index([module])
+  @@index([recordId])
+  @@index([createdAt])
 }

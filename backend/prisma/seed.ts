@@ -78,6 +78,15 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'Department', action: 'Create', description: 'Create departments' },
   { module: 'Department', action: 'Edit', description: 'Edit departments' },
   { module: 'Department', action: 'Delete', description: 'Delete departments' },
+
+  // Additive: Sales Automation (continuation of the DailyOps project).
+  { module: 'ApprovalMatrix', action: 'View', description: 'View the Approval Matrix' },
+  { module: 'ApprovalMatrix', action: 'Edit', description: 'Configure Approval Matrix brackets' },
+
+  { module: 'EmailTemplate', action: 'View', description: 'View email templates' },
+  { module: 'EmailTemplate', action: 'Edit', description: 'Edit email templates' },
+
+  { module: 'AuditLog', action: 'View', description: 'View the system audit log' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -245,6 +254,86 @@ async function main() {
       await prisma.userRole.deleteMany({ where: { userId: user.id } });
       await prisma.userRole.create({ data: { userId: user.id, roleId } });
     }
+  }
+
+  // 5. Approval Matrix (requirement #9) — the exact Quotation example from
+  // scope: 0-5% Sales Executive, 5-10% Sales Manager, >10% Administrator.
+  // Upserted by (module, minPercent) so re-running the seed converges
+  // instead of duplicating rows.
+  const approvalMatrixSeed: { module: string; minPercent: number; maxPercent: number; roleName: string }[] = [
+    { module: 'Quotation', minPercent: 0, maxPercent: 5, roleName: 'Sales Executive' },
+    { module: 'Quotation', minPercent: 5, maxPercent: 10, roleName: 'Sales Manager' },
+    { module: 'Quotation', minPercent: 10, maxPercent: Number.MAX_SAFE_INTEGER, roleName: 'Administrator' },
+  ];
+  for (const entry of approvalMatrixSeed) {
+    const roleId = roleIdByName.get(entry.roleName);
+    if (!roleId) continue;
+    const existing = await prisma.approvalMatrix.findFirst({
+      where: { module: entry.module, minPercent: entry.minPercent },
+    });
+    if (existing) {
+      await prisma.approvalMatrix.update({
+        where: { id: existing.id },
+        data: { maxPercent: entry.maxPercent, requiredRoleId: roleId, isActive: true },
+      });
+    } else {
+      await prisma.approvalMatrix.create({
+        data: {
+          module: entry.module,
+          minPercent: entry.minPercent,
+          maxPercent: entry.maxPercent,
+          requiredRoleId: roleId,
+        },
+      });
+    }
+  }
+
+  // 6. Email Templates (requirement #7) — the 5 required templates,
+  // upserted by `key` so re-running the seed never duplicates them, and an
+  // Administrator's later edits (subject/bodyHtml) are never overwritten
+  // on subsequent seed runs — only missing keys are created.
+  const emailTemplateSeed: { key: string; name: string; subject: string; bodyHtml: string }[] = [
+    {
+      key: 'QUOTATION',
+      name: 'Quotation Email',
+      subject: 'Quotation {{quotationNumber}} from Smart Rotamac',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Please find attached Quotation {{quotationNumber}}, total amount {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamac Sales Team</p>',
+    },
+    {
+      key: 'ORDER_CONFIRMATION',
+      name: 'Order Confirmation Email',
+      subject: 'Order Confirmation - {{salesOrderNumber}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed. Grand total: {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamac Sales Team</p>',
+    },
+    {
+      key: 'PROFORMA_INVOICE',
+      name: 'Proforma Invoice Email',
+      subject: 'Proforma Invoice {{invoiceNumber}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Please find attached Proforma Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamac Finance Team</p>',
+    },
+    {
+      key: 'JEO_NOTIFICATION',
+      name: 'JEO Notification Email',
+      subject: 'New Job Execution Order {{jeoNumber}}',
+      bodyHtml:
+        '<p>A new Job Execution Order {{jeoNumber}} has been generated for Sales Order {{salesOrderNumber}} (Customer: {{customerName}}). Priority: {{priority}}.</p>',
+    },
+    {
+      key: 'DISPATCH',
+      name: 'Dispatch Notification Email',
+      subject: 'Your order {{salesOrderNumber}} has been dispatched',
+      bodyHtml: '<p>Dear {{customerName}},</p><p>Sales Order {{salesOrderNumber}} has been dispatched.</p>',
+    },
+  ];
+  for (const template of emailTemplateSeed) {
+    await prisma.emailTemplate.upsert({
+      where: { key: template.key },
+      update: {},
+      create: template,
+    });
   }
 
   console.log('Seed complete. Default user (username / email / password / role):');

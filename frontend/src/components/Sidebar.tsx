@@ -19,6 +19,8 @@ import {
   Boxes,
   Truck,
   ShieldCheck,
+  CheckSquare,
+  Mail,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -62,6 +64,12 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/sales-orders",
         icon: ClipboardList,
         permission: { module: "SalesOrder", action: "View" },
+      },
+      {
+        label: "Quotation Approvals",
+        to: "/quotations/approvals",
+        icon: CheckSquare,
+        permission: { module: "Quotation", action: "View" },
       },
     ],
   },
@@ -124,6 +132,12 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/admin/departments",
         icon: Landmark,
         permission: { module: "Department", action: "View" },
+      },
+      {
+        label: "Email Templates",
+        to: "/email-templates",
+        icon: Mail,
+        permission: { module: "EmailTemplate", action: "View" },
       },
     ],
   },

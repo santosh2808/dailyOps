@@ -1,6 +1,14 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
@@ -60,7 +68,13 @@ interface ComputedTotals {
 
 @Injectable()
 export class SalesOrdersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(SalesOrdersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailerService: MailerService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll(query: QuerySalesOrderDto) {
     const page = query.page ?? 1;
@@ -142,6 +156,16 @@ export class SalesOrdersService {
     if (quotation.status !== 'ACCEPTED') {
       throw new BadRequestException('Sales Orders can only be created from an Accepted Quotation');
     }
+    // Lead Management Phase 1 boundary (requirement #14): QuotationsService
+    // now permits Quotation.customerId to be null (lead-sourced quotations),
+    // but QuotationsService.updateStatus() already refuses to ever move such
+    // a quotation to ACCEPTED — so in practice this can't be null here. This
+    // check exists purely to satisfy TypeScript's narrowed `string | null`
+    // type and as a defensive belt-and-suspenders guard, not because this
+    // path is expected to be reachable.
+    if (!quotation.customerId) {
+      throw new BadRequestException('This Quotation has no Customer linked and cannot be converted to a Sales Order');
+    }
 
     const existing = await this.prisma.salesOrder.findUnique({ where: { quotationId: dto.quotationId } });
     if (existing) {
@@ -154,7 +178,7 @@ export class SalesOrdersService {
     for (let attempt = 1; attempt <= MAX_SALES_ORDER_NUMBER_ATTEMPTS; attempt++) {
       const salesOrderNumber = await this.generateSalesOrderNumber();
       try {
-        return await this.prisma.salesOrder.create({
+        const created = await this.prisma.salesOrder.create({
           data: {
             salesOrderNumber,
             quotationId: quotation.id,
@@ -178,6 +202,24 @@ export class SalesOrdersService {
           },
           include: SALES_ORDER_DETAIL_INCLUDE,
         });
+
+        await this.auditLogService
+          .record({
+            module: 'SalesOrder',
+            recordId: created.id,
+            action: 'Created',
+            actorName: createdBy,
+            newValue: { salesOrderNumber: created.salesOrderNumber, grandTotal: created.grandTotal },
+          })
+          .catch((error) => this.logger.error('AuditLog record failed', error));
+
+        // "Order Confirmation" email (requirement #7's template list) — sent
+        // on every Sales Order creation, manual or automatic (both paths
+        // run through this one create() method), never a separate step the
+        // user has to remember to trigger.
+        await this.sendOrderConfirmationEmail(created, createdBy);
+
+        return created;
       } catch (error) {
         if (this.isSalesOrderNumberConflict(error) && attempt < MAX_SALES_ORDER_NUMBER_ATTEMPTS) {
           continue; // Another request took this number first — retry with a fresh one.
@@ -188,6 +230,71 @@ export class SalesOrdersService {
 
     // Unreachable, but keeps TypeScript satisfied about the return type.
     throw new Error('Failed to generate a unique sales order number');
+  }
+
+  private async sendOrderConfirmationEmail(
+    salesOrder: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>,
+    actorName?: string,
+  ) {
+    try {
+      await this.mailerService.send({
+        templateKey: 'ORDER_CONFIRMATION',
+        fallbackSubject: `Order Confirmation - ${salesOrder.salesOrderNumber}`,
+        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed. Grand total: {{grandTotal}}.</p>`,
+        vars: {
+          customerName: salesOrder.customer.contactPerson,
+          salesOrderNumber: salesOrder.salesOrderNumber,
+          quotationNumber: salesOrder.quotation.quotationNumber,
+          grandTotal: salesOrder.grandTotal.toFixed(2),
+        },
+        to: salesOrder.customer.email,
+        actorName,
+        link: { module: 'SalesOrder', salesOrderId: salesOrder.id },
+      });
+    } catch (error) {
+      this.logger.error(`Order Confirmation email failed for Sales Order ${salesOrder.id}`, error);
+    }
+  }
+
+  // Automatic Sales Order creation — triggered the moment a Quotation is
+  // approved (status -> ACCEPTED), see QuotationsService.updateStatus().
+  // Deliberately reuses create() above instead of duplicating any of its
+  // logic, so both the manual POST /api/v1/sales-orders flow and this
+  // automatic one run through the exact same code path: the
+  // ACCEPTED-only guard, the one-Sales-Order-per-Quotation uniqueness
+  // guard, salesOrderNumber generation/retry, and totals computation.
+  // Idempotent by design: if a Sales Order already exists for this
+  // quotation (this method is called again, or the quotation was already
+  // ACCEPTED before this automation existed), the existing one is
+  // returned instead of throwing — approving a quotation should never
+  // surface a Sales-Order-conflict error to the approving user.
+  async createFromQuotation(quotationId: string, createdBy?: string) {
+    const existing = await this.prisma.salesOrder.findUnique({ where: { quotationId } });
+    if (existing) {
+      return this.findOne(existing.id);
+    }
+
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { id: quotationId },
+      include: { items: true },
+    });
+    if (!quotation) {
+      throw new NotFoundException('Quotation not found');
+    }
+
+    // Items are derived 1:1 from the Quotation's own items (same product +
+    // quantity + description). unitPrice/discount are left undefined so
+    // create()'s resolveItemsAgainstQuotation() falls back to the price
+    // already recorded on the Quotation item — exactly what happens today
+    // when a user creates a Sales Order manually without editing those
+    // fields.
+    const items: SalesOrderItemInputDto[] = quotation.items.map((item) => ({
+      productId: item.productId,
+      description: item.description ?? undefined,
+      quantity: item.quantity,
+    }));
+
+    return this.create({ quotationId, items, gstPercent: quotation.gstPercent }, createdBy);
   }
 
   async update(id: string, dto: UpdateSalesOrderDto) {
@@ -285,20 +392,64 @@ export class SalesOrdersService {
     });
   }
 
-  async updateStatus(id: string, dto: UpdateSalesOrderStatusDto) {
-    await this.findOne(id);
-    return this.prisma.salesOrder.update({
+  async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.salesOrder.update({
       where: { id },
       data: { status: dto.status },
       include: SALES_ORDER_DETAIL_INCLUDE,
     });
+
+    await this.auditLogService
+      .record({
+        module: 'SalesOrder',
+        recordId: id,
+        action: 'Status Changed',
+        actorName,
+        oldValue: { status: existing.status },
+        newValue: { status: dto.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    // "Dispatch" email template (requirement #7's template list) — the one
+    // trigger point for it in the current workflow, since dispatching is
+    // exactly this status transition and nothing else in scope calls for a
+    // separate "Send Dispatch Email" button.
+    if (dto.status === 'DISPATCHED' && existing.status !== 'DISPATCHED') {
+      try {
+        await this.mailerService.send({
+          templateKey: 'DISPATCH',
+          fallbackSubject: `Your order ${updated.salesOrderNumber} has been dispatched`,
+          fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Sales Order {{salesOrderNumber}} has been dispatched.</p>`,
+          vars: { customerName: updated.customer.contactPerson, salesOrderNumber: updated.salesOrderNumber },
+          to: updated.customer.email,
+          actorName,
+          link: { module: 'SalesOrder', salesOrderId: id },
+        });
+      } catch (error) {
+        this.logger.error(`Dispatch email failed for Sales Order ${id}`, error);
+      }
+    }
+
+    return updated;
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorName?: string) {
     await this.findOne(id);
-    return this.prisma.salesOrder.update({
+    const removed = await this.prisma.salesOrder.update({
       where: { id },
       data: { deletedAt: new Date() },
+    });
+    await this.auditLogService
+      .record({ module: 'SalesOrder', recordId: id, action: 'Deleted', actorName })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return removed;
+  }
+
+  getEmailHistory(id: string) {
+    return this.prisma.emailHistory.findMany({
+      where: { salesOrderId: id },
+      orderBy: { sentAt: 'desc' },
     });
   }
 

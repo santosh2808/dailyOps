@@ -1,11 +1,16 @@
 import api from "@/lib/api";
 import type {
   Customer,
+  EmailHistoryEntry,
   Lead,
+  LeadAssignmentHistory,
+  LeadHistoryEntry,
   LeadImportSummary,
+  LeadNote,
   LeadPriority,
   LeadSource,
   LeadStatus,
+  LeadStatusHistoryEntry,
   PaginatedResponse,
 } from "@/types";
 
@@ -16,7 +21,7 @@ export interface LeadListParams {
   status?: LeadStatus;
   priority?: LeadPriority;
   source?: LeadSource;
-  assignedTo?: string;
+  assignedToUserId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
@@ -49,8 +54,13 @@ export interface LeadPayload {
   source?: LeadSource;
   expectedCloseDate?: string;
   nextFollowUp?: string;
+  // Lead Management Phase 1 (requirement #5) — short free-text reminder
+  // alongside the follow-up date, e.g. "Call before 3pm".
+  reminderNote?: string;
   remarks?: string;
-  assignedTo?: string;
+  // Lead Assignment enhancement: send null to explicitly unassign; omit to
+  // leave the current assignment untouched on a PATCH.
+  assignedToUserId?: string | null;
 }
 
 export async function listLeads(params: LeadListParams) {
@@ -73,8 +83,40 @@ export async function updateLead(id: string, payload: Partial<LeadPayload>) {
   return res.data;
 }
 
-export async function updateLeadStatus(id: string, status: LeadStatus) {
-  const res = await api.patch<Lead>(`/api/v1/leads/${id}/status`, { status });
+export async function updateLeadStatus(id: string, status: LeadStatus, remarks?: string) {
+  const res = await api.patch<Lead>(`/api/v1/leads/${id}/status`, { status, remarks });
+  return res.data;
+}
+
+export async function getLeadHistory(id: string) {
+  const res = await api.get<LeadHistoryEntry[]>(`/api/v1/leads/${id}/history`);
+  return res.data;
+}
+
+export async function getLeadNotes(id: string) {
+  const res = await api.get<LeadNote[]>(`/api/v1/leads/${id}/notes`);
+  return res.data;
+}
+
+export async function addLeadNote(id: string, note: string) {
+  const res = await api.post<LeadNote>(`/api/v1/leads/${id}/notes`, { note });
+  return res.data;
+}
+
+// Sales Automation requirement #16 — dedicated Assignment/Status/Email
+// History tabs on Lead Details, distinct from the merged Timeline above.
+export async function getLeadAssignmentHistory(id: string) {
+  const res = await api.get<LeadAssignmentHistory[]>(`/api/v1/leads/${id}/assignment-history`);
+  return res.data;
+}
+
+export async function getLeadStatusHistory(id: string) {
+  const res = await api.get<LeadStatusHistoryEntry[]>(`/api/v1/leads/${id}/status-history`);
+  return res.data;
+}
+
+export async function getLeadEmailHistory(id: string) {
+  const res = await api.get<EmailHistoryEntry[]>(`/api/v1/leads/${id}/email-history`);
   return res.data;
 }
 

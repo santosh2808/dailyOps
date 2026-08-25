@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRightCircle, CheckCircle2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRightCircle, CheckCircle2, FileText, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadStatusBadge from "@/components/leads/LeadStatusBadge";
 import LeadPriorityBadge from "@/components/leads/LeadPriorityBadge";
-import { sourceLabel } from "@/components/leads/leadOptions";
+import { nextActionFor, sourceLabel } from "@/components/leads/leadOptions";
 import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
+import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
+import { generateQuotationFromLead } from "@/api/quotations";
 import type { Lead, LeadStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -37,6 +39,15 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+// Lead Management Phase 1 (requirement #6) — exactly four tabs.
+const TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "timeline", label: "Timeline" },
+  { key: "notes", label: "Notes" },
+  { key: "attachments", label: "Attachments" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
 export default function LeadDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -47,6 +58,13 @@ export default function LeadDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [generatingQuotation, setGeneratingQuotation] = useState(false);
+  const [generateError, setGenerateError] = useState("");
+  // Bumped whenever an action here (status change, conversion) should also
+  // refresh the Timeline/Notes tab, since LeadActivityPanel fetches
+  // independently of the main lead record.
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const fetchLead = useCallback(async () => {
     if (!id) return;
@@ -66,10 +84,11 @@ export default function LeadDetails() {
     fetchLead();
   }, [fetchLead]);
 
-  async function handleStatusConfirm(status: LeadStatus) {
+  async function handleStatusConfirm(status: LeadStatus, remarks?: string) {
     if (!id) return;
-    await updateLeadStatus(id, status);
+    await updateLeadStatus(id, status, remarks);
     await fetchLead();
+    setHistoryRefreshKey((k) => k + 1);
   }
 
   async function handleDeleteConfirm() {
@@ -78,11 +97,60 @@ export default function LeadDetails() {
     navigate("/leads");
   }
 
+  // BUG FIX: converting a Won lead used to just leave the user on this same
+  // page — there was no next step shown anywhere, so the workflow appeared
+  // to dead-end here. Now it redirects straight to the new Customer
+  // Details page, where the Actions section picks up exactly where the
+  // Lead workflow leaves off (Generate Sales Order / Proforma Invoice /
+  // Job Execution Order).
   async function handleConvertConfirm() {
     if (!id) return;
-    await convertLeadToCustomer(id);
-    await fetchLead();
+    const { customer } = await convertLeadToCustomer(id);
+    navigate(`/customers/${customer.id}`);
   }
+
+  // Lead Management Phase 1 (requirement #8) — one-click Generate
+  // Quotation, only reachable while Qualified and only shown once (see
+  // nextActionFor: once lead.quotations has an entry, the button becomes
+  // "View Quotation" instead of generating a second one).
+  async function handleGenerateQuotation() {
+    if (!id) return;
+    setGeneratingQuotation(true);
+    setGenerateError("");
+    try {
+      const quotation = await generateQuotationFromLead(id);
+      navigate(`/quotations/${quotation.id}`);
+    } catch (err: any) {
+      setGenerateError(
+        err?.response?.data?.message || "Could not generate a quotation for this lead. Please try again.",
+      );
+      setGeneratingQuotation(false);
+    }
+  }
+
+  const nextAction = lead ? nextActionFor(lead) : null;
+  const latestQuotation = lead?.quotations?.[0];
+
+  function handleNextActionClick() {
+    if (!nextAction) return;
+    if (nextAction.label === "Generate Quotation") {
+      handleGenerateQuotation();
+    } else if (nextAction.label === "Send Quotation" || nextAction.label === "View Quotation") {
+      if (latestQuotation) navigate(`/quotations/${latestQuotation.id}`);
+    } else if (nextAction.label === "Convert to Customer") {
+      setConvertOpen(true);
+    } else if (nextAction.label === "Assign Sales Person" || nextAction.label === "Contact Customer") {
+      navigate(`/leads/${id}/edit`);
+    } else {
+      setStatusOpen(true);
+    }
+  }
+
+  const nextActionIsClickable =
+    !!nextAction &&
+    ["Assign Sales Person", "Contact Customer", "Schedule Follow-up", "Complete Site Visit", "Generate Quotation", "Send Quotation", "View Quotation", "Convert to Customer"].includes(
+      nextAction.label,
+    );
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -133,6 +201,36 @@ export default function LeadDetails() {
                 </div>
               </div>
 
+              {/* Lead Management Phase 1 (requirement #12) — always show the
+                  next available action so nobody has to wonder what to do. */}
+              {nextAction && nextAction.label && (
+                <Card>
+                  <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Next: {nextAction.label}</p>
+                      <p className="text-sm text-muted-foreground">{nextAction.hint}</p>
+                      {generateError && <p className="mt-1 text-sm text-destructive">{generateError}</p>}
+                    </div>
+                    {nextActionIsClickable && (
+                      <Button
+                        onClick={handleNextActionClick}
+                        disabled={generatingQuotation}
+                        variant={nextAction.label === "Waiting for Customer Response" ? "outline" : "default"}
+                      >
+                        {generatingQuotation && nextAction.label === "Generate Quotation" ? (
+                          "Generating..."
+                        ) : (
+                          <>
+                            <FileText className="mr-2 h-4 w-4" />
+                            {nextAction.label}
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {lead.isConverted && (
                 <Card>
                   <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -150,96 +248,152 @@ export default function LeadDetails() {
                 </Card>
               )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Pipeline</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <Field label="Status" value={<LeadStatusBadge status={lead.status} />} />
-                  <Field label="Priority" value={<LeadPriorityBadge priority={lead.priority} />} />
-                  <Field label="Source" value={sourceLabel(lead.source)} />
-                  <Field label="Estimated Value" value={formatCurrency(lead.estimatedValue)} />
-                  <Field label="Expected Close Date" value={formatDate(lead.expectedCloseDate)} />
-                  <Field label="Next Follow-up" value={formatDate(lead.nextFollowUp)} />
-                  <Field label="Assigned To" value={lead.assignedTo} />
-                  <Field label="Created" value={formatDate(lead.createdAt)} />
-                </CardContent>
-              </Card>
+              <div className="inline-flex rounded-md border p-1">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    className={`rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
+                      tab === t.key ? "bg-orange text-white" : "text-muted-foreground hover:text-slate-900"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Basic Information</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  <Field label="Company Name" value={lead.companyName} />
-                  <Field label="Contact Person" value={lead.contactPerson} />
-                  <Field label="Designation" value={lead.designation} />
-                  <Field label="Email" value={lead.email} />
-                  <Field label="Phone" value={lead.phone} />
-                  <Field label="Alternate Phone" value={lead.alternatePhone} />
-                  <Field label="City" value={lead.city} />
-                  <Field label="State" value={lead.state} />
-                  <Field label="Country" value={lead.country} />
-                  <Field label="Industry" value={lead.industry} />
-                </CardContent>
-              </Card>
+              {tab === "overview" && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Pipeline</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                      <Field label="Status" value={<LeadStatusBadge status={lead.status} />} />
+                      <Field label="Priority" value={<LeadPriorityBadge priority={lead.priority} />} />
+                      <Field label="Source" value={sourceLabel(lead.source)} />
+                      <Field label="Estimated Value" value={formatCurrency(lead.estimatedValue)} />
+                      <Field label="Expected Close Date" value={formatDate(lead.expectedCloseDate)} />
+                      <Field label="Next Follow-up" value={formatDate(lead.nextFollowUp)} />
+                      <Field label="Reminder" value={lead.reminderNote} />
+                      {/* Full name only — never the role — with an explicit
+                          "Unassigned" label (Field's own generic fallback is a
+                          bare "—") when no user is assigned. */}
+                      <Field label="Assigned To" value={lead.assignedToUser?.name || "Unassigned"} />
+                      <Field label="Created" value={formatDate(lead.createdAt)} />
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Products</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {lead.products && lead.products.length > 0 ? (
-                    <div className="space-y-2">
-                      {lead.products.map((lp) => (
-                        <div
-                          key={lp.id}
-                          className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                        >
-                          <div>
-                            <p className="font-medium text-slate-900">
-                              {lp.product?.name ?? "Unknown product"}
-                            </p>
-                            {lp.remarks && (
-                              <p className="text-xs text-muted-foreground">{lp.remarks}</p>
-                            )}
-                          </div>
-                          <div className="text-right text-muted-foreground">
-                            <p>Qty: {lp.quantity}</p>
-                            {lp.unitPrice != null && <p>{formatCurrency(lp.unitPrice)} / unit</p>}
-                          </div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Basic Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      <Field label="Company Name" value={lead.companyName} />
+                      <Field label="Contact Person" value={lead.contactPerson} />
+                      <Field label="Designation" value={lead.designation} />
+                      <Field label="Email" value={lead.email} />
+                      <Field label="Phone" value={lead.phone} />
+                      <Field label="Alternate Phone" value={lead.alternatePhone} />
+                      <Field label="City" value={lead.city} />
+                      <Field label="State" value={lead.state} />
+                      <Field label="Country" value={lead.country} />
+                      <Field label="Industry" value={lead.industry} />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Products</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {lead.products && lead.products.length > 0 ? (
+                        <div className="space-y-2">
+                          {lead.products.map((lp) => (
+                            <div
+                              key={lp.id}
+                              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                            >
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {lp.product?.name ?? "Unknown product"}
+                                </p>
+                                {lp.remarks && (
+                                  <p className="text-xs text-muted-foreground">{lp.remarks}</p>
+                                )}
+                              </div>
+                              <div className="text-right text-muted-foreground">
+                                <p>Qty: {lp.quantity}</p>
+                                {lp.unitPrice != null && <p>{formatCurrency(lp.unitPrice)} / unit</p>}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No products linked to this lead yet.</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No products linked to this lead yet.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Description & Remarks</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Field label="Description" value={lead.description} />
+                      <Field label="Remarks" value={lead.remarks} />
+                    </CardContent>
+                  </Card>
+
+                  {lead.quotations && lead.quotations.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Quotations</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {lead.quotations.map((q) => (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => navigate(`/quotations/${q.id}`)}
+                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-slate-50"
+                          >
+                            <span className="font-medium text-slate-900">{q.quotationNumber}</span>
+                            <span className="text-muted-foreground">{q.status}</span>
+                          </button>
+                        ))}
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Description & Remarks</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Field label="Description" value={lead.description} />
-                  <Field label="Remarks" value={lead.remarks} />
-                </CardContent>
-              </Card>
+              {tab === "timeline" && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <LeadActivityPanel leadId={lead.id} refreshKey={historyRefreshKey} view="timeline" />
+                  </CardContent>
+                </Card>
+              )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Timeline</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {/* Placeholder: activity timeline (status changes, calls, notes)
-                      is planned for a future release and is intentionally not
-                      implemented here. */}
-                  <p className="text-sm text-muted-foreground">
-                    Activity timeline is coming in a future release.
-                  </p>
-                </CardContent>
-              </Card>
+              {tab === "notes" && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <LeadActivityPanel leadId={lead.id} refreshKey={historyRefreshKey} view="notes" />
+                  </CardContent>
+                </Card>
+              )}
+
+              {tab === "attachments" && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-muted-foreground">
+                      Attachments are coming in a future release.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </main>

@@ -5,6 +5,7 @@ import Login from "@/pages/Login";
 import ChangePassword from "@/pages/ChangePassword";
 import Dashboard from "@/pages/Dashboard";
 import Customers from "@/pages/Customers";
+import CustomerDetails from "@/pages/CustomerDetails";
 import Products from "@/pages/Products";
 import LeadList from "@/pages/LeadList";
 import LeadForm from "@/pages/LeadForm";
@@ -12,6 +13,8 @@ import LeadDetails from "@/pages/LeadDetails";
 import QuotationList from "@/pages/QuotationList";
 import QuotationForm from "@/pages/QuotationForm";
 import QuotationDetails from "@/pages/QuotationDetails";
+import QuotationApprovals from "@/pages/QuotationApprovals";
+import EmailTemplates from "@/pages/EmailTemplates";
 import SalesOrderList from "@/pages/SalesOrderList";
 import SalesOrderForm from "@/pages/SalesOrderForm";
 import SalesOrderDetails from "@/pages/SalesOrderDetails";
@@ -58,6 +61,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Customers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id"
+            element={
+              <ProtectedRoute>
+                <CustomerDetails />
               </ProtectedRoute>
             }
           />
@@ -130,6 +141,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <QuotationDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quotations/approvals"
+            element={
+              <ProtectedRoute>
+                <QuotationApprovals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/email-templates"
+            element={
+              <ProtectedRoute>
+                <EmailTemplates />
               </ProtectedRoute>
             }
           />

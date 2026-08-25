@@ -11,6 +11,8 @@ export interface User {
   createdAt: string;
   departmentId?: string | null;
   department?: string | null;
+  // Additive: Lead Assignment enhancement.
+  phone?: string | null;
   // Role names, display-only — never used for access checks.
   roles?: string[];
   // Lowercased "module.action" codes, the union of every permission across
@@ -60,10 +62,23 @@ export interface RbacUser {
   isActive: boolean;
   departmentId?: string | null;
   department?: Department | null;
+  // Additive: Lead Assignment enhancement.
+  phone?: string | null;
   roles: { role: Role }[];
   createdAt: string;
   updatedAt: string;
   mustChangePassword: boolean;
+}
+
+// Lead Assignment dropdown — the deliberately minimal shape
+// GET /api/v1/users/assignable returns (active Sales Executive / Sales
+// Manager users only). Never includes the password hash or other User
+// columns.
+export interface AssignableUser {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
 }
 
 export interface Customer {
@@ -78,6 +93,44 @@ export interface Customer {
   updatedAt: string;
 }
 
+// Additive: Techno-Commercial Offer PDF (branded Quotation template) —
+// Annexure-I spec sheet for whichever fan size/model a Product row
+// represents. Mirrors backend ProductTechnicalSpec exactly. Every field is
+// optional free text; the PDF just renders a blank cell if left empty.
+export interface ProductTechnicalSpec {
+  modelNo?: string;
+  fanSize?: string;
+  noOfBlades?: string;
+  airVolume?: string;
+  coverageArea?: string;
+  motorRating?: string;
+  speed?: string;
+  noise?: string;
+  weight?: string;
+  threePhaseVoltage?: string;
+  threePhaseCurrent?: string;
+  onePhaseVoltage?: string;
+  onePhaseCurrent?: string;
+  frequency?: string;
+  frameStructure?: string;
+  hangingStructure?: string;
+  fasteners?: string;
+  bladeDesign?: string;
+  bladeMoc?: string;
+  bladeSectionalWidth?: string;
+  driveType?: string;
+  controlPanelMounting?: string;
+  controlPanelDrive?: string;
+  controlPanelEnclosure?: string;
+  bmsCompatibility?: string;
+  safetyCertification?: string;
+  boltedJoints?: string;
+  warrantyMotor?: string;
+  warrantyDrive?: string;
+  warrantyOther?: string;
+  scopeOfSupply?: { item: string; quantityPerFan: string }[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -88,6 +141,23 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Additive: Sales Automation price validation.
+  standardPrice?: number | null;
+  minPrice?: number | null;
+  maxDiscountPercent?: number | null;
+  // Additive: Techno-Commercial Offer PDF.
+  technicalSpec?: ProductTechnicalSpec | null;
+}
+
+export interface LeadSourceSummaryEntry {
+  source: LeadSource;
+  count: number;
+}
+
+export interface SalesByExecutiveEntry {
+  executive: string;
+  orderCount: number;
+  totalValue: number;
 }
 
 export interface DashboardStats {
@@ -102,18 +172,33 @@ export interface DashboardStats {
   lowStockCount: number;
   outOfStockCount: number;
   suppliers: number;
+  todaysFollowUpsCount: number;
+  overdueFollowUpsCount: number;
+  leadSourceSummary: LeadSourceSummaryEntry[];
+  // Additive: Sales Automation Dashboard widgets.
+  upcomingFollowUpsCount: number;
+  pendingQuotationsCount: number;
+  sentQuotationsCount: number;
+  acceptedQuotationsCount: number;
+  ordersAwaitingProductionCount: number;
+  ordersInProductionCount: number;
+  salesByExecutive: SalesByExecutiveEntry[];
 }
 
+// Lead Management Phase 1 — replaced wholesale to match the exact required
+// workflow order: Create -> Assign -> Contact -> Site Visit -> Qualified ->
+// Quotation Sent -> Won/Lost. NEGOTIATION and NOT_INTERESTED are gone (the
+// backend migration remaps NEGOTIATION -> QUOTATION_SENT and
+// NOT_INTERESTED -> LOST for any pre-existing rows).
 export const LEAD_STATUSES = [
   "NEW",
+  "ASSIGNED",
   "CONTACTED",
-  "QUALIFIED",
   "SITE_VISIT",
+  "QUALIFIED",
   "QUOTATION_SENT",
-  "NEGOTIATION",
   "WON",
   "LOST",
-  "NOT_INTERESTED",
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
@@ -163,7 +248,15 @@ export interface Lead {
   estimatedValue?: number | null;
   expectedCloseDate?: string | null;
   nextFollowUp?: string | null;
-  assignedTo?: string | null;
+  // Lead Management Phase 1 (requirement #5) — short free-text reminder
+  // alongside the follow-up date, e.g. "Call before 3pm".
+  reminderNote?: string | null;
+  // Lead Assignment enhancement: a real FK to User (was free text). The
+  // resolved user (id/name/email only, never a password hash) comes along
+  // whenever the backend includes it — see AssignableUser for the shape
+  // used to populate the assignment dropdown itself.
+  assignedToUserId?: string | null;
+  assignedToUser?: { id: string; name: string; email?: string | null } | null;
   city?: string | null;
   state?: string | null;
   country?: string | null;
@@ -178,9 +271,73 @@ export interface Lead {
   deletedAt?: string | null;
   products?: LeadProduct[];
   _count?: { products: number };
+  // Lead Management Phase 1 (requirement #12) — lets Lead Details show
+  // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once
+  // one already exists for this lead, and avoid ever creating duplicates.
+  // Most recent first.
+  quotations?: { id: string; quotationNumber: string; status: QuotationStatus; createdAt: string }[];
 }
 
-export const QUOTATION_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"] as const;
+// Lead History / Notes — additive. QUOTATION_CREATED entries are
+// synthesized by the backend at read time (see leads.service.ts) rather
+// than persisted, but they're indistinguishable from stored entries in
+// this shape.
+export const LEAD_HISTORY_ACTIONS = [
+  "CREATED",
+  "EDITED",
+  "ASSIGNED",
+  "STATUS_CHANGED",
+  // Lead Management Phase 1 (requirement #3): Notes and Follow-ups now also
+  // write a Timeline entry, alongside their own dedicated Notes storage.
+  "NOTE_ADDED",
+  "FOLLOWUP_ADDED",
+  "QUOTATION_CREATED",
+  "CUSTOMER_CONVERTED",
+  // Additive: Sales Automation — synthesized entries (see leads.service.ts
+  // getHistory()), never stored directly.
+  "QUOTATION_SENT",
+  "SALES_ORDER_CREATED",
+  "PROFORMA_INVOICE_GENERATED",
+  "JEO_GENERATED",
+] as const;
+export type LeadHistoryAction = (typeof LEAD_HISTORY_ACTIONS)[number];
+
+export interface LeadHistoryEntry {
+  id: string;
+  action: LeadHistoryAction;
+  description: string;
+  performedBy?: string | null;
+  createdAt: string;
+}
+
+export interface LeadNote {
+  id: string;
+  leadId: string;
+  note: string;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface LeadAssignmentHistory {
+  id: string;
+  leadId: string;
+  previousUser?: string | null;
+  newUser?: string | null;
+  changedBy?: string | null;
+  createdAt: string;
+}
+
+export interface LeadStatusHistoryEntry {
+  id: string;
+  leadId: string;
+  oldStatus?: LeadStatus | null;
+  newStatus: LeadStatus;
+  remarks?: string | null;
+  changedBy?: string | null;
+  createdAt: string;
+}
+
+export const QUOTATION_STATUSES = ["DRAFT", "READY", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 
 export interface QuotationItem {
@@ -195,24 +352,133 @@ export interface QuotationItem {
   product?: Product;
 }
 
+// Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms,
+// mirrors backend QuotationCommercialTerms exactly. Every field is optional
+// free text; anything left unset falls back to the PDF renderer's own
+// defaults. `unloading`/`installationSchedule` are the two lines that only
+// some real quotations have at all — they're simply omitted from the PDF
+// when unset, not defaulted.
+export interface QuotationCommercialTerms {
+  regionCode?: string;
+  priceBasis?: string;
+  installationCharge?: string;
+  transportation?: string;
+  gstTerms?: string;
+  packingForwarding?: string;
+  transportInsurance?: string;
+  unloading?: string;
+  payment?: string;
+  delivery?: string;
+  installationSchedule?: string;
+  offerValidity?: string;
+}
+
 export interface Quotation {
   id: string;
   quotationNumber: string;
-  customerId: string;
-  customer?: Customer;
+  // Lead Management Phase 1 (requirement #8): a Quotation now originates
+  // from exactly one of a Customer or a Lead — customerId/customer are
+  // null for a lead-sourced quotation until the not-yet-built Phase 2
+  // "Convert to Customer" step runs.
+  customerId?: string | null;
+  customer?: Customer | null;
+  leadId?: string | null;
+  lead?: Lead | null;
   status: QuotationStatus;
   subtotal: number;
   gstPercent: number;
+  // Additive: real currency amounts added into grandTotal — installation
+  // defaults to Rs.8,000 x total fan quantity unless overridden;
+  // transportation has no default (varies by site/distance), starts at 0
+  // until filled in per quotation. See QuotationsService.computeTotals().
+  installationCharge: number;
+  transportationCharge: number;
   gstAmount: number;
   grandTotal: number;
   validUntil?: string | null;
   notes?: string | null;
   terms?: string | null;
+  // Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms.
+  commercialTerms?: QuotationCommercialTerms | null;
+  // Additive: Send Quotation.
+  sentAt?: string | null;
+  sentBy?: string | null;
+  sentToEmail?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   items?: QuotationItem[];
   _count?: { items: number };
+}
+
+// Additive: Sales Automation — Email Templates, Email History, Approval
+// Matrix, Approval Requests, Audit Log.
+export interface EmailTemplate {
+  id: string;
+  key: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  isActive: boolean;
+  updatedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailHistoryEntry {
+  id: string;
+  module: string;
+  quotationId?: string | null;
+  salesOrderId?: string | null;
+  proformaInvoiceId?: string | null;
+  jobExecutionOrderId?: string | null;
+  templateKey?: string | null;
+  subject: string;
+  recipientEmail: string;
+  ccEmails?: string | null;
+  status: "SENT" | "SIMULATED" | "FAILED";
+  errorMessage?: string | null;
+  sentBy?: string | null;
+  sentAt: string;
+}
+
+export interface ApprovalMatrixEntry {
+  id: string;
+  module: string;
+  minPercent: number;
+  maxPercent: number;
+  requiredRoleId: string;
+  requiredRole?: Role;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotationApprovalRequest {
+  id: string;
+  quotationId: string;
+  quotation?: Quotation;
+  requestedBy?: string | null;
+  requestedAt: string;
+  reason?: string | null;
+  discountPercent?: number | null;
+  belowMinPrice: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  decisionRemarks?: string | null;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  module: string;
+  recordId?: string | null;
+  action: string;
+  actorName?: string | null;
+  oldValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
+  remarks?: string | null;
+  createdAt: string;
 }
 
 export const SALES_ORDER_STATUSES = [

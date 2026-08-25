@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +12,68 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Product } from "@/types";
+import type { Product, ProductTechnicalSpec } from "@/types";
 import type { ProductPayload } from "@/api/products";
+
+// Techno-Commercial Offer PDF (branded Quotation template) — Annexure-I
+// spec sheet fields, keyed exactly like ProductTechnicalSpec. Rendered as a
+// flat list of labeled text inputs below; every value is optional free text
+// (the PDF just leaves the cell blank), so there is no per-field validation.
+const SPEC_FIELDS: { key: Exclude<keyof ProductTechnicalSpec, "scopeOfSupply">; label: string; placeholder?: string }[] = [
+  { key: "modelNo", label: "Model No.", placeholder: "e.g. SPYRO 14" },
+  { key: "fanSize", label: "Fan Size", placeholder: "e.g. 14 ft. (4.3 M)" },
+  { key: "noOfBlades", label: "No. of Blades", placeholder: "e.g. 5 Nos." },
+  { key: "airVolume", label: "Air Volume", placeholder: "e.g. 6650 CMM; (2,40,000 CFM)" },
+  { key: "coverageArea", label: "Coverage Area", placeholder: "e.g. 3,848 ft²" },
+  { key: "motorRating", label: "Motor Rating", placeholder: "e.g. 0.75 kw; (1 HP) IP 65" },
+  { key: "speed", label: "Speed", placeholder: "e.g. 80 rpm" },
+  { key: "noise", label: "Noise", placeholder: "e.g. <45db" },
+  { key: "weight", label: "Weight (Approx.)", placeholder: "e.g. 105 kgs" },
+  { key: "threePhaseVoltage", label: "3 Phase Drive – Vol (V)", placeholder: "e.g. 410" },
+  { key: "threePhaseCurrent", label: "3 Phase Drive – Current (A)", placeholder: "e.g. 2.3" },
+  { key: "onePhaseVoltage", label: "1 Phase Drive – Vol (V)", placeholder: "e.g. 235" },
+  { key: "onePhaseCurrent", label: "1 Phase Drive – Current (A)", placeholder: "e.g. 7" },
+  { key: "frequency", label: "Frequency (Hz)", placeholder: "e.g. 50/60" },
+  { key: "frameStructure", label: "Frame Structure", placeholder: "e.g. M.S. (Powder Coated)" },
+  { key: "hangingStructure", label: "Hanging Structure", placeholder: "e.g. M.S. (Powder Coated)" },
+  { key: "fasteners", label: "Fasteners", placeholder: "e.g. High Tensile 10.9 Grade HEX Bolts" },
+  { key: "bladeDesign", label: "Blade Design", placeholder: "e.g. Cambered Aerofoil Design" },
+  { key: "bladeMoc", label: "Blade M.O.C.", placeholder: "e.g. Aluminium 6063 (Matte Silver Anodised)" },
+  { key: "bladeSectionalWidth", label: "Blade Sectional Width", placeholder: "e.g. 160 mm" },
+  { key: "driveType", label: "Drive Type", placeholder: "e.g. Direct Driven PMSM Type" },
+  { key: "controlPanelMounting", label: "Control Panel – Mounting", placeholder: "e.g. Wall Mounting 3-5 Ft. from Floor Level" },
+  { key: "controlPanelDrive", label: "Control Panel – PMSM Drive", placeholder: "e.g. CG Emotron / Veichi / Equ." },
+  { key: "controlPanelEnclosure", label: "Control Panel – Enclosure", placeholder: "e.g. IP 43, Powder Coated Steel Cabinet" },
+  { key: "bmsCompatibility", label: "BMS Compatibility", placeholder: "e.g. BMS Compatibility" },
+  { key: "safetyCertification", label: "Safety Certification", placeholder: "e.g. Compliance to CE Requirements" },
+  { key: "boltedJoints", label: "Bolted Joints", placeholder: "e.g. Self locking Nylock Nuts, SS Wire Rope wrapped" },
+  { key: "warrantyMotor", label: "Warranty – Motor", placeholder: "e.g. 36 months from the date of erection" },
+  { key: "warrantyDrive", label: "Warranty – Drive", placeholder: "e.g. 12 months from the date of erection" },
+  { key: "warrantyOther", label: "Warranty – Other", placeholder: "e.g. 60 months from the date of erection" },
+];
+
+// scopeOfSupply is excluded here — it's an array (repeatable rows), handled
+// separately by ScopeRow/scopeRows below, not a plain text field.
+type SpecFormState = Partial<Record<Exclude<keyof ProductTechnicalSpec, "scopeOfSupply">, string>>;
+type ScopeRow = { item: string; quantityPerFan: string };
+
+// Drops blank fields/rows so a product nobody has filled in this section for
+// simply sends technicalSpec: undefined rather than a JSON blob of empty
+// strings.
+function buildTechnicalSpec(
+  spec: SpecFormState,
+  scopeRows: ScopeRow[]
+): ProductTechnicalSpec | undefined {
+  const cleaned: SpecFormState = {};
+  for (const { key } of SPEC_FIELDS) {
+    const value = spec[key]?.trim();
+    if (value) cleaned[key] = value;
+  }
+  const rows = scopeRows.filter((r) => r.item.trim() || r.quantityPerFan.trim());
+  const result: ProductTechnicalSpec = { ...cleaned };
+  if (rows.length > 0) result.scopeOfSupply = rows;
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 
 interface ProductFormDialogProps {
   open: boolean;
@@ -28,6 +89,16 @@ interface FormState {
   sku: string;
   price: string;
   description: string;
+  // Price Validation (requirement #8): Standard Price is what discount % is
+  // measured against, Minimum Price is the hard floor a Quotation item may
+  // never go below without an approval request, and Max Discount % is
+  // informational context shown alongside them (the actual enforcement is
+  // the Approval Matrix, configured separately).
+  standardPrice: string;
+  minPrice: string;
+  maxDiscountPercent: string;
+  spec: SpecFormState;
+  scopeRows: ScopeRow[];
 }
 
 const emptyForm: FormState = {
@@ -36,6 +107,11 @@ const emptyForm: FormState = {
   sku: "",
   price: "",
   description: "",
+  standardPrice: "",
+  minPrice: "",
+  maxDiscountPercent: "",
+  spec: {},
+  scopeRows: [],
 };
 
 export default function ProductFormDialog({
@@ -61,6 +137,12 @@ export default function ProductFormDialog({
               sku: product.sku ?? "",
               price: product.price != null ? String(product.price) : "",
               description: product.description ?? "",
+              standardPrice: product.standardPrice != null ? String(product.standardPrice) : "",
+              minPrice: product.minPrice != null ? String(product.minPrice) : "",
+              maxDiscountPercent:
+                product.maxDiscountPercent != null ? String(product.maxDiscountPercent) : "",
+              spec: (product.technicalSpec ?? {}) as SpecFormState,
+              scopeRows: product.technicalSpec?.scopeOfSupply ?? [],
             }
           : emptyForm
       );
@@ -84,6 +166,27 @@ export default function ProductFormDialog({
         next.price = "Price must be a positive number";
       }
     }
+    if (form.standardPrice.trim()) {
+      const parsed = Number(form.standardPrice);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        next.standardPrice = "Standard price must be a positive number";
+      }
+    }
+    if (form.minPrice.trim()) {
+      const parsed = Number(form.minPrice);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        next.minPrice = "Minimum price must be a positive number";
+      }
+    }
+    if (form.standardPrice.trim() && form.minPrice.trim() && Number(form.minPrice) > Number(form.standardPrice)) {
+      next.minPrice = "Minimum price cannot be greater than the standard price";
+    }
+    if (form.maxDiscountPercent.trim()) {
+      const parsed = Number(form.maxDiscountPercent);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+        next.maxDiscountPercent = "Max discount % must be between 0 and 100";
+      }
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -102,6 +205,12 @@ export default function ProductFormDialog({
         sku: form.sku.trim() || undefined,
         description: form.description.trim() || undefined,
         price: form.price.trim() ? Number(form.price) : undefined,
+        standardPrice: form.standardPrice.trim() ? Number(form.standardPrice) : undefined,
+        minPrice: form.minPrice.trim() ? Number(form.minPrice) : undefined,
+        maxDiscountPercent: form.maxDiscountPercent.trim()
+          ? Number(form.maxDiscountPercent)
+          : undefined,
+        technicalSpec: buildTechnicalSpec(form.spec, form.scopeRows),
       });
       onOpenChange(false);
     } catch {
@@ -176,6 +285,56 @@ export default function ProductFormDialog({
             {errors.price && <p className="text-xs text-destructive">{errors.price}</p>}
           </div>
 
+          <div className="rounded-md border bg-slate-50 p-3">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Price Validation (Quotation approval)
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="standardPrice">Standard Price</Label>
+                <Input
+                  id="standardPrice"
+                  inputMode="decimal"
+                  value={form.standardPrice}
+                  onChange={(e) => setForm({ ...form, standardPrice: e.target.value })}
+                  placeholder="e.g. 125000"
+                />
+                {errors.standardPrice && (
+                  <p className="text-xs text-destructive">{errors.standardPrice}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="minPrice">Minimum Price</Label>
+                <Input
+                  id="minPrice"
+                  inputMode="decimal"
+                  value={form.minPrice}
+                  onChange={(e) => setForm({ ...form, minPrice: e.target.value })}
+                  placeholder="e.g. 110000"
+                />
+                {errors.minPrice && <p className="text-xs text-destructive">{errors.minPrice}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxDiscountPercent">Max Discount %</Label>
+                <Input
+                  id="maxDiscountPercent"
+                  inputMode="decimal"
+                  value={form.maxDiscountPercent}
+                  onChange={(e) => setForm({ ...form, maxDiscountPercent: e.target.value })}
+                  placeholder="e.g. 10"
+                />
+                {errors.maxDiscountPercent && (
+                  <p className="text-xs text-destructive">{errors.maxDiscountPercent}</p>
+                )}
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Selling below Minimum Price blocks a quotation from being accepted until the price
+              is fixed or an approval is requested. Standard Price is what the Approval Matrix
+              measures discount % against; Max Discount % is shown for reference only.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
@@ -184,6 +343,97 @@ export default function ProductFormDialog({
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Optional details about this product or service"
             />
+          </div>
+
+          <div className="rounded-md border bg-slate-50 p-3">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Techno-Commercial Offer PDF — Technical Specifications
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Fills the Annexure-I spec table on this fan size's Quotation PDF. Leave anything
+              blank if it doesn't apply — the PDF just shows an empty cell.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {SPEC_FIELDS.map(({ key, label, placeholder }) => (
+                <div key={key} className="space-y-1">
+                  <Label htmlFor={`spec-${key}`} className="text-xs">
+                    {label}
+                  </Label>
+                  <Input
+                    id={`spec-${key}`}
+                    value={form.spec[key] ?? ""}
+                    onChange={(e) =>
+                      setForm({ ...form, spec: { ...form.spec, [key]: e.target.value } })
+                    }
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Standard Scope of Supply</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      scopeRows: [...form.scopeRows, { item: "", quantityPerFan: "" }],
+                    })
+                  }
+                >
+                  <Plus className="mr-1 h-3 w-3" /> Add Item
+                </Button>
+              </div>
+              {form.scopeRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No scope-of-supply items yet (e.g. Hanging Pipe — 01 No., Blades — 05 Nos.).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {form.scopeRows.map((row, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={row.item}
+                        onChange={(e) => {
+                          const next = [...form.scopeRows];
+                          next[index] = { ...next[index], item: e.target.value };
+                          setForm({ ...form, scopeRows: next });
+                        }}
+                        placeholder="Item (e.g. Hanging Pipe)"
+                        className="flex-1"
+                      />
+                      <Input
+                        value={row.quantityPerFan}
+                        onChange={(e) => {
+                          const next = [...form.scopeRows];
+                          next[index] = { ...next[index], quantityPerFan: e.target.value };
+                          setForm({ ...form, scopeRows: next });
+                        }}
+                        placeholder="Qty / Fan (e.g. 01 No.)"
+                        className="w-40"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            scopeRows: form.scopeRows.filter((_, i) => i !== index),
+                          })
+                        }
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}

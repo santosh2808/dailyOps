@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, Plus, Eye, Pencil, Ban } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -14,7 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import CustomerFormDialog from "@/components/customers/CustomerFormDialog";
-import CustomerViewDialog from "@/components/customers/CustomerViewDialog";
 import DeactivateConfirmDialog from "@/components/customers/DeactivateConfirmDialog";
 import {
   createCustomer,
@@ -28,6 +28,8 @@ import type { Customer } from "@/types";
 const PAGE_SIZE = 20;
 
 export default function Customers() {
+  const navigate = useNavigate();
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -38,7 +40,6 @@ export default function Customers() {
   const [error, setError] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
-  const [viewOpen, setViewOpen] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
@@ -78,11 +79,6 @@ export default function Customers() {
   function openEditDialog(customer: Customer) {
     setSelectedCustomer(customer);
     setFormOpen(true);
-  }
-
-  function openViewDialog(customer: Customer) {
-    setSelectedCustomer(customer);
-    setViewOpen(true);
   }
 
   function openDeactivateDialog(customer: Customer) {
@@ -155,7 +151,11 @@ export default function Customers() {
                 </TableRow>
               ) : (
                 customers.map((customer) => (
-                  <TableRow key={customer.id}>
+                  <TableRow
+                    key={customer.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/customers/${customer.id}`)}
+                  >
                     <TableCell className="font-medium text-slate-900">
                       {customer.companyName}
                     </TableCell>
@@ -165,13 +165,13 @@ export default function Customers() {
                     <TableCell>
                       {customer.gstNumber || <Badge variant="muted">Not provided</Badge>}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           title="View details"
-                          onClick={() => openViewDialog(customer)}
+                          onClick={() => navigate(`/customers/${customer.id}`)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -235,11 +235,6 @@ export default function Customers() {
         onOpenChange={setFormOpen}
         customer={selectedCustomer}
         onSubmit={handleFormSubmit}
-      />
-      <CustomerViewDialog
-        open={viewOpen}
-        onOpenChange={setViewOpen}
-        customer={selectedCustomer}
       />
       <DeactivateConfirmDialog
         open={deactivateOpen}

@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { Product, PaginatedResponse } from "@/types";
+import type { Product, ProductTechnicalSpec, PaginatedResponse } from "@/types";
 
 export interface ProductListParams {
   page?: number;
@@ -14,6 +14,12 @@ export interface ProductPayload {
   sku?: string;
   description?: string;
   price?: number;
+  // Additive: Sales Automation price validation.
+  standardPrice?: number;
+  minPrice?: number;
+  maxDiscountPercent?: number;
+  // Additive: Techno-Commercial Offer PDF.
+  technicalSpec?: ProductTechnicalSpec;
 }
 
 export async function listProducts(params: ProductListParams) {

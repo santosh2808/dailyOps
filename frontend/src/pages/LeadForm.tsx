@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
+import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
 import { createLead, getLead, updateLead, type LeadPayload, type LeadProductPayload } from "@/api/leads";
 import type { LeadPriority, LeadSource } from "@/types";
@@ -31,8 +32,11 @@ interface FormState {
   source: LeadSource;
   expectedCloseDate: string;
   nextFollowUp: string;
+  // Lead Management Phase 1 (requirement #5) — short free-text reminder
+  // alongside the follow-up date, e.g. "Call before 3pm".
+  reminderNote: string;
   remarks: string;
-  assignedTo: string;
+  assignedToUserId: string;
 }
 
 const emptyForm: FormState = {
@@ -53,8 +57,9 @@ const emptyForm: FormState = {
   source: "OTHER",
   expectedCloseDate: "",
   nextFollowUp: "",
+  reminderNote: "",
   remarks: "",
-  assignedTo: "",
+  assignedToUserId: "",
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -105,8 +110,9 @@ export default function LeadForm() {
           source: lead.source,
           expectedCloseDate: toDateInputValue(lead.expectedCloseDate),
           nextFollowUp: toDateInputValue(lead.nextFollowUp),
+          reminderNote: lead.reminderNote ?? "",
           remarks: lead.remarks ?? "",
-          assignedTo: lead.assignedTo ?? "",
+          assignedToUserId: lead.assignedToUserId ?? "",
         });
         setProducts(
           (lead.products ?? []).map((p) => ({
@@ -184,8 +190,12 @@ export default function LeadForm() {
       source: form.source,
       expectedCloseDate: form.expectedCloseDate || undefined,
       nextFollowUp: form.nextFollowUp || undefined,
+      reminderNote: form.reminderNote.trim() || undefined,
       remarks: form.remarks.trim() || undefined,
-      assignedTo: form.assignedTo.trim() || undefined,
+      // Explicit null (not undefined) when cleared, so an edit that
+      // unassigns a lead actually clears it rather than being ignored by
+      // updateLead()'s partial-payload semantics.
+      assignedToUserId: form.assignedToUserId || null,
     };
 
     setSubmitting(true);
@@ -390,7 +400,7 @@ export default function LeadForm() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="expectedCloseDate">Expected Close Date</Label>
                       <Input
@@ -410,16 +420,24 @@ export default function LeadForm() {
                         onChange={(e) => update("nextFollowUp", e.target.value)}
                       />
                     </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="assignedTo">Assigned To</Label>
-                      <Input
-                        id="assignedTo"
-                        value={form.assignedTo}
-                        onChange={(e) => update("assignedTo", e.target.value)}
-                        placeholder="Sales rep name"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reminderNote">Reminder</Label>
+                    <Input
+                      id="reminderNote"
+                      value={form.reminderNote}
+                      onChange={(e) => update("reminderNote", e.target.value)}
+                      placeholder="e.g. Call before 3pm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Assigned To</Label>
+                    <AssignedToPicker
+                      value={form.assignedToUserId || null}
+                      onChange={(userId) => update("assignedToUserId", userId ?? "")}
+                    />
                   </div>
 
                   <div className="space-y-2">

@@ -8,6 +8,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
 } from 'class-validator';
 
@@ -49,10 +50,10 @@ export class QueryLeadDto {
   @IsEnum(LeadSource)
   source?: LeadSource;
 
-  @ApiPropertyOptional({ example: 'Priya Sharma' })
+  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   @IsOptional()
-  @IsString()
-  assignedTo?: string;
+  @IsUUID()
+  assignedToUserId?: string;
 
   @ApiPropertyOptional({ example: '2026-01-01', description: 'createdAt >= dateFrom' })
   @IsOptional()

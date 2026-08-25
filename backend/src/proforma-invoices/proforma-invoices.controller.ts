@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
@@ -27,19 +27,26 @@ export class ProformaInvoicesController {
     return this.proformaInvoicesService.findOne(id);
   }
 
+  @Get(':id/email-history')
+  @RequirePermission('ProformaInvoice', 'View')
+  getEmailHistory(@Param('id') id: string) {
+    return this.proformaInvoicesService.getEmailHistory(id);
+  }
+
   @Post()
   @RequirePermission('ProformaInvoice', 'Create')
-  create(@Body() dto: CreateProformaInvoiceDto) {
-    return this.proformaInvoicesService.create(dto);
+  create(@Body() dto: CreateProformaInvoiceDto, @Req() req: any) {
+    return this.proformaInvoicesService.create(dto, req.user?.name);
   }
 
   @Patch(':id/status')
   @RequirePermission('ProformaInvoice', 'Edit')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceStatusDto) {
-    return this.proformaInvoicesService.updateStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceStatusDto, @Req() req: any) {
+    return this.proformaInvoicesService.updateStatus(id, dto, req.user?.name);
   }
 
-  // No PDF endpoint yet — see the "Future Ready" comment on the
-  // ProformaInvoice model in schema.prisma for the intended
-  // GET :id/pdf extension point. Left out deliberately, per scope.
+  // No standalone PDF-download endpoint — the PDF is generated internally
+  // by create() purely to attach to the automatic email (see
+  // sendInvoiceEmail()); nothing in scope calls for a separate download
+  // button on this module the way Quotation's GET :id/pdf does.
 }

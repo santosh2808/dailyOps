@@ -14,7 +14,6 @@ import {
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -24,25 +23,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import LeadStatusBadge from "@/components/leads/LeadStatusBadge";
-import LeadPriorityBadge from "@/components/leads/LeadPriorityBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
+import { sourceLabel } from "@/components/leads/leadOptions";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead } from "@/types";
 
 const PAGE_SIZE = 20;
 
-type SortableColumn = "leadNumber" | "estimatedValue" | "nextFollowUp";
-
-function formatCurrency(value?: number | null) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+type SortableColumn = "leadNumber" | "nextFollowUp";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -79,7 +69,7 @@ export default function LeadList() {
         status: debouncedFilters.status || undefined,
         priority: debouncedFilters.priority || undefined,
         source: debouncedFilters.source || undefined,
-        assignedTo: debouncedFilters.assignedTo || undefined,
+        assignedToUserId: debouncedFilters.assignedToUserId || undefined,
         dateFrom: debouncedFilters.dateFrom || undefined,
         dateTo: debouncedFilters.dateTo || undefined,
         sortBy,
@@ -175,6 +165,10 @@ export default function LeadList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {/* Lead Management Phase 1 (requirement #7) — exactly these
+              columns: Lead No, Company, Contact, Phone, Email, Source,
+              Assigned To, Status, Next Follow-up, Last Updated, Actions.
+              Priority/Est. Value/Products still show on Lead Details. */}
           <Table>
             <TableHeader>
               <TableRow>
@@ -184,26 +178,17 @@ export default function LeadList() {
                     className="flex items-center"
                     onClick={() => toggleSort("leadNumber")}
                   >
-                    Lead Number
+                    Lead No
                     {sortIcon("leadNumber")}
                   </button>
                 </TableHead>
+                <TableHead>Company</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Products</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Assigned To</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("estimatedValue")}
-                  >
-                    Est. Value
-                    {sortIcon("estimatedValue")}
-                  </button>
-                </TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -214,7 +199,7 @@ export default function LeadList() {
                     {sortIcon("nextFollowUp")}
                   </button>
                 </TableHead>
-                <TableHead>Assigned To</TableHead>
+                <TableHead>Last Updated</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -235,26 +220,20 @@ export default function LeadList() {
                 leads.map((lead) => (
                   <TableRow key={lead.id} className="cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
                     <TableCell className="font-medium text-slate-900">{lead.leadNumber}</TableCell>
-                    <TableCell>
-                      <div className="font-medium text-slate-900">{lead.contactPerson || "-"}</div>
-                      {lead.companyName && (
-                        <div className="text-xs text-muted-foreground">{lead.companyName}</div>
-                      )}
-                    </TableCell>
+                    <TableCell>{lead.companyName || "-"}</TableCell>
+                    <TableCell>{lead.contactPerson || "-"}</TableCell>
                     <TableCell>{lead.phone || "-"}</TableCell>
                     <TableCell>{lead.email || "-"}</TableCell>
-                    <TableCell>
-                      <Badge variant="muted">{lead._count?.products ?? 0}</Badge>
-                    </TableCell>
+                    <TableCell>{sourceLabel(lead.source)}</TableCell>
+                    {/* Full name only — never the role — with an explicit
+                        "Unassigned" label (not a bare dash) when no user is
+                        assigned. */}
+                    <TableCell>{lead.assignedToUser?.name || "Unassigned"}</TableCell>
                     <TableCell>
                       <LeadStatusBadge status={lead.status} />
                     </TableCell>
-                    <TableCell>
-                      <LeadPriorityBadge priority={lead.priority} />
-                    </TableCell>
-                    <TableCell>{formatCurrency(lead.estimatedValue)}</TableCell>
                     <TableCell>{formatDate(lead.nextFollowUp)}</TableCell>
-                    <TableCell>{lead.assignedTo || "—"}</TableCell>
+                    <TableCell>{formatDate(lead.updatedAt)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

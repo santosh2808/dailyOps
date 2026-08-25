@@ -55,13 +55,19 @@ export class SalesOrdersController {
 
   @Patch(':id/status')
   @RequirePermission('SalesOrder', 'Edit')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateSalesOrderStatusDto) {
-    return this.salesOrdersService.updateStatus(id, dto);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateSalesOrderStatusDto, @Req() req: any) {
+    return this.salesOrdersService.updateStatus(id, dto, req.user?.name);
+  }
+
+  @Get(':id/email-history')
+  @RequirePermission('SalesOrder', 'View')
+  getEmailHistory(@Param('id') id: string) {
+    return this.salesOrdersService.getEmailHistory(id);
   }
 
   @Delete(':id')
   @RequirePermission('SalesOrder', 'Delete')
-  remove(@Param('id') id: string) {
-    return this.salesOrdersService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.salesOrdersService.remove(id, req.user?.name);
   }
 }

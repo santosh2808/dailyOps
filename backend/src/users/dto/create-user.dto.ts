@@ -30,6 +30,13 @@ export class CreateUserDto {
   @IsEmail(undefined, { message: 'Email must be a valid email address' })
   email: string;
 
+  // Additive: Lead Assignment enhancement also collects this on the quick
+  // "+ Add User" modal, so it's optional here too for parity.
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
   @ApiProperty({ example: 'Sales@123', description: 'Initial (temporary) password — the new user must change it on first login' })
   @IsString()
   @MinLength(6, { message: 'Password must be at least 6 characters' })
