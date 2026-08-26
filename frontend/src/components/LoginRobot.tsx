@@ -432,7 +432,8 @@ export default function LoginRobot() {
           <span className="volt-hand volt-hand--l" aria-hidden="true" />
           <span className="volt-hand volt-hand--r" aria-hidden="true" />
           <h1 className="volt-title">
-            Welcome to <span style={{ color: "#9BBB3D" }}>SR</span> DailyOps
+            Welcome to <span style={{ color: "#9BBB3D" }}>SR</span>{" "}
+            <span style={{ color: "#ED3525" }}>DailyOps</span>
           </h1>
           <p className="volt-subtitle">Smart Rotamac Operations Platform</p>
           <p className="volt-description">Manage your complete business from Lead to Dispatch.</p>
