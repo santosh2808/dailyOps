@@ -4,7 +4,7 @@ export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
       {/* Page header — full SR DailyOps lockup image, shared across both panels below */}
-      <header className="flex flex-shrink-0 flex-col px-6 pb-2">
+      <header className="flex flex-shrink-0 flex-col border-b border-slate-200 bg-white px-6 pb-2">
         <div className="flex h-16 items-center">
           <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
         </div>
