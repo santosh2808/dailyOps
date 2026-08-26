@@ -431,7 +431,9 @@ export default function LoginRobot() {
         <form className="volt-card" ref={formRef} noValidate>
           <span className="volt-hand volt-hand--l" aria-hidden="true" />
           <span className="volt-hand volt-hand--r" aria-hidden="true" />
-          <h1 className="volt-title">Welcome to SR DailyOps</h1>
+          <h1 className="volt-title">
+            Welcome to <span style={{ color: "#9BBB3D" }}>SR</span> DailyOps
+          </h1>
           <p className="volt-subtitle">Smart Rotamac Operations Platform</p>
           <p className="volt-description">Manage your complete business from Lead to Dispatch.</p>
 

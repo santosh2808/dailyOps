@@ -3,10 +3,9 @@ import LoginRobot from "@/components/LoginRobot";
 export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
-      {/* Page header — SR logo + DailyOps wordmark, shared across both panels below */}
-      <header className="flex flex-shrink-0 items-center gap-3 px-8 py-4">
-        <img src="/sr-logo.png" alt="SR" className="h-16 w-16" />
-        <span className="text-3xl font-bold tracking-tight text-[#2B3316]">DailyOps</span>
+      {/* Page header — full SR DailyOps lockup image, shared across both panels below */}
+      <header className="flex flex-shrink-0 items-center px-8 py-4">
+        <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-14 w-auto" />
       </header>
 
       <div className="flex flex-1 overflow-hidden">

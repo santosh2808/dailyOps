@@ -202,10 +202,7 @@ export default function Sidebar() {
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
       <div className="flex flex-col items-center gap-1 px-6 py-6 text-center">
-        <div className="flex items-center gap-2">
-          <img src="/sr-logo.png" alt="SR" className="h-8 w-8" />
-          <span className="text-xl font-semibold">DailyOps</span>
-        </div>
+        <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-10 w-auto" />
         <span className="text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
       </div>
 
