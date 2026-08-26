@@ -674,128 +674,132 @@ export default function Dashboard() {
             currentYear={currentYear}
           />
 
-          {/* v2 requirements #1-4: India Sales Map replaces the Sales Funnel */}
-          <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">India Sales Map</CardTitle>
-              {filters.state && (
-                <button
-                  type="button"
-                  onClick={() => setFilters({ ...filters, state: undefined })}
-                  className="flex items-center gap-1.5 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green hover:bg-srm-green/20"
-                >
-                  Showing: {filters.state}
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </CardHeader>
-            <CardContent>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Colored by revenue. Click a state to see its sales orders (with the sales executive on each).
-              </p>
-              {filteredLoading && salesByState.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : (
-                <IndiaSalesMap
-                  data={salesByState}
-                  onStateClick={(state) => navigate(`/sales-orders?customerState=${encodeURIComponent(state)}`)}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* v2 requirement #5: Revenue Trend (Area Chart) */}
-          <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">Revenue Trend</CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                {REVENUE_PERIODS.map((period) => (
-                  <Button
-                    key={period}
+          {/* v2 requirements #1-5: India Sales Map + Revenue Trend side by
+              side (on wide screens) so revenue progression is visible right
+              next to where it's happening geographically; they stack on
+              narrower screens. */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base">India Sales Map</CardTitle>
+                {filters.state && (
+                  <button
                     type="button"
-                    size="sm"
-                    variant={revenuePeriod === period ? "default" : "outline"}
-                    className={revenuePeriod === period ? "bg-srm-green hover:bg-srm-green/90" : ""}
-                    onClick={() => setRevenuePeriod(period)}
+                    onClick={() => setFilters({ ...filters, state: undefined })}
+                    className="flex items-center gap-1.5 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green hover:bg-srm-green/20"
                   >
-                    {period[0].toUpperCase() + period.slice(1)}
-                  </Button>
-                ))}
-                {revenuePeriod === "weekly" && (
-                  <Select
-                    value={revenueMonth}
-                    onChange={(e) => setRevenueMonth(Number(e.target.value))}
-                    className="w-32"
-                  >
-                    {MONTH_NAMES.map((m, i) => (
-                      <option key={m} value={i + 1}>
-                        {m}
-                      </option>
-                    ))}
-                  </Select>
+                    Showing: {filters.state}
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 )}
-                {revenuePeriod !== "yearly" && (
-                  <Select
-                    value={revenueYear}
-                    onChange={(e) => setRevenueYear(Number(e.target.value))}
-                    className="w-24"
-                  >
-                    {yearOptions(currentYear).map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </Select>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Colored by revenue. Click a state to see its sales orders (with the sales executive on each).
+                </p>
+                {filteredLoading && salesByState.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : (
+                  <IndiaSalesMap
+                    data={salesByState}
+                    onStateClick={(state) => navigate(`/sales-orders?customerState=${encodeURIComponent(state)}`)}
+                  />
                 )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {revenueLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : revenueSeries.every((p) => p.value === 0) ? (
-                <p className="text-sm text-muted-foreground">No revenue in this range yet.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart
-                    data={revenueSeries}
-                    onClick={(state) => {
-                      const index = state?.activeTooltipIndex;
-                      if (index == null) return;
-                      const parsedIndex = Number(index);
-                      if (Number.isNaN(parsedIndex)) return;
-                      const { dateFrom, dateTo } = revenueBucketRange(
-                        revenuePeriod,
-                        parsedIndex,
-                        revenueMonth,
-                        revenueYear,
-                      );
-                      navigate(`/sales-orders?dateFrom=${dateFrom}&dateTo=${dateTo}`);
-                    }}
-                  >
-                    <defs>
-                      <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={SRM_GREEN} stopOpacity={0.35} />
-                        <stop offset="100%" stopColor={SRM_GREEN} stopOpacity={0.03} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`} />
-                    <Tooltip formatter={(value) => formatINR(Number(value))} />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      name="Revenue"
-                      stroke={SRM_GREEN}
-                      strokeWidth={2}
-                      fill="url(#revenueFill)"
-                      activeDot={{ r: 5, cursor: "pointer" }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-base">Revenue Trend</CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  {REVENUE_PERIODS.map((period) => (
+                    <Button
+                      key={period}
+                      type="button"
+                      size="sm"
+                      variant={revenuePeriod === period ? "default" : "outline"}
+                      className={revenuePeriod === period ? "bg-srm-green hover:bg-srm-green/90" : ""}
+                      onClick={() => setRevenuePeriod(period)}
+                    >
+                      {period[0].toUpperCase() + period.slice(1)}
+                    </Button>
+                  ))}
+                  {revenuePeriod === "weekly" && (
+                    <Select
+                      value={revenueMonth}
+                      onChange={(e) => setRevenueMonth(Number(e.target.value))}
+                      className="w-32"
+                    >
+                      {MONTH_NAMES.map((m, i) => (
+                        <option key={m} value={i + 1}>
+                          {m}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  {revenuePeriod !== "yearly" && (
+                    <Select
+                      value={revenueYear}
+                      onChange={(e) => setRevenueYear(Number(e.target.value))}
+                      className="w-24"
+                    >
+                      {yearOptions(currentYear).map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {revenueLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : revenueSeries.every((p) => p.value === 0) ? (
+                  <p className="text-sm text-muted-foreground">No revenue in this range yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart
+                      data={revenueSeries}
+                      onClick={(state) => {
+                        const index = state?.activeTooltipIndex;
+                        if (index == null) return;
+                        const parsedIndex = Number(index);
+                        if (Number.isNaN(parsedIndex)) return;
+                        const { dateFrom, dateTo } = revenueBucketRange(
+                          revenuePeriod,
+                          parsedIndex,
+                          revenueMonth,
+                          revenueYear,
+                        );
+                        navigate(`/sales-orders?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+                      }}
+                    >
+                      <defs>
+                        <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={SRM_GREEN} stopOpacity={0.35} />
+                          <stop offset="100%" stopColor={SRM_GREEN} stopOpacity={0.03} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`} />
+                      <Tooltip formatter={(value) => formatINR(Number(value))} />
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        name="Revenue"
+                        stroke={SRM_GREEN}
+                        strokeWidth={2}
+                        fill="url(#revenueFill)"
+                        activeDot={{ r: 5, cursor: "pointer" }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           {/* v2 requirements #6-9: Donut Charts (Lead Source / Quotation Status /
               Production Status / Inventory Status — replaces v1's set, which
