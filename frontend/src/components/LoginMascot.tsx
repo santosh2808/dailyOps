@@ -37,7 +37,7 @@ export default function LoginMascot({ focusField, isValidEmail }: LoginMascotPro
   const eyelidTransform = covered ? "translate(0,0)" : "translate(0,34)";
 
   return (
-    <div ref={containerRef} className="mx-auto mb-1 h-24 w-24 select-none">
+    <div ref={containerRef} className="mx-auto h-20 w-20 select-none">
       <svg viewBox="0 0 100 100" className="h-full w-full">
         {/* head */}
         <circle cx="50" cy="52" r="40" fill="#ffffff" stroke="#e2e8f0" strokeWidth="2" />

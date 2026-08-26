@@ -67,32 +67,25 @@ export default function Login() {
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
           <Card className="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-lg">
 
-            <CardHeader className="space-y-1 text-center px-10 pt-8">
-              <img
-                src="/logo-smart-rotamach.jpg"
-                alt="Smart Rotamach"
-                className="mx-auto mb-2 h-32 w-32 rounded-md object-contain"
+            <CardHeader className="space-y-1 text-center px-8 pb-2 pt-6">
+              <LoginMascot
+                focusField={focusField}
+                isValidEmail={EMAIL_LIKE.test(identifier.trim())}
               />
               <div className="flex flex-col items-center leading-tight">
-                <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">
+                <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
                   DailyOps
                 </CardTitle>
-                <span className="text-sm font-medium text-srm-green">by Smart Rotamach</span>
+                <span className="text-xs font-medium text-srm-green">by Smart Rotamach</span>
               </div>
-              <CardDescription className="!mt-4 text-base">
+              <CardDescription className="!mt-2 text-sm">
                 Sign in to your account
               </CardDescription>
             </CardHeader>
-            <CardContent className="px-10 pb-10">
-              <div className="mb-4">
-                <LoginMascot
-                  focusField={focusField}
-                  isValidEmail={EMAIL_LIKE.test(identifier.trim())}
-                />
-              </div>
-              <form onSubmit={handleSubmit} className="space-y-5">
+            <CardContent className="px-8 pb-8 pt-2">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="identifier" className="text-base">
+                  <Label htmlFor="identifier" className="text-sm">
                     Username or Email
                   </Label>
                   <div className="relative">
@@ -105,12 +98,12 @@ export default function Login() {
                       onBlur={() => setFocusField(null)}
                       placeholder="admin"
                       required
-                      className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
+                      className="h-11 pl-10 text-sm border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-base">
+                  <Label htmlFor="password" className="text-sm">
                     Password
                   </Label>
                   <div className="relative">
@@ -123,7 +116,7 @@ export default function Login() {
                       onFocus={() => setFocusField("password")}
                       onBlur={() => setFocusField(null)}
                       required
-                      className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
+                      className="h-11 pl-10 text-sm border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
                     />
                   </div>
                 </div>
@@ -153,7 +146,7 @@ export default function Login() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button
                   type="submit"
-                  className="group h-12 w-full gap-2 bg-srm-green text-base font-semibold text-white hover:bg-srm-green/90"
+                  className="group h-11 w-full gap-2 bg-srm-green text-sm font-semibold text-white hover:bg-srm-green/90"
                   disabled={loading}
                 >
                   {loading ? "Signing in..." : "Sign In"}
