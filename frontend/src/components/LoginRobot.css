@@ -1,0 +1,503 @@
+/* Volt — the login robot. Ported from the user's reference (Sora font,
+   neubrutalist card, 3D-flipping head, speech bubble, password-strength
+   back-panel, confetti on success). All selectors are prefixed with
+   "volt-" and scoped under .volt-scene so nothing here leaks into the
+   rest of the app. Colors remapped to SRM green/red instead of the
+   original orange/teal. */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&display=swap');
+
+.volt-scene {
+  --paper: #f4efe5;
+  --ink: #23252d;
+  --accent: #ED3525;
+  --accent-deep: #c22a1c;
+  --teal: #9BBB3D;
+  --yellow: #ffc53d;
+  --shell: #fffdf8;
+  --screen: #23252d;
+  --eye: #fffdf8;
+  --muted: #9a948a;
+  --field: #faf7f0;
+  --line: 2px solid var(--ink);
+  --turn: .65s cubic-bezier(.5, -0.3, .25, 1.35);
+  font-family: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  color: var(--ink);
+  min-height: 100%;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 110px 24px 70px;
+  overflow: clip;
+  position: relative;
+  background:
+    radial-gradient(rgba(35, 37, 45, .07) 1.2px, transparent 1.3px) 0 0 / 24px 24px,
+    var(--paper);
+}
+.volt-scene, .volt-scene * { box-sizing: border-box; margin: 0; padding: 0; }
+.volt-stage { display: flex; flex-direction: column; align-items: center; position: relative; }
+
+/* robot */
+.volt-robot {
+  position: relative;
+  z-index: 1;
+  margin-bottom: -16px;
+  animation: volt-float 4s ease-in-out infinite alternate;
+  perspective: 800px;
+}
+@keyframes volt-float {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-5px); }
+}
+
+/* antenna */
+.volt-antenna {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+}
+.volt-antenna-rod { width: 4px; height: 22px; background: var(--ink); border-radius: 2px; }
+.volt-antenna-tip {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: var(--line);
+  order: -1;
+  margin-bottom: -2px;
+  position: relative;
+  animation: volt-bob 2.4s ease-in-out infinite;
+}
+.volt-antenna-tip::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .85);
+}
+@keyframes volt-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2.5px); }
+}
+.volt-robot[data-mood="excited"] .volt-antenna-tip { animation-duration: .4s; background: var(--yellow); }
+.volt-robot[data-mood="success"] .volt-antenna-tip { background: var(--teal); }
+
+/* head */
+.volt-head3d {
+  width: 152px;
+  height: 140px;
+  perspective: 700px;
+  transform-style: preserve-3d;
+  transform:
+    translateY(var(--hy, 0px))
+    scale(var(--hsc, 1))
+    rotateX(var(--rx, 0deg))
+    rotateY(var(--ry, 0deg));
+  transition: transform .25s ease-out;
+  will-change: transform;
+}
+.volt-robot.is-hyped .volt-head3d { --hy: 5px; --hsc: 1.04; }
+.volt-robot.is-pressed .volt-head3d { --hy: 9px; --hsc: .94; }
+.volt-head {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform var(--turn);
+}
+.volt-robot.is-turned .volt-head { transform: rotateY(180deg); }
+.volt-robot.is-spinning .volt-head { animation: volt-victory .9s ease-in-out; }
+@keyframes volt-victory { to { transform: rotateY(360deg); } }
+.volt-ear {
+  position: absolute;
+  top: 48px;
+  width: 16px;
+  height: 40px;
+  background: var(--shell);
+  border: var(--line);
+  border-radius: 8px;
+  transform: translateZ(0);
+}
+.volt-ear--l { left: -10px; }
+.volt-ear--r { right: -10px; }
+.volt-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 34px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--shell);
+  border: var(--line);
+}
+.volt-face--front { box-shadow: 5px 6px 0 rgba(35, 37, 45, .16); }
+.volt-face--back {
+  box-shadow: 5px 6px 0 rgba(35, 37, 45, .16);
+  transform: rotateY(180deg);
+  display: grid;
+  place-items: center;
+}
+
+/* face */
+.volt-visor {
+  position: absolute;
+  inset: 22px 16px 20px;
+  background: var(--screen);
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  overflow: hidden;
+}
+.volt-eyes {
+  display: flex;
+  gap: 28px;
+  transform: translate(var(--lx, 0px), var(--ly, 0px));
+  transition: transform .18s ease-out;
+}
+.volt-eyes.volt-blink .volt-eye { transform: scaleY(.08); }
+.volt-eye {
+  width: 19px;
+  height: 25px;
+  border-radius: 9px;
+  background: var(--eye);
+  transition: all .22s ease;
+}
+.volt-robot[data-mood="happy"] .volt-eye,
+.volt-robot[data-mood="success"] .volt-eye {
+  width: 25px;
+  height: 12px;
+  background: transparent;
+  border: 5px solid var(--eye);
+  border-bottom: none;
+  border-radius: 25px 25px 0 0;
+}
+.volt-robot[data-mood="excited"] .volt-eye {
+  transform: scale(1.2);
+  border-radius: 50%;
+  height: 21px;
+}
+.volt-robot[data-mood="pressed"] .volt-eye {
+  width: 24px;
+  height: 12px;
+  background: transparent;
+  border: 5px solid var(--eye);
+  border-top: none;
+  border-radius: 0 0 24px 24px;
+}
+.volt-cheek {
+  position: absolute;
+  top: 59%;
+  width: 15px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+.volt-cheek--l { left: 15px; }
+.volt-cheek--r { right: 15px; }
+.volt-robot[data-mood="happy"] .volt-cheek,
+.volt-robot[data-mood="excited"] .volt-cheek,
+.volt-robot[data-mood="pressed"] .volt-cheek,
+.volt-robot[data-mood="success"] .volt-cheek { opacity: .9; }
+.volt-mouth {
+  width: 15px;
+  height: 5px;
+  border-radius: 4px;
+  background: var(--eye);
+  transition: all .25s ease;
+}
+.volt-robot[data-mood="watching"] .volt-mouth { width: 9px; height: 9px; border-radius: 50%; }
+.volt-robot[data-mood="happy"] .volt-mouth { width: 30px; height: 12px; border-radius: 0 0 16px 16px; }
+.volt-robot[data-mood="excited"] .volt-mouth { width: 22px; height: 16px; border-radius: 0 0 13px 13px; }
+.volt-robot[data-mood="pressed"] .volt-mouth { width: 27px; height: 15px; border-radius: 0 0 14px 14px; }
+.volt-robot[data-mood="success"] .volt-mouth { width: 38px; height: 17px; border-radius: 0 0 20px 20px; }
+
+/* back of the head + password meter */
+.volt-panel {
+  width: 116px;
+  padding: 12px 10px 10px;
+  background: var(--screen);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.volt-panel-lights { display: flex; gap: 6px; }
+.volt-panel-lights i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: volt-bob 1.8s ease-in-out infinite;
+}
+.volt-panel-lights i:nth-child(2) { animation-delay: .3s; background: var(--yellow); }
+.volt-panel-lights i:nth-child(3) { animation-delay: .6s; background: var(--teal); }
+.volt-meter { display: flex; gap: 5px; }
+.volt-meter i {
+  width: 15px;
+  height: 20px;
+  border-radius: 4px;
+  background: #3b3e49;
+  transition: background .25s ease;
+}
+.volt-meter[data-lvl="1"] i.on { background: #ff5c4d; }
+.volt-meter[data-lvl="2"] i.on { background: #ff9f43; }
+.volt-meter[data-lvl="3"] i.on { background: var(--yellow); }
+.volt-meter[data-lvl="4"] i.on { background: var(--teal); }
+.volt-panel-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+/* speech bubble */
+.volt-bubble {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--shell);
+  border: var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 9px 14px;
+  border-radius: 12px;
+  width: max-content;
+  max-width: 250px;
+  text-align: center;
+  box-shadow: 3px 3px 0 rgba(35, 37, 45, .9);
+  z-index: 3;
+}
+.volt-bubble::after {
+  content: '';
+  position: absolute;
+  top: calc(100% - 5px);
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: var(--shell);
+  border-right: var(--line);
+  border-bottom: var(--line);
+  transform: translateX(-50%) rotate(45deg);
+}
+.volt-bubble.volt-pop { animation: volt-pop .3s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes volt-pop {
+  from { transform: translateX(-50%) scale(.8); }
+  to   { transform: translateX(-50%) scale(1); }
+}
+
+/* form card */
+.volt-card {
+  position: relative;
+  z-index: 2;
+  width: min(344px, calc(100vw - 48px));
+  background: linear-gradient(165deg, #fffefb 0%, #fdfaf3 45%, #f7f1e4 100%);
+  border: var(--line);
+  border-radius: 20px;
+  padding: 36px 28px 40px;
+  box-shadow: 8px 9px 0 rgba(35, 37, 45, .9);
+}
+.volt-hand {
+  position: absolute;
+  top: -16px;
+  width: 44px;
+  height: 32px;
+  background:
+    linear-gradient(90deg, transparent 31%, rgba(35, 37, 45, .9) 32%, rgba(35, 37, 45, .9) 36%, transparent 37%, transparent 63%, rgba(35, 37, 45, .9) 64%, rgba(35, 37, 45, .9) 68%, transparent 69%) 0 12px / 100% calc(100% - 12px) no-repeat,
+    var(--shell);
+  border: var(--line);
+  border-radius: 9px 9px 14px 14px;
+  z-index: 3;
+  transition: transform .25s ease;
+}
+.volt-hand--l { left: 36px; }
+.volt-hand--r { right: 36px; }
+.volt-robot.is-hyped ~ .volt-card .volt-hand { transform: translateY(-3px) scaleY(1.08); }
+.volt-foot {
+  position: absolute;
+  bottom: -26px;
+  width: 54px;
+  height: 34px;
+  background: var(--shell);
+  border: var(--line);
+  border-radius: 9px 9px 14px 14px;
+  box-shadow: inset 0 -9px 0 rgba(35, 37, 45, .12);
+  z-index: -1;
+}
+.volt-foot--l { left: 62px; }
+.volt-foot--r { right: 62px; }
+.volt-title {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.volt-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  margin-bottom: 14px;
+  background: var(--field);
+  border: 2px solid rgba(35, 37, 45, .22);
+  border-radius: 12px;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  cursor: text;
+}
+.volt-field:focus-within {
+  border-color: var(--ink);
+  box-shadow: 3px 3px 0 var(--accent);
+  transform: translate(-1px, -1px);
+}
+.volt-field-icon {
+  width: 19px;
+  height: 19px;
+  fill: var(--muted);
+  flex: none;
+  transition: fill .18s ease;
+}
+.volt-field:focus-within .volt-field-icon { fill: var(--ink); }
+.volt-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.volt-field input::placeholder { color: var(--muted); font-weight: 500; }
+.volt-peek {
+  border: none;
+  background: none;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.volt-peek svg { width: 20px; height: 20px; fill: var(--muted); transition: fill .18s ease; }
+.volt-peek:hover svg, .volt-peek[aria-pressed="true"] svg { fill: var(--ink); }
+.volt-peek:focus-visible { outline: 2px solid var(--ink); }
+
+/* remember-me / forgot-password row */
+.volt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -2px 2px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.volt-remember { display: flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
+.volt-remember input { width: 15px; height: 15px; accent-color: var(--teal); cursor: pointer; }
+.volt-forgot { border: none; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.volt-forgot:hover { text-decoration: underline; }
+.volt-notice { font-size: 12px; color: var(--muted); margin: -6px 2px 12px; }
+
+/* login button */
+.volt-btn {
+  position: relative;
+  width: 100%;
+  height: 54px;
+  margin-top: 10px;
+  border: var(--line);
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 4px 5px 0 rgba(35, 37, 45, .9);
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), box-shadow .18s ease, background .25s ease;
+}
+.volt-btn:hover, .volt-btn:focus-visible {
+  transform: translate(-2px, -2px);
+  background: var(--accent-deep);
+  box-shadow: 7px 8px 0 rgba(35, 37, 45, .9);
+}
+.volt-btn:active {
+  transform: translate(3px, 4px);
+  box-shadow: 0 0 0 rgba(35, 37, 45, .9);
+}
+.volt-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.volt-btn:disabled { cursor: not-allowed; opacity: .75; }
+.volt-btn-bolt {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-10px) scale(.4) rotate(-30deg);
+  transition: all .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+.volt-btn:hover .volt-btn-bolt, .volt-btn:focus-visible .volt-btn-bolt {
+  opacity: 1;
+  transform: none;
+  animation: volt-bolt-jitter .4s ease-in-out infinite;
+}
+@keyframes volt-bolt-jitter {
+  0%, 100% { transform: rotate(-7deg) scale(1); }
+  50%      { transform: rotate(7deg) scale(1.2); }
+}
+.volt-btn.is-success { background: var(--teal); }
+
+/* error shake */
+.volt-card.volt-shake { animation: volt-shake .4s ease; }
+@keyframes volt-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  50% { transform: translateX(6px); }
+  75% { transform: translateX(-3px); }
+}
+
+/* confetti */
+.volt-confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: 0;
+  left: 0;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+@media (max-width: 560px) {
+  .volt-scene { padding-top: 96px; }
+  .volt-bubble { max-width: 210px; font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .volt-robot { animation: none; }
+  .volt-antenna-tip, .volt-panel-lights i { animation: none; }
+  .volt-head { transition-duration: .01s; }
+  .volt-btn:hover .volt-btn-bolt { animation: none; }
+  .volt-robot.is-spinning .volt-head { animation: none; }
+  .volt-bubble.volt-pop { animation: none; }
+  .volt-eyes { transition: none; }
+}
