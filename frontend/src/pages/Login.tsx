@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowRight, Lock, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,15 +61,24 @@ export default function Login() {
       <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
         <ParticlesBackground />
 
-        <Card className="relative z-10 w-full max-w-md border-none shadow-lg">
-          <CardHeader className="space-y-1 text-center px-10 pt-10">
+        {/* Soft brand-color glows behind the card */}
+        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-srm-green/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-srm-red/15 blur-3xl" />
+
+        <Card className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border-none shadow-2xl">
+          {/* Brand accent bar */}
+          <div className="h-1.5 w-full bg-gradient-to-r from-srm-green via-srm-green to-srm-red" />
+
+          <CardHeader className="space-y-1 text-center px-10 pt-8">
             <img
               src="/logo-smart-rotamach.jpg"
               alt="Smart Rotamach"
               className="mx-auto mb-2 h-32 w-32 rounded-md object-contain"
             />
-            <CardTitle className="text-3xl">DailyOps</CardTitle>
-            <p className="text-sm font-medium text-slate-400">by Smart Rotamach</p>
+            <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">
+              DailyOps
+            </CardTitle>
+            <p className="text-sm font-medium text-srm-green">by Smart Rotamach</p>
             <CardDescription className="text-base">Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent className="px-10 pb-10">
@@ -77,31 +87,44 @@ export default function Login() {
                 <Label htmlFor="identifier" className="text-base">
                   Username or Email
                 </Label>
-                <Input
-                  id="identifier"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin"
-                  required
-                  className="h-12 text-base"
-                />
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="identifier"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="admin"
+                    required
+                    className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-base">
                   Password
                 </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-12 text-base"
-                />
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
+                  />
+                </div>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="h-12 w-full text-base" disabled={loading}>
+              <Button
+                type="submit"
+                className="group h-12 w-full gap-2 bg-gradient-to-r from-srm-green to-[#7ea82f] text-base font-semibold text-white shadow-lg shadow-srm-green/30 transition-all hover:shadow-xl hover:shadow-srm-green/40"
+                disabled={loading}
+              >
                 {loading ? "Signing in..." : "Sign in"}
+                {!loading && (
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                )}
               </Button>
             </form>
           </CardContent>
