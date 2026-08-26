@@ -12,12 +12,12 @@
   --accent: #ED3525;
   --accent-deep: #c22a1c;
   --teal: #9BBB3D;
-  --yellow: #ffc53d;
-  --shell: #fffdf8;
+  --teal-light: #c3d68b;
+  --shell: #ffffff;
   --screen: #23252d;
-  --eye: #fffdf8;
+  --eye: #ffffff;
   --muted: #9a948a;
-  --field: #faf7f0;
+  --field: #f5f5f4;
   --line: 2px solid var(--ink);
   --turn: .65s cubic-bezier(.5, -0.3, .25, 1.35);
   font-family: 'Sora', 'Segoe UI', system-ui, sans-serif;
@@ -86,7 +86,7 @@
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-2.5px); }
 }
-.volt-robot[data-mood="excited"] .volt-antenna-tip { animation-duration: .4s; background: var(--yellow); }
+.volt-robot[data-mood="excited"] .volt-antenna-tip { animation-duration: .4s; background: var(--accent-deep); }
 .volt-robot[data-mood="success"] .volt-antenna-tip { background: var(--teal); }
 
 /* head */
@@ -241,7 +241,7 @@
   background: var(--accent);
   animation: volt-bob 1.8s ease-in-out infinite;
 }
-.volt-panel-lights i:nth-child(2) { animation-delay: .3s; background: var(--yellow); }
+.volt-panel-lights i:nth-child(2) { animation-delay: .3s; background: var(--accent-deep); }
 .volt-panel-lights i:nth-child(3) { animation-delay: .6s; background: var(--teal); }
 .volt-meter { display: flex; gap: 5px; }
 .volt-meter i {
@@ -251,9 +251,9 @@
   background: #3b3e49;
   transition: background .25s ease;
 }
-.volt-meter[data-lvl="1"] i.on { background: #ff5c4d; }
-.volt-meter[data-lvl="2"] i.on { background: #ff9f43; }
-.volt-meter[data-lvl="3"] i.on { background: var(--yellow); }
+.volt-meter[data-lvl="1"] i.on { background: var(--accent); }
+.volt-meter[data-lvl="2"] i.on { background: var(--accent-deep); }
+.volt-meter[data-lvl="3"] i.on { background: var(--teal-light); }
 .volt-meter[data-lvl="4"] i.on { background: var(--teal); }
 .volt-panel-label {
   font-size: 9px;
@@ -309,7 +309,7 @@
   position: relative;
   z-index: 2;
   width: min(344px, calc(100vw - 48px));
-  background: linear-gradient(165deg, #fffefb 0%, #fdfaf3 45%, #f7f1e4 100%);
+  background: var(--shell);
   border: var(--line);
   border-radius: 20px;
   padding: 36px 28px 40px;
