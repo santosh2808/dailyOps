@@ -10,7 +10,7 @@ export default function Login() {
         </div>
         {/* Same offset/tightening as the Sidebar's caption, so it sits under
             the "DailyOps" wordmark rather than under the gear/SR icon. */}
-        <span className="ml-[71px] -mt-1 text-[11px] font-medium text-muted-foreground">
+        <span className="ml-[71px] -mt-3 text-[11px] font-medium text-muted-foreground">
           by Smart Rotamach
         </span>
       </header>
