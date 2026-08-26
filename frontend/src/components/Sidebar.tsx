@@ -9,7 +9,6 @@ import {
   ClipboardList,
   Receipt,
   Settings,
-  LogOut,
   TrendingUp,
   Landmark,
   Factory,
@@ -25,6 +24,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
+// .volt-btn/.volt-btn-bolt are the exact same classes the login page's
+// "LOG ME IN" button uses (see LoginRobot.css) — imported here too so the
+// Logout button below can reuse them verbatim, animations included, even
+// though this file never renders inside LoginRobot's .volt-scene wrapper.
+import "./LoginRobot.css";
 
 interface NavItem {
   label: string;
@@ -262,15 +266,29 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-200 px-3 py-4">
-        {/* Solid red button, same look as the "LOG ME IN" button on the
-            login page (LoginRobot.css .volt-btn), instead of a plain
-            ghost link. */}
+        {/* Exact same markup/classes as the login page's "LOG ME IN" button
+            (LoginRobot.tsx's .volt-btn), including its hover/active/focus
+            animations — the CSS vars it depends on are normally inherited
+            from .volt-scene, so they're supplied inline here instead since
+            this button isn't rendered inside that wrapper. */}
         <button
           onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-srm-red px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-srm-red/90"
+          className="volt-btn"
+          style={
+            {
+              "--ink": "#23252d",
+              "--accent": "#ED3525",
+              "--accent-deep": "#c22a1c",
+              "--line": "2px solid #23252d",
+              marginTop: 0,
+              fontFamily: "'Sora', 'Segoe UI', system-ui, sans-serif",
+            } as React.CSSProperties
+          }
         >
-          <LogOut className="h-4 w-4" />
-          Logout
+          <span className="volt-btn-bolt" aria-hidden="true">
+            ⚡
+          </span>
+          <span className="volt-btn-label">LOGOUT</span>
         </button>
       </div>
     </aside>
