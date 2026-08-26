@@ -7,7 +7,10 @@
    index.html rather than an @import here — see the comment there. */
 
 .volt-scene {
-  --paper: #ffffff;
+  /* Transparent so the shared page-level gradient (set on Login.tsx's
+     outer wrapper) shows through consistently on both sides — was a flat
+     #ffffff, which fully hid that gradient behind this panel. */
+  --paper: transparent;
   --ink: #23252d;
   --accent: #ED3525;
   --accent-deep: #c22a1c;

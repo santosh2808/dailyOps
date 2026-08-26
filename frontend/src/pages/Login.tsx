@@ -2,7 +2,7 @@ import LoginRobot from "@/components/LoginRobot";
 
 export default function Login() {
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-white">
+    <div className="flex h-screen w-full overflow-hidden bg-gradient-to-br from-[#eef6da] via-white to-[#f4f8ec]">
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
           Percentage-based (not a fixed pixel width) so it keeps roughly the same proportion
           of the screen — and the image stays large — at any window size. */}
