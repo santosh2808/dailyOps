@@ -56,14 +56,18 @@ export default function Login() {
         />
       </div>
 
-      {/* Right side — same off-white as the left panel, so the two blend together, with the login card centered */}
+      {/* Right side — base tone matches the left panel, lifted with soft brand-color gradients so it doesn't read flat */}
       <div
         className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8"
-        style={{ backgroundColor: "#f8f9fd" }}
+        style={{
+          backgroundColor: "#f8f9fd",
+          backgroundImage:
+            "radial-gradient(at 15% 15%, rgba(155,187,61,0.16) 0px, transparent 55%), radial-gradient(at 85% 85%, rgba(237,53,37,0.12) 0px, transparent 55%), radial-gradient(at 85% 15%, rgba(155,187,61,0.08) 0px, transparent 50%)",
+        }}
       >
         {/* Soft brand-color glows behind the card */}
-        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-srm-green/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-srm-red/15 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-srm-green/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-14 h-72 w-72 rounded-full bg-srm-red/25 blur-3xl" />
 
         <Card className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border-none shadow-2xl">
           {/* Brand accent bar */}
