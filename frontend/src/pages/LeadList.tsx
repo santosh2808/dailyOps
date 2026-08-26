@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowDown,
   ArrowUp,
@@ -28,7 +28,7 @@ import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog"
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
-import type { Lead } from "@/types";
+import type { Lead, LeadStatus } from "@/types";
 
 const PAGE_SIZE = 20;
 
@@ -39,15 +39,34 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+// Additive: Dashboard Redesign — lets a Dashboard card/chart link like
+// `/leads?status=QUALIFIED` land here with that filter already applied.
+// Only read once, on first mount (see useState lazy initializer below) —
+// afterwards LeadFiltersBar owns the filter state as it always has.
+function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilters {
+  const status = searchParams.get("status");
+  const assignedToUserId = searchParams.get("assignedToUserId");
+  return {
+    ...emptyLeadFilters,
+    status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
+    assignedToUserId: assignedToUserId ?? emptyLeadFilters.assignedToUserId,
+  };
+}
+
 export default function LeadList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<LeadFilters>(emptyLeadFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(emptyLeadFilters);
+  const [filters, setFilters] = useState<LeadFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
   const [sortBy, setSortBy] = useState<SortableColumn>("leadNumber");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

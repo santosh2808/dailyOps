@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -19,7 +19,7 @@ import QuotationFiltersBar, {
 } from "@/components/quotations/QuotationFiltersBar";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
-import type { Quotation } from "@/types";
+import type { Quotation, QuotationStatus } from "@/types";
 
 const PAGE_SIZE = 20;
 
@@ -39,15 +39,29 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+// Additive: Dashboard Redesign — lets a Dashboard link like
+// `/quotations?status=ACCEPTED` land here with that filter already
+// applied. Only read once, on first mount (see useState lazy initializer
+// below).
+function initialFiltersFromSearchParams(searchParams: URLSearchParams): QuotationFilters {
+  const status = searchParams.get("status");
+  return { ...emptyQuotationFilters, status: (status as QuotationStatus | null) ?? emptyQuotationFilters.status };
+}
+
 export default function QuotationList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<QuotationFilters>(emptyQuotationFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<QuotationFilters>(emptyQuotationFilters);
+  const [filters, setFilters] = useState<QuotationFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<QuotationFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
   const [sortBy, setSortBy] = useState<SortableColumn>("quotationNumber");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

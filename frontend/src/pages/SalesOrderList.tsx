@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Pencil, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -19,7 +19,7 @@ import SalesOrderFiltersBar, {
 } from "@/components/sales-orders/SalesOrderFiltersBar";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
-import type { SalesOrder } from "@/types";
+import type { SalesOrder, SalesOrderStatus } from "@/types";
 
 const PAGE_SIZE = 20;
 
@@ -39,15 +39,32 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+// Additive: Dashboard Redesign — lets a Dashboard link like
+// `/sales-orders?status=READY_FOR_DISPATCH` land here with that filter
+// already applied. Only read once, on first mount (see useState lazy
+// initializer below).
+function initialFiltersFromSearchParams(searchParams: URLSearchParams): SalesOrderFilters {
+  const status = searchParams.get("status");
+  return {
+    ...emptySalesOrderFilters,
+    status: (status as SalesOrderStatus | null) ?? emptySalesOrderFilters.status,
+  };
+}
+
 export default function SalesOrderList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<SalesOrderFilters>(emptySalesOrderFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<SalesOrderFilters>(emptySalesOrderFilters);
+  const [filters, setFilters] = useState<SalesOrderFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<SalesOrderFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
   const [sortBy, setSortBy] = useState<SortableColumn>("orderDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

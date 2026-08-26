@@ -183,6 +183,42 @@ export interface DashboardStats {
   ordersAwaitingProductionCount: number;
   ordersInProductionCount: number;
   salesByExecutive: SalesByExecutiveEntry[];
+  // Additive: Dashboard Redesign.
+  dispatchCount: number;
+  delayedOrdersCount: number;
+  pendingApprovalsCount: number;
+}
+
+// Additive: Dashboard Redesign types — mirror
+// backend/src/dashboard/dashboard.service.ts's exported interfaces exactly.
+export interface FunnelStage {
+  stage: string;
+  count: number;
+}
+
+export interface RevenuePoint {
+  label: string;
+  value: number;
+}
+
+export type RevenuePeriod = "weekly" | "monthly" | "quarterly" | "yearly";
+
+export interface ExecutivePerformanceEntry {
+  executive: string;
+  revenue: number;
+  orders: number;
+  wonPercent: number;
+}
+
+export interface StatusBreakdownEntry {
+  label: string;
+  count: number;
+}
+
+export interface DashboardCharts {
+  leadStatus: StatusBreakdownEntry[];
+  productionStatus: StatusBreakdownEntry[];
+  inventoryStatus: StatusBreakdownEntry[];
 }
 
 // Lead Management Phase 1 — replaced wholesale to match the exact required

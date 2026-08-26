@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Eye } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -19,7 +19,7 @@ import JeoFiltersBar, {
   type JeoFilters,
 } from "@/components/job-execution-orders/JeoFiltersBar";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
-import type { JobExecutionOrder } from "@/types";
+import type { JobExecutionOrder, JeoStatus } from "@/types";
 
 const PAGE_SIZE = 20;
 
@@ -30,15 +30,27 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+// Additive: Dashboard Redesign — lets a Dashboard link like
+// `/job-execution-orders?status=QC` land here with that filter already
+// applied. Only read once, on first mount (see useState lazy initializer
+// below).
+function initialFiltersFromSearchParams(searchParams: URLSearchParams): JeoFilters {
+  const status = searchParams.get("status");
+  return { ...emptyJeoFilters, status: (status as JeoStatus | null) ?? emptyJeoFilters.status };
+}
+
 export default function JobExecutionOrderList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [jeos, setJeos] = useState<JobExecutionOrder[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<JeoFilters>(emptyJeoFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<JeoFilters>(emptyJeoFilters);
+  const [filters, setFilters] = useState<JeoFilters>(() => initialFiltersFromSearchParams(searchParams));
+  const [debouncedFilters, setDebouncedFilters] = useState<JeoFilters>(() =>
+    initialFiltersFromSearchParams(searchParams),
+  );
   const [sortBy, setSortBy] = useState<SortableColumn>("deliveryDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);

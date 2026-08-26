@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Download, Eye, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -30,8 +30,20 @@ function formatCurrency(value?: number | null) {
   }).format(value);
 }
 
+type StockStatus = "low_stock" | "out_of_stock";
+
+function isStockStatus(value: string | null): value is StockStatus {
+  return value === "low_stock" || value === "out_of_stock";
+}
+
+const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
+  low_stock: "Low Stock",
+  out_of_stock: "Out of Stock",
+};
+
 export default function MaterialList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [materials, setMaterials] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
@@ -39,6 +51,13 @@ export default function MaterialList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Additive: Dashboard Redesign — lets a Dashboard link like
+  // `/materials?stockStatus=low_stock` land here with that filter already
+  // applied (Materials had no stock-status filter UI at all before this).
+  const [stockStatus, setStockStatus] = useState<StockStatus | null>(() => {
+    const value = searchParams.get("stockStatus");
+    return isStockStatus(value) ? value : null;
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -55,6 +74,7 @@ export default function MaterialList() {
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
+        stockStatus: stockStatus ?? undefined,
       });
       setMaterials(res.data);
       setTotal(res.total);
@@ -64,7 +84,7 @@ export default function MaterialList() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, stockStatus]);
 
   useEffect(() => {
     fetchMaterials();
@@ -116,6 +136,19 @@ export default function MaterialList() {
                 className="pl-9"
               />
             </div>
+            {stockStatus && (
+              <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
+                {STOCK_STATUS_LABEL[stockStatus]}
+                <button
+                  type="button"
+                  onClick={() => setStockStatus(null)}
+                  aria-label="Clear stock status filter"
+                  className="text-srm-green/70 hover:text-srm-green"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />

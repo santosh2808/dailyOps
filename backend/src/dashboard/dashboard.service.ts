@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LeadSource, LeadStatus } from '@prisma/client';
+import { LeadSource, LeadStatus, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface LeadSourceSummaryEntry {
@@ -47,6 +47,85 @@ export interface DashboardStats {
   ordersAwaitingProductionCount: number;
   ordersInProductionCount: number;
   salesByExecutive: SalesByExecutiveEntry[];
+  // Additive: Dashboard Redesign — KPI/notification widgets (requirements
+  // #1 and #8). "Dispatch" is deliberately just status = DISPATCHED (not
+  // the broader "reached dispatch or beyond" cumulative count getFunnel()
+  // uses for its own last stage) — a KPI card's number and its click-through
+  // destination filter should always describe the exact same set of
+  // records, and DISPATCHED is the one unambiguous single-status filter
+  // the Sales Orders list already supports.
+  dispatchCount: number;
+  // Delayed Orders: still open (not dispatched/completed/cancelled) with a
+  // deliveryDate that has already passed.
+  delayedOrdersCount: number;
+  // Pending Approvals: QuotationApprovalRequest rows awaiting a decision —
+  // see quotations.service.ts for how these get created/decided.
+  pendingApprovalsCount: number;
+}
+
+// Additive: Dashboard Redesign — Sales Funnel (requirement #2). Each stage
+// is a *cumulative* "reached this stage or beyond" count (not "currently
+// sitting at this exact status"), so the series is naturally monotonically
+// non-increasing left-to-right, which is what a funnel chart expects. Lead
+// stages use LeadStatus's own natural progression order; Sales Order stages
+// use SalesOrderStatus's — CANCELLED orders are excluded throughout rather
+// than counted as having "reached" any stage.
+export interface FunnelStage {
+  stage: string;
+  count: number;
+}
+
+// Additive: Dashboard Redesign — Revenue chart (requirement #4). `label` is
+// a display-ready bucket name (e.g. "Jan", "Q2 2026", "Week 3", "2026");
+// `value` is the summed SalesOrder.grandTotal for that bucket, rounded the
+// same way salesByExecutive.totalValue is above.
+export interface RevenuePoint {
+  label: string;
+  value: number;
+}
+
+export type RevenuePeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+// Additive: Dashboard Redesign — Sales Executive Performance (requirement
+// #5). `revenue`/`orders` are keyed off SalesOrder.createdBy the same way
+// salesByExecutive is (see that field's comment on why it's a name string,
+// not a User relation). `wonPercent` is computed separately, from
+// Lead.assignedToUserId (the one place this schema *does* have a real FK to
+// User) as WON / (WON + LOST) among that user's closed leads — so it's only
+// populated for executives whose SalesOrder.createdBy name matches an
+// active Sales Executive/Sales Manager User by name; anyone else (e.g. a
+// renamed or deactivated user, or a typo'd name) gets wonPercent: 0 rather
+// than a crash, since there's no reliable way to resolve the name to a
+// User row in that case.
+export interface ExecutivePerformanceEntry {
+  executive: string;
+  revenue: number;
+  orders: number;
+  wonPercent: number;
+}
+
+// Additive: Dashboard Redesign — donut charts (requirement #3). `label` is
+// display-ready (already humanized), not the raw enum value.
+export interface StatusBreakdownEntry {
+  label: string;
+  count: number;
+}
+
+export interface DashboardCharts {
+  leadStatus: StatusBreakdownEntry[];
+  // Production Status buckets JeoStatus's 6 values into the 4 named in
+  // requirement #6: Pending (PENDING), In Production (MATERIAL_READY +
+  // ASSEMBLY_STARTED + QC), Ready (READY_FOR_DISPATCH), Completed
+  // (COMPLETED).
+  productionStatus: StatusBreakdownEntry[];
+  // Inventory Status buckets every active Material into the 4 named in
+  // requirement #7, using the two threshold columns Material already has:
+  // Out Of Stock (currentStock <= 0), Critical (0 < currentStock <=
+  // minimumStock), Low Stock (minimumStock < currentStock <= reorderLevel),
+  // Healthy (currentStock > reorderLevel). This assumes minimumStock <=
+  // reorderLevel, which is how those two columns are described in the
+  // Material model's own comments (minimum floor vs. reorder trigger).
+  inventoryStatus: StatusBreakdownEntry[];
 }
 
 @Injectable()
@@ -98,6 +177,9 @@ export class DashboardService {
       ordersAwaitingProductionCount,
       ordersInProductionCount,
       salesOrdersForExecutiveSummary,
+      dispatchCount,
+      delayedOrdersCount,
+      pendingApprovalsCount,
     ] = await Promise.all([
       this.prisma.customer.count({ where: { isActive: true } }),
       this.prisma.product.count({ where: { isActive: true } }),
@@ -170,6 +252,20 @@ export class DashboardService {
         where: { deletedAt: null },
         select: { createdBy: true, grandTotal: true },
       }),
+      // Dispatch KPI — see the DashboardStats.dispatchCount field comment
+      // on why this is exactly status = DISPATCHED, not a cumulative range.
+      this.prisma.salesOrder.count({
+        where: { deletedAt: null, status: 'DISPATCHED' as SalesOrderStatus },
+      }),
+      // Delayed Orders — still open, past their promised deliveryDate.
+      this.prisma.salesOrder.count({
+        where: {
+          deletedAt: null,
+          status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
+          deliveryDate: { lt: startOfToday },
+        },
+      }),
+      this.prisma.quotationApprovalRequest.count({ where: { status: 'PENDING' } }),
     ]);
 
     const salesByExecutiveMap = new Map<string, { orderCount: number; totalValue: number }>();
@@ -219,6 +315,270 @@ export class DashboardService {
       ordersAwaitingProductionCount,
       ordersInProductionCount,
       salesByExecutive,
+      dispatchCount,
+      delayedOrdersCount,
+      pendingApprovalsCount,
     };
+  }
+
+  // Additive: Dashboard Redesign — Sales Funnel (requirement #2).
+  async getFunnel(): Promise<FunnelStage[]> {
+    // LeadStatus's own declared progression order (WON is the terminal
+    // "reached everything" state; LOST is excluded — a lost lead didn't
+    // reach Qualified/Quotation/Won just because it's no longer open).
+    const qualifiedOnwards: LeadStatus[] = ['QUALIFIED', 'QUOTATION_SENT', 'WON'];
+
+    const [
+      leadTotal,
+      qualifiedCount,
+      quotationTotal,
+      wonQuotations,
+      salesOrderTotal,
+      productionOnwards,
+      dispatchOnwards,
+    ] = await Promise.all([
+      this.prisma.lead.count({ where: { deletedAt: null } }),
+      this.prisma.lead.count({ where: { deletedAt: null, status: { in: qualifiedOnwards } } }),
+      this.prisma.quotation.count({ where: { deletedAt: null } }),
+      // "Won" sits between Quotation and Sales Order in this funnel — a
+      // Sales Order can only be created from an ACCEPTED Quotation (see
+      // SalesOrder's own schema comment), so ACCEPTED is the "won the deal"
+      // milestone, not Lead.status = WON (that's a Lead-side label, applied
+      // later when the lead itself is closed out).
+      this.prisma.quotation.count({ where: { deletedAt: null, status: 'ACCEPTED' } }),
+      this.prisma.salesOrder.count({
+        where: { deletedAt: null, status: { not: 'CANCELLED' as SalesOrderStatus } },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          deletedAt: null,
+          status: {
+            in: ['PRODUCTION_STARTED', 'READY_FOR_DISPATCH', 'DISPATCHED', 'COMPLETED'] as SalesOrderStatus[],
+          },
+        },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          deletedAt: null,
+          status: { in: ['READY_FOR_DISPATCH', 'DISPATCHED', 'COMPLETED'] as SalesOrderStatus[] },
+        },
+      }),
+    ]);
+
+    return [
+      { stage: 'Lead', count: leadTotal },
+      { stage: 'Qualified', count: qualifiedCount },
+      { stage: 'Quotation', count: quotationTotal },
+      { stage: 'Won', count: wonQuotations },
+      { stage: 'Sales Order', count: salesOrderTotal },
+      { stage: 'Production', count: productionOnwards },
+      { stage: 'Dispatch', count: dispatchOnwards },
+    ];
+  }
+
+  // Additive: Dashboard Redesign — Revenue chart (requirement #4). No date
+  // library in this backend (see other date-boundary math in getStats()) —
+  // bucketing is hand-rolled the same way, and revenue is drawn from
+  // SalesOrder.grandTotal/orderDate (the "central business document" per
+  // that model's own schema comment), excluding CANCELLED orders.
+  async getRevenue(period: RevenuePeriod, month?: number, year?: number): Promise<RevenuePoint[]> {
+    const now = new Date();
+    const targetYear = year ?? now.getFullYear();
+    const targetMonth = month ?? now.getMonth() + 1; // 1-12, human-readable
+
+    if (period === 'yearly') {
+      const startYear = targetYear - 4;
+      const orders = await this.prisma.salesOrder.findMany({
+        where: {
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+          orderDate: { gte: new Date(startYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
+        },
+        select: { orderDate: true, grandTotal: true },
+      });
+      const buckets = new Map<number, number>();
+      for (let y = startYear; y <= targetYear; y++) buckets.set(y, 0);
+      for (const order of orders) {
+        const y = order.orderDate.getFullYear();
+        buckets.set(y, (buckets.get(y) ?? 0) + order.grandTotal);
+      }
+      return Array.from(buckets.entries()).map(([y, value]) => ({
+        label: String(y),
+        value: Math.round(value * 100) / 100,
+      }));
+    }
+
+    if (period === 'quarterly') {
+      const orders = await this.prisma.salesOrder.findMany({
+        where: {
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+          orderDate: { gte: new Date(targetYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
+        },
+        select: { orderDate: true, grandTotal: true },
+      });
+      const buckets = [0, 0, 0, 0];
+      for (const order of orders) {
+        buckets[Math.floor(order.orderDate.getMonth() / 3)] += order.grandTotal;
+      }
+      return buckets.map((value, i) => ({
+        label: `Q${i + 1} ${targetYear}`,
+        value: Math.round(value * 100) / 100,
+      }));
+    }
+
+    if (period === 'monthly') {
+      const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const orders = await this.prisma.salesOrder.findMany({
+        where: {
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+          orderDate: { gte: new Date(targetYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
+        },
+        select: { orderDate: true, grandTotal: true },
+      });
+      const buckets = new Array(12).fill(0);
+      for (const order of orders) buckets[order.orderDate.getMonth()] += order.grandTotal;
+      return buckets.map((value, i) => ({
+        label: MONTH_LABELS[i],
+        value: Math.round(value * 100) / 100,
+      }));
+    }
+
+    // weekly — within the given month/year, bucketed into 7-day windows
+    // starting from the 1st (so "Week 1" is always days 1-7, not an
+    // ISO/calendar week).
+    const rangeStart = new Date(targetYear, targetMonth - 1, 1);
+    const rangeEnd = new Date(targetYear, targetMonth, 1);
+    const orders = await this.prisma.salesOrder.findMany({
+      where: { deletedAt: null, status: { not: 'CANCELLED' }, orderDate: { gte: rangeStart, lt: rangeEnd } },
+      select: { orderDate: true, grandTotal: true },
+    });
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const weekCount = Math.ceil(daysInMonth / 7);
+    const buckets = new Array(weekCount).fill(0);
+    for (const order of orders) {
+      const weekIndex = Math.min(weekCount - 1, Math.floor((order.orderDate.getDate() - 1) / 7));
+      buckets[weekIndex] += order.grandTotal;
+    }
+    return buckets.map((value, i) => ({
+      label: `Week ${i + 1}`,
+      value: Math.round(value * 100) / 100,
+    }));
+  }
+
+  // Additive: Dashboard Redesign — Sales Executive Performance (requirement
+  // #5). See ExecutivePerformanceEntry's own comment for how the
+  // name-string/User-FK mismatch is handled.
+  async getExecutivePerformance(): Promise<ExecutivePerformanceEntry[]> {
+    const [orders, executiveUsers] = await Promise.all([
+      this.prisma.salesOrder.findMany({
+        where: { deletedAt: null },
+        select: { createdBy: true, grandTotal: true },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          isActive: true,
+          roles: { some: { role: { name: { in: ['Sales Executive', 'Sales Manager'] } } } },
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    const closedLeads = await this.prisma.lead.findMany({
+      where: {
+        deletedAt: null,
+        assignedToUserId: { in: executiveUsers.map((u) => u.id) },
+        status: { in: ['WON', 'LOST'] },
+      },
+      select: { assignedToUserId: true, status: true },
+    });
+
+    const wonPercentByUserId = new Map<string, number>();
+    for (const user of executiveUsers) {
+      const leadsForUser = closedLeads.filter((l) => l.assignedToUserId === user.id);
+      const won = leadsForUser.filter((l) => l.status === 'WON').length;
+      wonPercentByUserId.set(
+        user.id,
+        leadsForUser.length === 0 ? 0 : Math.round((won / leadsForUser.length) * 1000) / 10,
+      );
+    }
+    const wonPercentByName = new Map<string, number>();
+    for (const user of executiveUsers) {
+      wonPercentByName.set(user.name, wonPercentByUserId.get(user.id) ?? 0);
+    }
+
+    const byName = new Map<string, { revenue: number; orders: number }>();
+    for (const order of orders) {
+      const key = order.createdBy || 'Unknown';
+      const entry = byName.get(key) ?? { revenue: 0, orders: 0 };
+      entry.revenue += order.grandTotal;
+      entry.orders += 1;
+      byName.set(key, entry);
+    }
+
+    return Array.from(byName.entries())
+      .map(([executive, { revenue, orders: orderCount }]) => ({
+        executive,
+        revenue: Math.round(revenue * 100) / 100,
+        orders: orderCount,
+        wonPercent: wonPercentByName.get(executive) ?? 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }
+
+  // Additive: Dashboard Redesign — donut charts (requirement #3). Lead
+  // Sources reuses the existing leadSourceSummary groupBy (see getStats());
+  // this method covers the other three donuts.
+  async getCharts(): Promise<DashboardCharts> {
+    const [leadStatusGroups, jeoStatusGroups, materials] = await Promise.all([
+      this.prisma.lead.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
+      this.prisma.jobExecutionOrder.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.material.findMany({
+        where: { isActive: true },
+        select: { currentStock: true, minimumStock: true, reorderLevel: true },
+      }),
+    ]);
+
+    const LEAD_STATUS_LABELS: Record<string, string> = {
+      NEW: 'New',
+      ASSIGNED: 'Assigned',
+      CONTACTED: 'Contacted',
+      SITE_VISIT: 'Site Visit',
+      QUALIFIED: 'Qualified',
+      QUOTATION_SENT: 'Quotation Sent',
+      WON: 'Won',
+      LOST: 'Lost',
+    };
+    const leadStatus: StatusBreakdownEntry[] = leadStatusGroups.map((g) => ({
+      label: LEAD_STATUS_LABELS[g.status] ?? g.status,
+      count: g._count._all,
+    }));
+
+    const jeoBuckets = { Pending: 0, 'In Production': 0, Ready: 0, Completed: 0 };
+    for (const g of jeoStatusGroups) {
+      if (g.status === 'PENDING') jeoBuckets.Pending += g._count._all;
+      else if (g.status === 'READY_FOR_DISPATCH') jeoBuckets.Ready += g._count._all;
+      else if (g.status === 'COMPLETED') jeoBuckets.Completed += g._count._all;
+      else jeoBuckets['In Production'] += g._count._all; // MATERIAL_READY, ASSEMBLY_STARTED, QC
+    }
+    const productionStatus: StatusBreakdownEntry[] = Object.entries(jeoBuckets).map(([label, count]) => ({
+      label,
+      count,
+    }));
+
+    const inventoryBuckets = { Healthy: 0, 'Low Stock': 0, Critical: 0, 'Out of Stock': 0 };
+    for (const m of materials) {
+      if (m.currentStock <= 0) inventoryBuckets['Out of Stock'] += 1;
+      else if (m.currentStock <= m.minimumStock) inventoryBuckets.Critical += 1;
+      else if (m.currentStock <= m.reorderLevel) inventoryBuckets['Low Stock'] += 1;
+      else inventoryBuckets.Healthy += 1;
+    }
+    const inventoryStatus: StatusBreakdownEntry[] = Object.entries(inventoryBuckets).map(([label, count]) => ({
+      label,
+      count,
+    }));
+
+    return { leadStatus, productionStatus, inventoryStatus };
   }
 }
