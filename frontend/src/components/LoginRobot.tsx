@@ -337,7 +337,7 @@ export default function LoginRobot() {
     }
     document.addEventListener("mousemove", onMouseMove);
 
-    say("Hi. I'm Volt. I guard this form.");
+    say("Hi. I'm SRM Bot. I guard this form.");
 
     return () => {
       clearTimeout(blinkTimer);
@@ -369,7 +369,7 @@ export default function LoginRobot() {
       <main className="volt-stage">
         <div className="volt-robot" ref={robotRef} data-mood="idle">
           <div className="volt-bubble" ref={bubbleRef} role="status" aria-live="polite">
-            <span ref={bubbleTextRef}>Hi. I'm Volt. I guard this form.</span>
+            <span ref={bubbleTextRef}>Hi. I'm SRM Bot. I guard this form.</span>
           </div>
           <div className="volt-antenna" aria-hidden="true">
             <span className="volt-antenna-rod" />
