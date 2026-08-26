@@ -1,11 +1,16 @@
 import api from "@/lib/api";
 import type {
   DashboardCharts,
+  DashboardFilters,
   DashboardStats,
   ExecutivePerformanceEntry,
   FunnelStage,
+  RecentActivityEntry,
   RevenuePeriod,
   RevenuePoint,
+  StateSalesEntry,
+  TodaysFollowUpEntry,
+  TopProductEntry,
 } from "@/types";
 
 export async function getDashboardStats() {
@@ -21,10 +26,11 @@ export async function getDashboardFunnel() {
   return res.data;
 }
 
-export interface RevenueQueryParams {
+export interface RevenueQueryParams extends DashboardFilters {
   period: RevenuePeriod;
-  month?: number;
-  year?: number;
+  // period's own month/year (bucketing) — see DashboardFilters.month/year
+  // for the separate Global Filters meaning; both happen to share param
+  // names on this one endpoint only, see dashboard.controller.ts.
 }
 
 export async function getDashboardRevenue(params: RevenueQueryParams) {
@@ -32,12 +38,40 @@ export async function getDashboardRevenue(params: RevenueQueryParams) {
   return res.data;
 }
 
-export async function getDashboardExecutives() {
-  const res = await api.get<ExecutivePerformanceEntry[]>("/api/v1/dashboard/executives");
+export async function getDashboardExecutives(filters: DashboardFilters = {}) {
+  const res = await api.get<ExecutivePerformanceEntry[]>("/api/v1/dashboard/executives", {
+    params: filters,
+  });
   return res.data;
 }
 
 export async function getDashboardCharts() {
   const res = await api.get<DashboardCharts>("/api/v1/dashboard/charts");
+  return res.data;
+}
+
+// Additive: Dashboard Redesign v2 client functions.
+
+export async function getDashboardSalesByState(filters: DashboardFilters = {}) {
+  const res = await api.get<StateSalesEntry[]>("/api/v1/dashboard/sales-by-state", {
+    params: filters,
+  });
+  return res.data;
+}
+
+export async function getDashboardTopProducts(filters: DashboardFilters = {}) {
+  const res = await api.get<TopProductEntry[]>("/api/v1/dashboard/top-products", {
+    params: filters,
+  });
+  return res.data;
+}
+
+export async function getDashboardRecentActivities() {
+  const res = await api.get<RecentActivityEntry[]>("/api/v1/dashboard/recent-activities");
+  return res.data;
+}
+
+export async function getDashboardTodaysFollowUps() {
+  const res = await api.get<TodaysFollowUpEntry[]>("/api/v1/dashboard/todays-followups");
   return res.data;
 }

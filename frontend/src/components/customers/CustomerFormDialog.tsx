@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { INDIA_STATES } from "@/lib/indiaStates";
 import type { Customer } from "@/types";
 import type { CustomerPayload } from "@/api/customers";
 
@@ -26,6 +28,7 @@ interface FormState {
   phone: string;
   email: string;
   gstNumber: string;
+  state: string;
 }
 
 const emptyForm: FormState = {
@@ -34,6 +37,7 @@ const emptyForm: FormState = {
   phone: "",
   email: "",
   gstNumber: "",
+  state: "",
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -61,6 +65,7 @@ export default function CustomerFormDialog({
               phone: customer.phone,
               email: customer.email ?? "",
               gstNumber: customer.gstNumber ?? "",
+              state: customer.state ?? "",
             }
           : emptyForm
       );
@@ -104,6 +109,7 @@ export default function CustomerFormDialog({
         phone: form.phone.trim(),
         email: form.email.trim() || undefined,
         gstNumber: form.gstNumber.trim() || undefined,
+        state: form.state || undefined,
       });
       onOpenChange(false);
     } catch {
@@ -175,13 +181,31 @@ export default function CustomerFormDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="gstNumber">GST Number</Label>
-            <Input
-              id="gstNumber"
-              value={form.gstNumber}
-              onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="gstNumber">GST Number</Label>
+              <Input
+                id="gstNumber"
+                value={form.gstNumber}
+                onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="state">State</Label>
+              <Select
+                id="state"
+                value={form.state}
+                onChange={(e) => setForm({ ...form, state: e.target.value })}
+              >
+                <option value="">Select state...</option>
+                {INDIA_STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}

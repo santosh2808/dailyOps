@@ -13,6 +13,7 @@ export interface CustomerPayload {
   phone: string;
   email?: string;
   gstNumber?: string;
+  state?: string;
 }
 
 export async function listCustomers(params: CustomerListParams) {

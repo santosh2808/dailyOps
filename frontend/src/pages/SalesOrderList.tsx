@@ -48,6 +48,11 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): SalesOrd
   return {
     ...emptySalesOrderFilters,
     status: (status as SalesOrderStatus | null) ?? emptySalesOrderFilters.status,
+    dateFrom: searchParams.get("dateFrom") ?? emptySalesOrderFilters.dateFrom,
+    dateTo: searchParams.get("dateTo") ?? emptySalesOrderFilters.dateTo,
+    customerState: searchParams.get("customerState") ?? emptySalesOrderFilters.customerState,
+    createdBy: searchParams.get("createdBy") ?? emptySalesOrderFilters.createdBy,
+    productId: searchParams.get("productId") ?? emptySalesOrderFilters.productId,
   };
 }
 
@@ -84,6 +89,9 @@ export default function SalesOrderList() {
         status: debouncedFilters.status || undefined,
         dateFrom: debouncedFilters.dateFrom || undefined,
         dateTo: debouncedFilters.dateTo || undefined,
+        customerState: debouncedFilters.customerState || undefined,
+        createdBy: debouncedFilters.createdBy || undefined,
+        productId: debouncedFilters.productId || undefined,
         sortBy,
         sortOrder,
       });
@@ -149,6 +157,50 @@ export default function SalesOrderList() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <SalesOrderFiltersBar filters={filters} onChange={setFilters} />
           </div>
+
+          {(filters.customerState || filters.createdBy || filters.productId) && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {filters.customerState && (
+                <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
+                  State: {filters.customerState}
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, customerState: "" })}
+                    aria-label="Clear state filter"
+                    className="text-srm-green/70 hover:text-srm-green"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {filters.createdBy && (
+                <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
+                  Executive: {filters.createdBy}
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, createdBy: "" })}
+                    aria-label="Clear executive filter"
+                    className="text-srm-green/70 hover:text-srm-green"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {filters.productId && (
+                <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
+                  Product filter applied
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, productId: "" })}
+                    aria-label="Clear product filter"
+                    className="text-srm-green/70 hover:text-srm-green"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <p className="mb-3 text-xs text-muted-foreground">
             Sales Orders are created from an Accepted Quotation — open a quotation with status

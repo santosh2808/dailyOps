@@ -10,6 +10,13 @@ export interface SalesOrderFilters {
   status: SalesOrderStatus | "";
   dateFrom: string;
   dateTo: string;
+  // Additive: Dashboard Redesign v2 — set only via a Dashboard link (India
+  // Sales Map / Sales Executive Performance / Top Products), no dedicated
+  // dropdown here yet; "Clear filters" below still resets them.
+  customerState: string;
+  createdBy: string;
+  // Additive: Dashboard Redesign v2 — Top Products widget link.
+  productId: string;
 }
 
 interface SalesOrderFiltersBarProps {
@@ -22,10 +29,19 @@ export const emptySalesOrderFilters: SalesOrderFilters = {
   status: "",
   dateFrom: "",
   dateTo: "",
+  customerState: "",
+  createdBy: "",
+  productId: "",
 };
 
 export default function SalesOrderFiltersBar({ filters, onChange }: SalesOrderFiltersBarProps) {
-  const hasActiveFilters = !!filters.status || !!filters.dateFrom || !!filters.dateTo;
+  const hasActiveFilters =
+    !!filters.status ||
+    !!filters.dateFrom ||
+    !!filters.dateTo ||
+    !!filters.customerState ||
+    !!filters.createdBy ||
+    !!filters.productId;
 
   function update<K extends keyof SalesOrderFilters>(key: K, value: SalesOrderFilters[K]) {
     onChange({ ...filters, [key]: value });

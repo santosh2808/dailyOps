@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import { INDIA_STATES } from '../../common/india-states';
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Acme Corp' })
@@ -26,4 +27,11 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   gstNumber?: string;
+
+  // Additive: Dashboard Redesign v2 — India Sales Map. Optional so existing
+  // create/update flows that don't send it keep working unchanged.
+  @ApiPropertyOptional({ example: 'Maharashtra', enum: INDIA_STATES })
+  @IsOptional()
+  @IsIn(INDIA_STATES)
+  state?: string;
 }

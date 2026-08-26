@@ -129,6 +129,13 @@ model Customer {
   phone         String
   email         String?
   gstNumber     String?
+  // Additive: Dashboard Redesign v2 — India Sales Map. One of the 36
+  // Indian states/UTs (see frontend INDIA_STATES / backend indiaStates.ts
+  // for the exact list this is validated against); nullable since existing
+  // customers won't have one until someone fills it in. Sales Orders don't
+  // have their own state field — they're mapped to a state through this,
+  // via their Customer.
+  state         String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

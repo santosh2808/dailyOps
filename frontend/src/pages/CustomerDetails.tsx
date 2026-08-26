@@ -213,6 +213,7 @@ export default function CustomerDetails() {
                   <Field label="Phone" value={customer.phone} />
                   <Field label="Email" value={customer.email} />
                   <Field label="GST Number" value={customer.gstNumber} />
+                  <Field label="State" value={customer.state} />
                   <Field label="Status" value={customer.isActive ? "Active" : "Inactive"} />
                 </CardContent>
               </Card>

@@ -86,6 +86,9 @@ export class SalesOrdersService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.quotationId ? { quotationId: query.quotationId } : {}),
+      ...(query.customerState ? { customer: { state: query.customerState } } : {}),
+      ...(query.createdBy ? { createdBy: query.createdBy } : {}),
+      ...(query.productId ? { items: { some: { productId: query.productId } } } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
             orderDate: {

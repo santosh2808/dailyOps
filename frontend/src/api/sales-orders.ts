@@ -8,6 +8,9 @@ export interface SalesOrderListParams {
   status?: SalesOrderStatus;
   customerId?: string;
   quotationId?: string;
+  customerState?: string;
+  createdBy?: string;
+  productId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;

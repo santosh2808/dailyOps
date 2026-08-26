@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { LeadSource } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 // Additive: Dashboard Redesign — Revenue chart (requirement #4).
 export class QueryRevenueDto {
@@ -31,4 +32,28 @@ export class QueryRevenueDto {
   @Min(2000)
   @Max(2100)
   year?: number;
+
+  // Additive: Dashboard Redesign v2 — Global Filters (requirement #13).
+  // Deliberately separate from this endpoint's own period/month/year above
+  // (which control bucketing) — see dashboard.controller.ts's comment on
+  // why the Global Filters bar's Month isn't wired into this endpoint too.
+  @ApiPropertyOptional({ example: 'Maharashtra' })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiPropertyOptional({ example: 'Priya Sharma' })
+  @IsOptional()
+  @IsString()
+  executive?: string;
+
+  @ApiPropertyOptional({ enum: LeadSource })
+  @IsOptional()
+  @IsEnum(LeadSource)
+  leadSource?: LeadSource;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
 }

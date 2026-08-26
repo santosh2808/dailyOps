@@ -88,6 +88,9 @@ export interface Customer {
   phone: string;
   email?: string | null;
   gstNumber?: string | null;
+  // Additive: Dashboard Redesign v2 — India Sales Map (see INDIA_STATES in
+  // @/lib/indiaStates for the exact list this is chosen from).
+  state?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -217,8 +220,57 @@ export interface StatusBreakdownEntry {
 
 export interface DashboardCharts {
   leadStatus: StatusBreakdownEntry[];
+  // Additive: Dashboard Redesign v2.
+  quotationStatus: StatusBreakdownEntry[];
   productionStatus: StatusBreakdownEntry[];
   inventoryStatus: StatusBreakdownEntry[];
+}
+
+// Additive: Dashboard Redesign v2 — India Sales Map.
+export interface StateSalesEntry {
+  state: string;
+  revenue: number;
+  orders: number;
+  customers: number;
+}
+
+// Additive: Dashboard Redesign v2 — Top Products.
+export interface TopProductEntry {
+  productId: string;
+  name: string;
+  revenue: number;
+  quantity: number;
+}
+
+// Additive: Dashboard Redesign v2 — Recent Activities timeline.
+export interface RecentActivityEntry {
+  id: string;
+  module: string;
+  action: string;
+  actorName: string | null;
+  remarks: string | null;
+  createdAt: string;
+}
+
+// Additive: Dashboard Redesign v2 — Today's Follow-ups list.
+export interface TodaysFollowUpEntry {
+  id: string;
+  leadNumber: string;
+  companyName: string;
+  contactPerson: string;
+  phone: string;
+  nextFollowUp: string | null;
+  assignedToName: string | null;
+}
+
+// Additive: Dashboard Redesign v2 — Global Filters (requirement #13).
+export interface DashboardFilters {
+  month?: number;
+  year?: number;
+  state?: string;
+  executive?: string;
+  leadSource?: LeadSource;
+  productId?: string;
 }
 
 // Lead Management Phase 1 — replaced wholesale to match the exact required

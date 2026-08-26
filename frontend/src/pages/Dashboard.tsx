@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -17,15 +17,13 @@ import {
   Plus,
   FileSpreadsheet,
   PackageSearch,
+  X,
 } from "lucide-react";
 import {
   ResponsiveContainer,
-  FunnelChart,
-  Funnel,
-  LabelList,
-  Cell,
   PieChart,
   Pie,
+  Cell,
   Tooltip,
   Legend,
   BarChart,
@@ -33,6 +31,8 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  AreaChart,
+  Area,
 } from "recharts";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -40,21 +40,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { STATUS_OPTIONS as LEAD_STATUS_OPTIONS, sourceLabel } from "@/components/leads/leadOptions";
+import { SOURCE_OPTIONS, sourceLabel } from "@/components/leads/leadOptions";
+import { INDIA_STATES } from "@/lib/indiaStates";
+import { listProducts } from "@/api/products";
+import IndiaSalesMap from "@/components/dashboard/IndiaSalesMap";
 import {
   getDashboardCharts,
   getDashboardExecutives,
-  getDashboardFunnel,
+  getDashboardRecentActivities,
   getDashboardRevenue,
+  getDashboardSalesByState,
   getDashboardStats,
+  getDashboardTodaysFollowUps,
+  getDashboardTopProducts,
 } from "@/api/dashboard";
 import type {
   DashboardCharts as DashboardChartsData,
+  DashboardFilters,
   DashboardStats,
   ExecutivePerformanceEntry,
-  FunnelStage,
+  LeadSource,
+  RecentActivityEntry,
   RevenuePeriod,
   RevenuePoint,
+  StateSalesEntry,
+  TodaysFollowUpEntry,
+  TopProductEntry,
 } from "@/types";
 
 // Dashboard Redesign — every widget on this page is read-only reporting
@@ -67,6 +78,24 @@ import type {
 // (e.g. "today's follow-ups" — Lead has no nextFollowUp filter param), the
 // click still opens the right page, just unfiltered; that's called out
 // inline below rather than silently pretending it works.
+//
+// v2 notes:
+// - The Sales Funnel is replaced by the India Sales Map (see
+//   components/dashboard/IndiaSalesMap.tsx for why it's a tile cartogram,
+//   not a traced geographic SVG).
+// - The Donut Charts row now shows exactly the 4 v2 asked for — Lead
+//   Source, Quotation Status, Production Status, Inventory Status — which
+//   drops v1's Lead Status donut from view. That data is still fetched
+//   (getDashboardCharts().leadStatus) in case something else needs it
+//   later; it's just not rendered here anymore, per v2's own explicit list.
+// - Global Filters (Month/State/Sales Executive/Lead Source/Product) only
+//   apply to the SalesOrder-derived widgets: India Map, Top Products,
+//   Executive Performance, and the non-date dimensions of Revenue Trend
+//   (state/executive/leadSource/product — its own Week/Month/Quarter/Year
+//   buttons remain the date control). The 4 donuts, Recent Activities and
+//   Today's Follow-ups are operational/pipeline snapshots, not sales
+//   figures, so they're intentionally left unfiltered — matching how the
+//   backend endpoints were built (see dashboard.service.ts).
 
 const SRM_GREEN = "#9BBB3D";
 const SRM_RED = "#ED3525";
@@ -85,9 +114,10 @@ const DONUT_PALETTE = [
 ];
 
 // Order must match dashboard.service.ts getCharts()'s Object.entries()
-// insertion order for these two buckets.
+// insertion order for these buckets.
 const PRODUCTION_COLORS = ["#64748b", "#f59e0b", SRM_GREEN, "#5f7726"];
 const INVENTORY_COLORS = [SRM_GREEN, "#f59e0b", "#fb7185", SRM_RED];
+const QUOTATION_COLORS = ["#64748b", "#0ea5e9", "#f59e0b", SRM_GREEN, SRM_RED];
 
 const PRODUCTION_STATUS_LINK: Record<string, string> = {
   Pending: "/job-execution-orders?status=PENDING",
@@ -109,16 +139,14 @@ const INVENTORY_STATUS_LINK: Record<string, string> = {
   "Out of Stock": "/materials?stockStatus=out_of_stock",
 };
 
-const FUNNEL_COLORS = ["#c3d68b", "#afc865", SRM_GREEN, "#87a636", "#738f2e", "#5f7726", "#4b5f1e"];
-
-const FUNNEL_LINKS: Record<string, string> = {
-  Lead: "/leads",
-  Qualified: "/leads?status=QUALIFIED",
+// AuditLog.module values actually written by the backend today — see
+// dashboard.service.ts getRecentActivities()'s own comment. Leads log to
+// their own LeadHistory, not AuditLog, so "Lead" deliberately isn't here.
+const ACTIVITY_MODULE_LINK: Record<string, string> = {
+  SalesOrder: "/sales-orders",
+  ProformaInvoice: "/proforma-invoices",
+  JEO: "/job-execution-orders",
   Quotation: "/quotations",
-  Won: "/quotations?status=ACCEPTED",
-  "Sales Order": "/sales-orders",
-  Production: "/sales-orders?status=PRODUCTION_STARTED",
-  Dispatch: "/sales-orders?status=READY_FOR_DISPATCH",
 };
 
 const REVENUE_PERIODS: RevenuePeriod[] = ["weekly", "monthly", "quarterly", "yearly"];
@@ -168,6 +196,17 @@ function revenueBucketRange(period: RevenuePeriod, index: number, month: number,
   const startDay = index * 7 + 1;
   const endDay = Math.min(startDay + 6, daysInMonth);
   return { dateFrom: isoDate(year, month, startDay), dateTo: isoDate(year, month, endDay) };
+}
+
+function timeAgo(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 interface KpiCardProps {
@@ -311,20 +350,127 @@ function NotificationRow({ label, count, icon: Icon, onClick }: NotificationRowP
   );
 }
 
+interface GlobalFiltersBarProps {
+  filters: DashboardFilters;
+  onChange: (next: DashboardFilters) => void;
+  executiveOptions: string[];
+  productOptions: { id: string; name: string }[];
+  currentYear: number;
+}
+
+// v2 requirement #13. Scope of what this affects is documented in the
+// file-level comment above.
+function GlobalFiltersBar({ filters, onChange, executiveOptions, productOptions, currentYear }: GlobalFiltersBarProps) {
+  const activeCount = Object.values(filters).filter(Boolean).length;
+  return (
+    <Card className="border-none shadow-sm">
+      <CardContent className="flex flex-wrap items-center gap-3 py-4">
+        <span className="text-sm font-medium text-slate-500">Global Filters</span>
+        <Select
+          value={filters.month ?? ""}
+          onChange={(e) => onChange({ ...filters, month: e.target.value ? Number(e.target.value) : undefined })}
+          className="w-36"
+        >
+          <option value="">All Months</option>
+          {MONTH_NAMES.map((m, i) => (
+            <option key={m} value={i + 1}>
+              {m}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.year ?? ""}
+          onChange={(e) => onChange({ ...filters, year: e.target.value ? Number(e.target.value) : undefined })}
+          className="w-24"
+        >
+          <option value="">All Years</option>
+          {yearOptions(currentYear).map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.state ?? ""}
+          onChange={(e) => onChange({ ...filters, state: e.target.value || undefined })}
+          className="w-44"
+        >
+          <option value="">All States</option>
+          {INDIA_STATES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.executive ?? ""}
+          onChange={(e) => onChange({ ...filters, executive: e.target.value || undefined })}
+          className="w-44"
+        >
+          <option value="">All Executives</option>
+          {executiveOptions.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.leadSource ?? ""}
+          onChange={(e) => onChange({ ...filters, leadSource: (e.target.value || undefined) as LeadSource | undefined })}
+          className="w-44"
+        >
+          <option value="">All Lead Sources</option>
+          {SOURCE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.productId ?? ""}
+          onChange={(e) => onChange({ ...filters, productId: e.target.value || undefined })}
+          className="w-48"
+        >
+          <option value="">All Products</option>
+          {productOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+        {activeCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => onChange({})} className="text-slate-500">
+            <X className="mr-1 h-3.5 w-3.5" />
+            Clear
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [funnel, setFunnel] = useState<FunnelStage[]>([]);
   const [charts, setCharts] = useState<DashboardChartsData | null>(null);
-  const [executives, setExecutives] = useState<ExecutivePerformanceEntry[]>([]);
   const [monthRevenue, setMonthRevenue] = useState(0);
+  const [recentActivities, setRecentActivities] = useState<RecentActivityEntry[]>([]);
+  const [todaysFollowUps, setTodaysFollowUps] = useState<TodaysFollowUpEntry[]>([]);
+  const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
+
+  // v2: Global Filters (requirement #13).
+  const [filters, setFilters] = useState<DashboardFilters>({});
+  const [executives, setExecutives] = useState<ExecutivePerformanceEntry[]>([]);
+  const [salesByState, setSalesByState] = useState<StateSalesEntry[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProductEntry[]>([]);
+  const [filteredLoading, setFilteredLoading] = useState(true);
 
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>("monthly");
   const [revenueMonth, setRevenueMonth] = useState(currentMonth);
@@ -336,18 +482,18 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const [statsData, funnelData, chartsData, executivesData, thisMonthRevenue] = await Promise.all([
+      const [statsData, chartsData, thisMonthRevenue, activities, followUps] = await Promise.all([
         getDashboardStats(),
-        getDashboardFunnel(),
         getDashboardCharts(),
-        getDashboardExecutives(),
         getDashboardRevenue({ period: "monthly", year: currentYear }),
+        getDashboardRecentActivities(),
+        getDashboardTodaysFollowUps(),
       ]);
       setStats(statsData);
-      setFunnel(funnelData);
       setCharts(chartsData);
-      setExecutives(executivesData);
       setMonthRevenue(thisMonthRevenue[now.getMonth()]?.value ?? 0);
+      setRecentActivities(activities);
+      setTodaysFollowUps(followUps);
     } catch {
       setError("Failed to load dashboard data.");
     } finally {
@@ -359,6 +505,15 @@ export default function Dashboard() {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  // Product dropdown options for the Global Filters bar — fetched once;
+  // there are only a handful of SPYRO products today so one page covers
+  // all of them without building a searchable combobox for this.
+  useEffect(() => {
+    listProducts({ limit: 100 })
+      .then((res) => setProductOptions(res.data.map((p) => ({ id: p.id, name: p.name }))))
+      .catch(() => setProductOptions([]));
+  }, []);
 
   useEffect(() => {
     function handleFocus() {
@@ -375,6 +530,41 @@ export default function Dashboard() {
     };
   }, [fetchDashboard]);
 
+  // v2: the SalesOrder-derived widgets — Executive Performance, India Sales
+  // Map, Top Products — all re-fetch together whenever a Global Filter
+  // changes.
+  const fetchFiltered = useCallback(async () => {
+    setFilteredLoading(true);
+    try {
+      const [executivesData, stateData, productsData] = await Promise.all([
+        getDashboardExecutives(filters),
+        getDashboardSalesByState(filters),
+        getDashboardTopProducts(filters),
+      ]);
+      setExecutives(executivesData);
+      setSalesByState(stateData);
+      setTopProducts(productsData);
+    } catch {
+      // Leave whatever was last successfully loaded on screen rather than
+      // blanking three widgets over one transient request failure.
+    } finally {
+      setFilteredLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    fetchFiltered();
+  }, [fetchFiltered]);
+
+  // Stable dropdown options for "Sales Executive" — sourced from
+  // DashboardStats.salesByExecutive (unfiltered) rather than the `executives`
+  // state above, so the option list doesn't shrink as other filters narrow
+  // the filtered result.
+  const executiveOptions = useMemo(
+    () => (stats?.salesByExecutive ?? []).map((e) => e.executive),
+    [stats],
+  );
+
   const fetchRevenue = useCallback(async () => {
     setRevenueLoading(true);
     try {
@@ -382,6 +572,10 @@ export default function Dashboard() {
         period: revenuePeriod,
         month: revenueMonth,
         year: revenueYear,
+        state: filters.state,
+        executive: filters.executive,
+        leadSource: filters.leadSource,
+        productId: filters.productId,
       });
       setRevenueSeries(data);
     } catch {
@@ -389,7 +583,7 @@ export default function Dashboard() {
     } finally {
       setRevenueLoading(false);
     }
-  }, [revenuePeriod, revenueMonth, revenueYear]);
+  }, [revenuePeriod, revenueMonth, revenueYear, filters.state, filters.executive, filters.leadSource, filters.productId]);
 
   useEffect(() => {
     fetchRevenue();
@@ -400,7 +594,7 @@ export default function Dashboard() {
     value: entry.count,
     source: entry.source,
   }));
-  const leadStatusData = (charts?.leadStatus ?? []).map((entry) => ({
+  const quotationStatusData = (charts?.quotationStatus ?? []).map((entry) => ({
     name: entry.label,
     value: entry.count,
   }));
@@ -488,81 +682,36 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* 2. Sales Funnel */}
+          {/* v2 requirement #13 */}
+          <GlobalFiltersBar
+            filters={filters}
+            onChange={setFilters}
+            executiveOptions={executiveOptions}
+            productOptions={productOptions}
+            currentYear={currentYear}
+          />
+
+          {/* v2 requirements #1-4: India Sales Map replaces the Sales Funnel */}
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Sales Funnel</CardTitle>
+              <CardTitle className="text-base">India Sales Map</CardTitle>
             </CardHeader>
             <CardContent>
-              {funnel.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No data yet.</p>
+              {filteredLoading && salesByState.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
               ) : (
-                <ResponsiveContainer width="100%" height={340}>
-                  <FunnelChart>
-                    <Tooltip />
-                    <Funnel dataKey="count" data={funnel} isAnimationActive nameKey="stage">
-                      <LabelList dataKey="stage" position="right" fill="#23252d" stroke="none" fontSize={13} />
-                      <LabelList dataKey="count" position="center" fill="#ffffff" stroke="none" fontSize={13} />
-                      {funnel.map((entry, i) => (
-                        <Cell
-                          key={entry.stage}
-                          fill={FUNNEL_COLORS[i % FUNNEL_COLORS.length]}
-                          cursor="pointer"
-                          onClick={() => {
-                            const link = FUNNEL_LINKS[entry.stage];
-                            if (link) navigate(link);
-                          }}
-                        />
-                      ))}
-                    </Funnel>
-                  </FunnelChart>
-                </ResponsiveContainer>
+                <IndiaSalesMap
+                  data={salesByState}
+                  onStateClick={(state) => navigate(`/sales-orders?customerState=${encodeURIComponent(state)}`)}
+                />
               )}
             </CardContent>
           </Card>
 
-          {/* 3. Donut Charts */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <DonutCard
-              title="Lead Sources"
-              data={leadSourceData}
-              colors={DONUT_PALETTE}
-              emptyLabel="No leads yet."
-              onSliceClick={(name) => {
-                const entry = leadSourceData.find((d) => d.name === name);
-                if (entry) navigate(`/leads?source=${entry.source}`);
-              }}
-            />
-            <DonutCard
-              title="Lead Status"
-              data={leadStatusData}
-              colors={DONUT_PALETTE}
-              emptyLabel="No leads yet."
-              onSliceClick={(name) => {
-                const option = LEAD_STATUS_OPTIONS.find((o) => o.label === name);
-                if (option) navigate(`/leads?status=${option.value}`);
-              }}
-            />
-            <DonutCard
-              title="Production Status"
-              data={productionStatusData}
-              colors={PRODUCTION_COLORS}
-              emptyLabel="No job execution orders yet."
-              onSliceClick={(name) => navigate(PRODUCTION_STATUS_LINK[name] ?? "/job-execution-orders")}
-            />
-            <DonutCard
-              title="Inventory Status"
-              data={inventoryStatusData}
-              colors={INVENTORY_COLORS}
-              emptyLabel="No materials yet."
-              onSliceClick={(name) => navigate(INVENTORY_STATUS_LINK[name] ?? "/materials")}
-            />
-          </div>
-
-          {/* 4. Revenue Chart */}
+          {/* v2 requirement #5: Revenue Trend (Area Chart) */}
           <Card className="border-none shadow-sm">
             <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">Revenue</CardTitle>
+              <CardTitle className="text-base">Revenue Trend</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 {REVENUE_PERIODS.map((period) => (
                   <Button
@@ -611,7 +760,7 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground">No revenue in this range yet.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart
+                  <AreaChart
                     data={revenueSeries}
                     onClick={(state) => {
                       const index = state?.activeTooltipIndex;
@@ -627,18 +776,70 @@ export default function Dashboard() {
                       navigate(`/sales-orders?dateFrom=${dateFrom}&dateTo=${dateTo}`);
                     }}
                   >
+                    <defs>
+                      <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={SRM_GREEN} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={SRM_GREEN} stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`} />
                     <Tooltip formatter={(value) => formatINR(Number(value))} />
-                    <Bar dataKey="value" name="Revenue" fill={SRM_GREEN} radius={[4, 4, 0, 0]} cursor="pointer" />
-                  </BarChart>
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      name="Revenue"
+                      stroke={SRM_GREEN}
+                      strokeWidth={2}
+                      fill="url(#revenueFill)"
+                      activeDot={{ r: 5, cursor: "pointer" }}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
 
-          {/* 5. Sales Executive Performance */}
+          {/* v2 requirements #6-9: Donut Charts (Lead Source / Quotation Status /
+              Production Status / Inventory Status — replaces v1's set, which
+              had Lead Status here instead of Quotation Status) */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <DonutCard
+              title="Lead Sources"
+              data={leadSourceData}
+              colors={DONUT_PALETTE}
+              emptyLabel="No leads yet."
+              onSliceClick={(name) => {
+                const entry = leadSourceData.find((d) => d.name === name);
+                if (entry) navigate(`/leads?source=${entry.source}`);
+              }}
+            />
+            <DonutCard
+              title="Quotation Status"
+              data={quotationStatusData}
+              colors={QUOTATION_COLORS}
+              emptyLabel="No quotations yet."
+              onSliceClick={(name) => navigate(`/quotations?status=${name.toUpperCase().replace(/\s+/g, "_")}`)}
+            />
+            <DonutCard
+              title="Production Status"
+              data={productionStatusData}
+              colors={PRODUCTION_COLORS}
+              emptyLabel="No job execution orders yet."
+              onSliceClick={(name) => navigate(PRODUCTION_STATUS_LINK[name] ?? "/job-execution-orders")}
+            />
+            <DonutCard
+              title="Inventory Status"
+              data={inventoryStatusData}
+              colors={INVENTORY_COLORS}
+              emptyLabel="No materials yet."
+              onSliceClick={(name) => navigate(INVENTORY_STATUS_LINK[name] ?? "/materials")}
+            />
+          </div>
+
+          {/* 5 (v1 numbering). Sales Executive Performance — now filtered by
+              Global Filters */}
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Sales Executive Performance</CardTitle>
@@ -662,11 +863,7 @@ export default function Dashboard() {
                         <tr
                           key={entry.executive}
                           className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
-                          // No createdBy/executive filter exists on the Sales
-                          // Orders list today (see ExecutivePerformanceEntry's
-                          // comment) — opens the list unfiltered rather than
-                          // guessing a filter that isn't there.
-                          onClick={() => navigate("/sales-orders")}
+                          onClick={() => navigate(`/sales-orders?createdBy=${encodeURIComponent(entry.executive)}`)}
                         >
                           <td className="py-2 pr-4 font-medium text-slate-900">{entry.executive}</td>
                           <td className="py-2 pr-4">{formatINR(entry.revenue)}</td>
@@ -681,7 +878,41 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* 6 & 7. Production + Inventory Summary */}
+          {/* v2 requirement #12: Top Products (Horizontal Bar Chart) */}
+          <Card className="border-none shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Top Products</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {topProducts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales orders yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(220, topProducts.length * 44)}>
+                  <BarChart
+                    data={topProducts}
+                    layout="vertical"
+                    margin={{ left: 16, right: 24 }}
+                    onClick={(state) => {
+                      const index = state?.activeTooltipIndex;
+                      if (index == null) return;
+                      const product = topProducts[Number(index)];
+                      if (product) navigate(`/sales-orders?productId=${product.productId}`);
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={160} />
+                    <Tooltip
+                      formatter={(value, name) => (name === "revenue" ? formatINR(Number(value)) : value)}
+                    />
+                    <Bar dataKey="revenue" name="Revenue" fill={SRM_GREEN} radius={[0, 4, 4, 0]} cursor="pointer" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 6 & 7 (v1 numbering). Production + Inventory Summary */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <SummaryCard
               title="Production Summary"
@@ -707,6 +938,74 @@ export default function Dashboard() {
               emptyLabel="No materials yet."
               onEntryClick={(name) => navigate(INVENTORY_STATUS_LINK[name] ?? "/materials")}
             />
+          </div>
+
+          {/* v2 requirements #10-11: Recent Activities (Timeline) + Today's
+              Follow-ups (List) */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Recent Activities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {recentActivities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No activity yet.</p>
+                ) : (
+                  <ol className="max-h-80 space-y-3 overflow-y-auto">
+                    {recentActivities.map((activity) => (
+                      <li
+                        key={activity.id}
+                        className="flex cursor-pointer gap-3 rounded-md p-1.5 text-sm transition-colors hover:bg-slate-50"
+                        // No recordId on this feed (see RecentActivityEntry) —
+                        // opens the owning module's list, not the specific record.
+                        onClick={() => navigate(ACTIVITY_MODULE_LINK[activity.module] ?? "/sales-orders")}
+                      >
+                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-srm-green" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-slate-800">
+                            <span className="font-medium">{activity.actorName ?? "System"}</span>{" "}
+                            {activity.action.toLowerCase()} a {activity.module}
+                            {activity.remarks ? ` — ${activity.remarks}` : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{timeAgo(activity.createdAt)}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Today's Follow-ups</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {todaysFollowUps.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No follow-ups scheduled for today.</p>
+                ) : (
+                  <ul className="max-h-80 space-y-1 overflow-y-auto">
+                    {todaysFollowUps.map((lead) => (
+                      <li key={lead.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                          className="flex w-full items-center justify-between rounded-md p-2 text-left text-sm transition-colors hover:bg-slate-50"
+                        >
+                          <span>
+                            <span className="font-medium text-slate-900">{lead.companyName}</span>
+                            <span className="text-muted-foreground"> — {lead.contactPerson}</span>
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {lead.assignedToName ?? "Unassigned"}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* 8. Notifications + 9. Quick Actions */}

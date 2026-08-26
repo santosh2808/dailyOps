@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LeadSource, LeadStatus, SalesOrderStatus } from '@prisma/client';
+import { LeadSource, LeadStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface LeadSourceSummaryEntry {
@@ -113,6 +113,12 @@ export interface StatusBreakdownEntry {
 
 export interface DashboardCharts {
   leadStatus: StatusBreakdownEntry[];
+  // Additive: Dashboard Redesign v2 — Quotation Status donut (v2
+  // requirement #7, replacing v1's separate Lead Status donut in the
+  // frontend's own widget list — leadStatus above is left in place,
+  // unused by v2's page, rather than removed, since removing a field is
+  // more likely to break something than an unused extra one).
+  quotationStatus: StatusBreakdownEntry[];
   // Production Status buckets JeoStatus's 6 values into the 4 named in
   // requirement #6: Pending (PENDING), In Production (MATERIAL_READY +
   // ASSEMBLY_STARTED + QC), Ready (READY_FOR_DISPATCH), Completed
@@ -128,9 +134,101 @@ export interface DashboardCharts {
   inventoryStatus: StatusBreakdownEntry[];
 }
 
+// Additive: Dashboard Redesign v2 — India Sales Map (requirement #1-4).
+// `state` is one of INDIA_STATES (backend/src/common/india-states.ts), or
+// "Unknown" for Sales Orders whose Customer has no state set yet.
+export interface StateSalesEntry {
+  state: string;
+  revenue: number;
+  orders: number;
+  customers: number;
+}
+
+// Additive: Dashboard Redesign v2 — Top Products (requirement #12). Sums
+// every SalesOrderItem for that product across non-cancelled, non-deleted
+// Sales Orders — i.e. what's actually been sold, not quoted.
+export interface TopProductEntry {
+  productId: string;
+  name: string;
+  revenue: number;
+  quantity: number;
+}
+
+// Additive: Dashboard Redesign v2 — Recent Activities timeline
+// (requirement #10). A thin pass-through over the existing AuditLog table
+// (see audit-log.service.ts) — no new logging added, just read the latest
+// rows.
+export interface RecentActivityEntry {
+  id: string;
+  module: string;
+  action: string;
+  actorName: string | null;
+  remarks: string | null;
+  createdAt: Date;
+}
+
+// Additive: Dashboard Redesign v2 — Today's Follow-ups list (requirement
+// #11). getStats().todaysFollowUpsCount already gives the count; this is
+// the same underlying query, just returning the actual Lead rows instead
+// of a number.
+export interface TodaysFollowUpEntry {
+  id: string;
+  leadNumber: string;
+  companyName: string;
+  contactPerson: string;
+  phone: string;
+  nextFollowUp: Date | null;
+  assignedToName: string | null;
+}
+
+// Additive: Dashboard Redesign v2 — Global Filters (requirement #13).
+// Shared shape for the four filter dimensions that apply across the
+// SalesOrder-derived widgets (India Map, Top Products, Executive
+// Performance, and Revenue) — see QueryDashboardFiltersDto's own comment
+// for which endpoints use which fields and why "month" isn't part of
+// Revenue's usage of this.
+interface SalesOrderFilterInput {
+  month?: number;
+  year?: number;
+  state?: string;
+  executive?: string;
+  leadSource?: LeadSource;
+  productId?: string;
+}
+
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
+
+  // Additive: Dashboard Redesign v2 — Global Filters (requirement #13).
+  // Shared by getSalesByState/getTopProducts/getExecutivePerformance/
+  // getRevenue so the 4 non-date filter dimensions (state/executive/
+  // leadSource/productId) are built identically everywhere, plus the
+  // month/year date range for the three widgets that use it (Revenue
+  // handles its own date range separately — see its own comment).
+  private buildSalesOrderWhere(filters: SalesOrderFilterInput, includeMonthYear: boolean): Prisma.SalesOrderWhereInput {
+    const where: Prisma.SalesOrderWhereInput = {
+      deletedAt: null,
+      status: { not: 'CANCELLED' },
+    };
+    if (includeMonthYear && (filters.month || filters.year)) {
+      const now = new Date();
+      const year = filters.year ?? now.getFullYear();
+      if (filters.month) {
+        where.orderDate = { gte: new Date(year, filters.month - 1, 1), lt: new Date(year, filters.month, 1) };
+      } else {
+        where.orderDate = { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) };
+      }
+    }
+    if (filters.state) where.customer = { state: filters.state };
+    if (filters.executive) where.createdBy = filters.executive;
+    if (filters.productId) where.items = { some: { productId: filters.productId } };
+    // Best-effort — see QueryDashboardFiltersDto's own comment: only
+    // matches orders whose Quotation traces back to a Lead with this
+    // source; direct customer-to-quotation orders are excluded.
+    if (filters.leadSource) where.quotation = { lead: { source: filters.leadSource } };
+    return where;
+  }
 
   async getStats(): Promise<DashboardStats> {
     // Local day boundaries (server time) — "Today" for follow-ups means the
@@ -381,17 +479,24 @@ export class DashboardService {
   // bucketing is hand-rolled the same way, and revenue is drawn from
   // SalesOrder.grandTotal/orderDate (the "central business document" per
   // that model's own schema comment), excluding CANCELLED orders.
-  async getRevenue(period: RevenuePeriod, month?: number, year?: number): Promise<RevenuePoint[]> {
+  async getRevenue(
+    period: RevenuePeriod,
+    month?: number,
+    year?: number,
+    filters: Omit<SalesOrderFilterInput, 'month' | 'year'> = {},
+  ): Promise<RevenuePoint[]> {
     const now = new Date();
     const targetYear = year ?? now.getFullYear();
     const targetMonth = month ?? now.getMonth() + 1; // 1-12, human-readable
+    // Non-date filters only — this endpoint's own period/month/year above
+    // already control the date range per bucketing mode.
+    const extraWhere = this.buildSalesOrderWhere(filters, false);
 
     if (period === 'yearly') {
       const startYear = targetYear - 4;
       const orders = await this.prisma.salesOrder.findMany({
         where: {
-          deletedAt: null,
-          status: { not: 'CANCELLED' },
+          ...extraWhere,
           orderDate: { gte: new Date(startYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
         },
         select: { orderDate: true, grandTotal: true },
@@ -411,8 +516,7 @@ export class DashboardService {
     if (period === 'quarterly') {
       const orders = await this.prisma.salesOrder.findMany({
         where: {
-          deletedAt: null,
-          status: { not: 'CANCELLED' },
+          ...extraWhere,
           orderDate: { gte: new Date(targetYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
         },
         select: { orderDate: true, grandTotal: true },
@@ -431,8 +535,7 @@ export class DashboardService {
       const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const orders = await this.prisma.salesOrder.findMany({
         where: {
-          deletedAt: null,
-          status: { not: 'CANCELLED' },
+          ...extraWhere,
           orderDate: { gte: new Date(targetYear, 0, 1), lt: new Date(targetYear + 1, 0, 1) },
         },
         select: { orderDate: true, grandTotal: true },
@@ -451,7 +554,7 @@ export class DashboardService {
     const rangeStart = new Date(targetYear, targetMonth - 1, 1);
     const rangeEnd = new Date(targetYear, targetMonth, 1);
     const orders = await this.prisma.salesOrder.findMany({
-      where: { deletedAt: null, status: { not: 'CANCELLED' }, orderDate: { gte: rangeStart, lt: rangeEnd } },
+      where: { ...extraWhere, orderDate: { gte: rangeStart, lt: rangeEnd } },
       select: { orderDate: true, grandTotal: true },
     });
     const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
@@ -470,10 +573,10 @@ export class DashboardService {
   // Additive: Dashboard Redesign — Sales Executive Performance (requirement
   // #5). See ExecutivePerformanceEntry's own comment for how the
   // name-string/User-FK mismatch is handled.
-  async getExecutivePerformance(): Promise<ExecutivePerformanceEntry[]> {
+  async getExecutivePerformance(filters: SalesOrderFilterInput = {}): Promise<ExecutivePerformanceEntry[]> {
     const [orders, executiveUsers] = await Promise.all([
       this.prisma.salesOrder.findMany({
-        where: { deletedAt: null },
+        where: this.buildSalesOrderWhere(filters, true),
         select: { createdBy: true, grandTotal: true },
       }),
       this.prisma.user.findMany({
@@ -531,14 +634,28 @@ export class DashboardService {
   // Sources reuses the existing leadSourceSummary groupBy (see getStats());
   // this method covers the other three donuts.
   async getCharts(): Promise<DashboardCharts> {
-    const [leadStatusGroups, jeoStatusGroups, materials] = await Promise.all([
+    const [leadStatusGroups, quotationStatusGroups, jeoStatusGroups, materials] = await Promise.all([
       this.prisma.lead.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
+      this.prisma.quotation.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
       this.prisma.jobExecutionOrder.groupBy({ by: ['status'], _count: { _all: true } }),
       this.prisma.material.findMany({
         where: { isActive: true },
         select: { currentStock: true, minimumStock: true, reorderLevel: true },
       }),
     ]);
+
+    const QUOTATION_STATUS_LABELS: Record<string, string> = {
+      DRAFT: 'Draft',
+      READY: 'Ready',
+      SENT: 'Sent',
+      ACCEPTED: 'Accepted',
+      REJECTED: 'Rejected',
+      EXPIRED: 'Expired',
+    };
+    const quotationStatus: StatusBreakdownEntry[] = quotationStatusGroups.map((g) => ({
+      label: QUOTATION_STATUS_LABELS[g.status] ?? g.status,
+      count: g._count._all,
+    }));
 
     const LEAD_STATUS_LABELS: Record<string, string> = {
       NEW: 'New',
@@ -579,6 +696,112 @@ export class DashboardService {
       count,
     }));
 
-    return { leadStatus, productionStatus, inventoryStatus };
+    return { leadStatus, quotationStatus, productionStatus, inventoryStatus };
+  }
+
+  // Additive: Dashboard Redesign v2 — India Sales Map (requirements #1-4).
+  // Grouped in memory by Customer.state (same convention as
+  // salesByExecutive/getExecutivePerformance above) — orders whose
+  // customer has no state yet are bucketed under "Unknown" rather than
+  // dropped, so totals still reconcile with the Sales Orders list.
+  async getSalesByState(filters: SalesOrderFilterInput = {}): Promise<StateSalesEntry[]> {
+    const orders = await this.prisma.salesOrder.findMany({
+      where: this.buildSalesOrderWhere(filters, true),
+      select: { customerId: true, grandTotal: true, customer: { select: { state: true } } },
+    });
+
+    const byState = new Map<string, { revenue: number; orders: number; customerIds: Set<string> }>();
+    for (const order of orders) {
+      const key = order.customer.state || 'Unknown';
+      const entry = byState.get(key) ?? { revenue: 0, orders: 0, customerIds: new Set<string>() };
+      entry.revenue += order.grandTotal;
+      entry.orders += 1;
+      entry.customerIds.add(order.customerId);
+      byState.set(key, entry);
+    }
+
+    return Array.from(byState.entries())
+      .map(([state, entry]) => ({
+        state,
+        revenue: Math.round(entry.revenue * 100) / 100,
+        orders: entry.orders,
+        customers: entry.customerIds.size,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }
+
+  // Additive: Dashboard Redesign v2 — Top Products (requirement #12).
+  async getTopProducts(filters: SalesOrderFilterInput = {}, limit = 10): Promise<TopProductEntry[]> {
+    const items = await this.prisma.salesOrderItem.findMany({
+      where: { salesOrder: this.buildSalesOrderWhere(filters, true) },
+      select: { productId: true, quantity: true, lineTotal: true, product: { select: { name: true } } },
+    });
+
+    const byProduct = new Map<string, { name: string; revenue: number; quantity: number }>();
+    for (const item of items) {
+      const entry = byProduct.get(item.productId) ?? { name: item.product.name, revenue: 0, quantity: 0 };
+      entry.revenue += item.lineTotal;
+      entry.quantity += item.quantity;
+      byProduct.set(item.productId, entry);
+    }
+
+    return Array.from(byProduct.entries())
+      .map(([productId, entry]) => ({
+        productId,
+        name: entry.name,
+        revenue: Math.round(entry.revenue * 100) / 100,
+        quantity: entry.quantity,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, limit);
+  }
+
+  // Additive: Dashboard Redesign v2 — Recent Activities timeline
+  // (requirement #10). Straight read of the existing AuditLog table.
+  async getRecentActivities(limit = 20): Promise<RecentActivityEntry[]> {
+    const rows = await this.prisma.auditLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, module: true, action: true, actorName: true, remarks: true, createdAt: true },
+    });
+    return rows;
+  }
+
+  // Additive: Dashboard Redesign v2 — Today's Follow-ups list (requirement
+  // #11). Same open-lead/date-window definition as
+  // getStats().todaysFollowUpsCount, just returning rows instead of a count.
+  async getTodaysFollowUps(): Promise<TodaysFollowUpEntry[]> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+    const leads = await this.prisma.lead.findMany({
+      where: {
+        deletedAt: null,
+        status: { notIn: ['WON', 'LOST'] as LeadStatus[] },
+        nextFollowUp: { gte: startOfToday, lt: startOfTomorrow },
+      },
+      orderBy: { nextFollowUp: 'asc' },
+      select: {
+        id: true,
+        leadNumber: true,
+        companyName: true,
+        contactPerson: true,
+        phone: true,
+        nextFollowUp: true,
+        assignedToUser: { select: { name: true } },
+      },
+    });
+
+    return leads.map((lead) => ({
+      id: lead.id,
+      leadNumber: lead.leadNumber,
+      companyName: lead.companyName,
+      contactPerson: lead.contactPerson,
+      phone: lead.phone,
+      nextFollowUp: lead.nextFollowUp,
+      assignedToName: lead.assignedToUser?.name ?? null,
+    }));
   }
 }
