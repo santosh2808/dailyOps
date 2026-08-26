@@ -1,18 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Lock, User } from "lucide-react";
+import { Lock, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import LoginMascot from "@/components/LoginMascot";
 
 // Loose enough to just drive the mascot's smile/antenna — not used for
@@ -62,101 +52,108 @@ export default function Login() {
         />
       </div>
 
-      {/* Right side — login card centered in the remaining space */}
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
-        <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Card className="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-lg">
+      {/* Right side — the neubrutalist login card, centered in the remaining space, on a soft dotted backdrop */}
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8"
+        style={{
+          backgroundColor: "#f6f2e9",
+          backgroundImage: "radial-gradient(#d8d2c0 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      >
+        <div className="relative z-10 flex w-full max-w-sm flex-col items-center">
+          {/* brand pill */}
+          <div className="mb-3 flex flex-col items-center leading-tight">
+            <span className="text-lg font-bold tracking-tight text-slate-900">DailyOps</span>
+            <span className="text-xs font-medium text-srm-green">by Smart Rotamach</span>
+          </div>
 
-            <CardHeader className="space-y-1 text-center px-8 pb-2 pt-6">
-              <LoginMascot
-                focusField={focusField}
-                isValidEmail={EMAIL_LIKE.test(identifier.trim())}
-              />
-              <div className="flex flex-col items-center leading-tight">
-                <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
-                  DailyOps
-                </CardTitle>
-                <span className="text-xs font-medium text-srm-green">by Smart Rotamach</span>
+          {/* the mascot peeks over the top edge of the card */}
+          <div className="relative z-20 -mb-6">
+            <LoginMascot
+              focusField={focusField}
+              isValidEmail={EMAIL_LIKE.test(identifier.trim())}
+            />
+          </div>
+
+          {/* card */}
+          <div className="relative w-full rounded-[28px] border-[3px] border-slate-900 bg-[#fdfcf8] px-7 pb-7 pt-10 shadow-[6px_6px_0_0_#0f172a]">
+            {/* little ear/foot nubs poking out of the card, echoing the mascot's ears */}
+            <div className="absolute -top-3 left-9 h-6 w-3 rounded-full border-2 border-slate-900 bg-white" />
+            <div className="absolute -top-3 right-9 h-6 w-3 rounded-full border-2 border-slate-900 bg-white" />
+            <div className="absolute -bottom-3 left-14 h-3 w-9 rounded-full border-2 border-slate-900 bg-white" />
+            <div className="absolute -bottom-3 right-14 h-3 w-9 rounded-full border-2 border-slate-900 bg-white" />
+
+            <h1 className="text-xl font-bold text-slate-900">Hey there! Who's this?</h1>
+            <p className="mt-1 text-sm text-slate-500">Sign in to your DailyOps account.</p>
+
+            <form onSubmit={handleSubmit} className="mt-5 space-y-3">
+              <div className="relative">
+                <label htmlFor="identifier" className="sr-only">
+                  Username or Email
+                </label>
+                <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  id="identifier"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  onFocus={() => setFocusField("identifier")}
+                  onBlur={() => setFocusField(null)}
+                  placeholder="Your username or email"
+                  required
+                  className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
+                />
               </div>
-              <CardDescription className="!mt-2 text-sm">
-                Sign in to your account
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-8 pb-8 pt-2">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="identifier" className="text-sm">
-                    Username or Email
-                  </Label>
-                  <div className="relative">
-                    <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      id="identifier"
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      onFocus={() => setFocusField("identifier")}
-                      onBlur={() => setFocusField(null)}
-                      placeholder="admin"
-                      required
-                      className="h-11 pl-10 text-sm border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm">
-                    Password
-                  </Label>
-                  <div className="relative">
-                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocusField("password")}
-                      onBlur={() => setFocusField(null)}
-                      required
-                      className="h-11 pl-10 text-sm border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
-                    />
-                  </div>
-                </div>
+              <div className="relative">
+                <label htmlFor="password" className="sr-only">
+                  Password
+                </label>
+                <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusField("password")}
+                  onBlur={() => setFocusField(null)}
+                  placeholder="Super secret password"
+                  required
+                  className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
+                />
+              </div>
 
-                <div className="flex items-center justify-between">
-                  <label htmlFor="remember" className="flex items-center gap-2 text-sm text-slate-600">
-                    <Checkbox
-                      id="remember"
-                      checked={remember}
-                      onChange={(e) => setRemember(e.target.checked)}
-                      className="checked:border-srm-green checked:bg-srm-green"
-                    />
-                    Remember me
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setNotice("Contact your administrator to reset your password.")
-                    }
-                    className="text-sm font-medium text-srm-red hover:underline"
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-                {notice && <p className="text-sm text-slate-500">{notice}</p>}
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button
-                  type="submit"
-                  className="group h-11 w-full gap-2 bg-srm-green text-sm font-semibold text-white hover:bg-srm-green/90"
-                  disabled={loading}
+              <div className="flex items-center justify-between pt-1">
+                <label htmlFor="remember" className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <Checkbox
+                    id="remember"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="rounded border-2 border-slate-900 checked:border-srm-green checked:bg-srm-green"
+                  />
+                  Remember me
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotice("Contact your administrator to reset your password.")
+                  }
+                  className="text-xs font-semibold text-srm-red hover:underline"
                 >
-                  {loading ? "Signing in..." : "Sign In"}
-                  {!loading && (
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                  Forgot Password?
+                </button>
+              </div>
+              {notice && <p className="text-xs text-slate-500">{notice}</p>}
+              {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-2 h-12 w-full rounded-xl border-2 border-slate-900 bg-srm-red text-sm font-bold uppercase tracking-wide text-white shadow-[4px_4px_0_0_#0f172a] transition-all hover:brightness-105 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_0_#0f172a] disabled:opacity-60"
+              >
+                {loading ? "Signing in..." : "Sign Me In"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>
