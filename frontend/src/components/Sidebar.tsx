@@ -262,9 +262,12 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-200 px-3 py-4">
+        {/* Solid red button, same look as the "LOG ME IN" button on the
+            login page (LoginRobot.css .volt-btn), instead of a plain
+            ghost link. */}
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-srm-red/10 hover:text-srm-red"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-srm-red px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-srm-red/90"
         >
           <LogOut className="h-4 w-4" />
           Logout
