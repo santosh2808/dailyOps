@@ -41,7 +41,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-slate-50">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-50">
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
           Percentage-based (not a fixed pixel width) so it keeps roughly the same proportion
           of the screen — and the image stays large — at any window size. */}
