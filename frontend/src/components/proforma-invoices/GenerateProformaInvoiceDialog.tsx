@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { ProformaInvoicePayload } from "@/api/proforma-invoices";
 import type { SalesOrder } from "@/types";
 
@@ -84,6 +86,7 @@ export default function GenerateProformaInvoiceDialog({
       onOpenChange(false);
     } catch {
       setError("Could not generate the proforma invoice. Please try again.");
+      toast.error("Could not generate the proforma invoice.");
     } finally {
       setSubmitting(false);
     }
@@ -167,6 +170,7 @@ export default function GenerateProformaInvoiceDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Generating..." : "Generate Invoice"}
           </Button>
         </DialogFooter>

@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Department } from "@/types";
 import type { DepartmentPayload } from "@/api/departments";
 
@@ -67,9 +69,11 @@ export default function DepartmentFormDialog({
         name: form.name.trim(),
         description: form.description.trim() || undefined,
       });
+      toast.success(isEdit ? "Department updated successfully." : "Department created successfully.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -120,6 +124,7 @@ export default function DepartmentFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add Department"}
             </Button>
           </DialogFooter>

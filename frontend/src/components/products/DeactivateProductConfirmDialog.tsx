@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Product } from "@/types";
 
 interface DeactivateProductConfirmDialogProps {
@@ -34,6 +36,7 @@ export default function DeactivateProductConfirmDialog({
       onOpenChange(false);
     } catch {
       setError("Could not deactivate this product. Please try again.");
+      toast.error("Could not deactivate this product.");
     } finally {
       setSubmitting(false);
     }
@@ -71,6 +74,7 @@ export default function DeactivateProductConfirmDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Deactivating..." : "Deactivate"}
           </Button>
         </DialogFooter>

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { getLeadHistory, getLeadNotes, addLeadNote } from "@/api/leads";
 import type { LeadHistoryAction, LeadHistoryEntry, LeadNote } from "@/types";
 
@@ -87,6 +89,7 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
       setHistory(await getLeadHistory(leadId));
     } catch {
       setHistoryError("Could not load the activity timeline.");
+      toast.error("Could not load the activity timeline.");
     } finally {
       setHistoryLoading(false);
     }
@@ -99,6 +102,7 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
       setNotes(await getLeadNotes(leadId));
     } catch {
       setNotesError("Could not load notes.");
+      toast.error("Could not load notes.");
     } finally {
       setNotesLoading(false);
     }
@@ -120,9 +124,12 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
     try {
       await addLeadNote(leadId, note);
       setNewNote("");
+      toast.success("Note added.");
       await fetchNotes();
     } catch {
-      setNotesError("Could not save this note. Please try again.");
+      const message = "Could not save this note. Please try again.";
+      setNotesError(message);
+      toast.error(message);
     } finally {
       setSubmittingNote(false);
     }
@@ -139,13 +146,16 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
           />
           <div className="flex justify-end">
             <Button type="submit" size="sm" disabled={submittingNote || !newNote.trim()}>
+              {submittingNote && <Spinner className="mr-2 h-4 w-4" />}
               {submittingNote ? "Saving..." : "Add Note"}
             </Button>
           </div>
         </form>
 
         {notesLoading ? (
-          <p className="text-sm text-muted-foreground">Loading notes...</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner /> Loading notes...
+          </p>
         ) : notesError ? (
           <p className="text-sm text-destructive">{notesError}</p>
         ) : notes.length === 0 ? (
@@ -167,7 +177,9 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
   }
 
   return historyLoading ? (
-    <p className="text-sm text-muted-foreground">Loading timeline...</p>
+    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Spinner /> Loading timeline...
+    </p>
   ) : historyError ? (
     <p className="text-sm text-destructive">{historyError}</p>
   ) : history.length === 0 ? (

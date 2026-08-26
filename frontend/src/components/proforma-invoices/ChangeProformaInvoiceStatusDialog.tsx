@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { STATUS_OPTIONS } from "./proformaInvoiceOptions";
 import type { ProformaInvoice, ProformaInvoiceStatus } from "@/types";
 
@@ -45,6 +47,7 @@ export default function ChangeProformaInvoiceStatusDialog({
       onOpenChange(false);
     } catch {
       setError("Could not update the invoice status. Please try again.");
+      toast.error("Could not update the invoice status.");
     } finally {
       setSubmitting(false);
     }
@@ -97,6 +100,7 @@ export default function ChangeProformaInvoiceStatusDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Updating..." : "Update Status"}
           </Button>
         </DialogFooter>

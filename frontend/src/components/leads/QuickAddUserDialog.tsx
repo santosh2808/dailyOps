@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listDepartments } from "@/api/departments";
 import { listRoles } from "@/api/roles";
 import { quickCreateUser } from "@/api/users";
@@ -107,11 +109,13 @@ export default function QuickAddUserDialog({
         roleId: form.roleId,
         isActive: form.isActive,
       });
+      toast.success("User created successfully.");
       onCreated(user);
     } catch {
-      setSubmitError(
-        "Could not create this user. The email may already be in use — please try again.",
-      );
+      const message =
+        "Could not create this user. The email may already be in use — please try again.";
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -229,6 +233,7 @@ export default function QuickAddUserDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting || loadingOptions}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Creating..." : "Add User"}
             </Button>
           </DialogFooter>

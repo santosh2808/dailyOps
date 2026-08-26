@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createMaterial,
   getMaterial,
@@ -109,7 +111,9 @@ export default function MaterialForm() {
           }));
         }
       } catch {
-        setSubmitError("Could not load this material.");
+        const message = "Could not load this material.";
+        setSubmitError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -127,18 +131,28 @@ export default function MaterialForm() {
 
   async function handleAddCategory() {
     if (!newCategory.trim()) return;
-    const created = await createMaterialCategory({ name: newCategory.trim() });
-    setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-    update("categoryId", created.id);
-    setNewCategory("");
+    try {
+      const created = await createMaterialCategory({ name: newCategory.trim() });
+      setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      update("categoryId", created.id);
+      setNewCategory("");
+      toast.success("Category added.");
+    } catch {
+      toast.error("Could not add this category. Please try again.");
+    }
   }
 
   async function handleAddUnit() {
     if (!newUnit.trim()) return;
-    const created = await createMaterialUnit({ name: newUnit.trim() });
-    setUnits((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-    update("unitId", created.id);
-    setNewUnit("");
+    try {
+      const created = await createMaterialUnit({ name: newUnit.trim() });
+      setUnits((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      update("unitId", created.id);
+      setNewUnit("");
+      toast.success("Unit added.");
+    } catch {
+      toast.error("Could not add this unit. Please try again.");
+    }
   }
 
   function validate(): boolean {
@@ -203,16 +217,20 @@ export default function MaterialForm() {
     try {
       if (isEdit && id) {
         await updateMaterial(id, payload);
+        toast.success("Material updated successfully.");
         navigate(`/materials/${id}`);
       } else {
         const created = await createMaterial(payload);
+        toast.success("Material created successfully.");
         navigate(`/materials/${created.id}`);
       }
     } catch (err: any) {
-      const message =
+      const rawMessage =
         err?.response?.data?.message ||
         "Something went wrong while saving this material. Please try again.";
-      setSubmitError(Array.isArray(message) ? message.join(", ") : message);
+      const message = Array.isArray(rawMessage) ? rawMessage.join(", ") : rawMessage;
+      setSubmitError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -224,7 +242,9 @@ export default function MaterialForm() {
         <Topbar title={isEdit ? "Edit Material" : "Create Material"} />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading material...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading material...
+            </p>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
               <Card>
@@ -425,6 +445,7 @@ export default function MaterialForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Create Material"}
                 </Button>
               </div>

@@ -13,6 +13,8 @@ import SalesOrderItemsEditor, {
   type SalesOrderItemRow,
 } from "@/components/sales-orders/SalesOrderItemsEditor";
 import { getQuotation } from "@/api/quotations";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createSalesOrder,
   getSalesOrder,
@@ -102,6 +104,7 @@ export default function SalesOrderForm() {
         );
       } catch {
         setLoadError("Could not load the quotation for this sales order.");
+        toast.error("Could not load the quotation for this sales order.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -139,6 +142,7 @@ export default function SalesOrderForm() {
         );
       } catch {
         setLoadError("Could not load this sales order.");
+        toast.error("Could not load this sales order.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -194,13 +198,17 @@ export default function SalesOrderForm() {
       if (isEdit && id) {
         const { quotationId: _quotationId, ...updatePayload } = payload;
         await updateSalesOrder(id, updatePayload);
+        toast.success("Sales Order updated successfully.");
         navigate(`/sales-orders/${id}`);
       } else {
         const created = await createSalesOrder(payload);
+        toast.success("Sales Order created successfully.");
         navigate(`/sales-orders/${created.id}`);
       }
     } catch {
-      setSubmitError("Something went wrong while saving this sales order. Please try again.");
+      const message = "Something went wrong while saving this sales order. Please try again.";
+      setSubmitError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -220,7 +228,9 @@ export default function SalesOrderForm() {
         <Topbar title={isEdit ? "Edit Sales Order" : "Create Sales Order"} />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading...
+            </div>
           ) : loadError ? (
             <div className="mx-auto max-w-2xl rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {loadError}
@@ -393,6 +403,7 @@ export default function SalesOrderForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting || items.length === 0}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Create Sales Order"}
                 </Button>
               </div>

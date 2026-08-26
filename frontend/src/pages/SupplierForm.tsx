@@ -9,6 +9,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STATUS_OPTIONS } from "@/components/suppliers/supplierOptions";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { createSupplier, getSupplier, updateSupplier, type SupplierPayload } from "@/api/suppliers";
 import type { SupplierStatus } from "@/types";
 
@@ -159,16 +161,20 @@ export default function SupplierForm() {
     try {
       if (isEdit && id) {
         await updateSupplier(id, payload);
+        toast.success("Supplier updated successfully.");
         navigate(`/suppliers/${id}`);
       } else {
         const created = await createSupplier(payload);
+        toast.success("Supplier created successfully.");
         navigate(`/suppliers/${created.id}`);
       }
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         "Something went wrong while saving this supplier. Please try again.";
-      setSubmitError(Array.isArray(message) ? message.join(", ") : message);
+      const text = Array.isArray(message) ? message.join(", ") : message;
+      setSubmitError(text);
+      toast.error(text);
       setSubmitting(false);
     }
   }
@@ -180,7 +186,9 @@ export default function SupplierForm() {
         <Topbar title={isEdit ? "Edit Supplier" : "Add Supplier"} />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading supplier...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading supplier...
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
               <Card>
@@ -379,6 +387,7 @@ export default function SupplierForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add Supplier"}
                 </Button>
               </div>

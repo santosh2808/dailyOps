@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
 import type { JeoPriority, SalesOrder } from "@/types";
@@ -74,6 +76,7 @@ export default function GenerateJeoDialog({
       onOpenChange(false);
     } catch {
       setError("Could not generate the job execution order. Please try again.");
+      toast.error("Could not generate the job execution order.");
     } finally {
       setSubmitting(false);
     }
@@ -139,6 +142,7 @@ export default function GenerateJeoDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Generating..." : "Generate JEO"}
           </Button>
         </DialogFooter>

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SupplierStatusBadge from "@/components/suppliers/SupplierStatusBadge";
 import DeleteSupplierConfirmDialog from "@/components/suppliers/DeleteSupplierConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteSupplier, getSupplier } from "@/api/suppliers";
 import type { Supplier } from "@/types";
 
@@ -42,6 +44,7 @@ export default function SupplierDetails() {
       setSupplier(data);
     } catch {
       setError("Could not load this supplier.");
+      toast.error("Could not load this supplier.");
     } finally {
       setLoading(false);
     }
@@ -54,6 +57,7 @@ export default function SupplierDetails() {
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteSupplier(id);
+    toast.success("Supplier deleted.");
     navigate("/suppliers");
   }
 
@@ -69,7 +73,9 @@ export default function SupplierDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading supplier...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading supplier...
+            </div>
           ) : error || !supplier ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Supplier not found."}</span>

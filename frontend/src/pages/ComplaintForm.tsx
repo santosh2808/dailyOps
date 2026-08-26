@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SalesOrderPicker from "@/components/complaints/SalesOrderPicker";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { createComplaint, getComplaint, updateComplaint, type ComplaintPayload } from "@/api/complaints";
 import type { SalesOrder } from "@/types";
 
@@ -55,6 +57,7 @@ export default function ComplaintForm() {
         }
       } catch {
         setSubmitError("Could not load this complaint.");
+        toast.error("Could not load this complaint.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -91,6 +94,7 @@ export default function ComplaintForm() {
           subject: form.subject.trim(),
           description: form.description.trim() || undefined,
         });
+        toast.success("Complaint updated successfully.");
         navigate(`/complaints/${id}`);
       } else {
         const payload: ComplaintPayload = {
@@ -99,13 +103,16 @@ export default function ComplaintForm() {
           description: form.description.trim() || undefined,
         };
         const created = await createComplaint(payload);
+        toast.success("Complaint logged successfully.");
         navigate(`/complaints/${created.id}`);
       }
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         "Something went wrong while saving this complaint. Please try again.";
-      setSubmitError(Array.isArray(message) ? message.join(", ") : message);
+      const text = Array.isArray(message) ? message.join(", ") : message;
+      setSubmitError(text);
+      toast.error(text);
       setSubmitting(false);
     }
   }
@@ -117,7 +124,9 @@ export default function ComplaintForm() {
         <Topbar title={isEdit ? "Edit Complaint" : "Log Complaint"} showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading complaint...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading complaint...
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-6">
               <Card>
@@ -188,6 +197,7 @@ export default function ComplaintForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Log Complaint"}
                 </Button>
               </div>

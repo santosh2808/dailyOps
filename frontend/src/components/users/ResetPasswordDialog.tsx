@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { RbacUser } from "@/types";
 
 // Administrator action ("Reset Passwords") — separate from the Edit User
@@ -54,9 +56,11 @@ export default function ResetPasswordDialog({
     setSubmitting(true);
     try {
       await onSubmit(newPassword);
+      toast.success("Password reset.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +105,7 @@ export default function ResetPasswordDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Resetting..." : "Reset Password"}
             </Button>
           </DialogFooter>

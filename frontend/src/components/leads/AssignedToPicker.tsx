@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/context/AuthContext";
 import { listAssignableUsers } from "@/api/users";
 import QuickAddUserDialog from "./QuickAddUserDialog";
@@ -33,6 +35,7 @@ export default function AssignedToPicker({ value, onChange }: AssignedToPickerPr
       setUsers(await listAssignableUsers());
     } catch {
       setLoadError("Could not load sales users.");
+      toast.error("Could not load sales users.");
     } finally {
       setLoading(false);
     }
@@ -118,7 +121,9 @@ export default function AssignedToPicker({ value, onChange }: AssignedToPickerPr
               </button>
             )}
             {loading ? (
-              <p className="px-3 py-2 text-sm text-muted-foreground">Loading...</p>
+              <p className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+                <Spinner /> Loading...
+              </p>
             ) : loadError ? (
               <p className="px-3 py-2 text-sm text-destructive">{loadError}</p>
             ) : filtered.length === 0 ? (

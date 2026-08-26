@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { INDIA_STATES } from "@/lib/indiaStates";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Customer } from "@/types";
 import type { CustomerPayload } from "@/api/customers";
 
@@ -111,9 +113,11 @@ export default function CustomerFormDialog({
         gstNumber: form.gstNumber.trim() || undefined,
         state: form.state || undefined,
       });
+      toast.success(isEdit ? "Customer updated successfully." : "Customer created successfully.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -220,6 +224,7 @@ export default function CustomerFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add Customer"}
             </Button>
           </DialogFooter>

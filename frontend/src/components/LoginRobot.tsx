@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { getDotGreeting } from "@/lib/dotMessages";
+import { toast } from "@/lib/toast";
 import "./LoginRobot.css";
 
 // D.O.T. (DailyOps Operations Assistant) — ported from the user's own
@@ -290,6 +291,7 @@ export default function LoginRobot() {
         setTimeout(() => navigate("/dashboard"), 1400);
       } catch {
         btn.disabled = false;
+        toast.error("Incorrect username/email or password.");
         setTimeout(() => {
           say("Nope, that's not it. Try again?");
           setMood("watching");

@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listPermissions } from "@/api/permissions";
 import type { Permission, Role } from "@/types";
 import type { RolePayload } from "@/api/roles";
@@ -62,7 +64,10 @@ export default function RoleFormDialog({
     setLoadingPermissions(true);
     listPermissions()
       .then(setAllPermissions)
-      .catch(() => setSubmitError("Failed to load the permission catalog."))
+      .catch(() => {
+        setSubmitError("Failed to load the permission catalog.");
+        toast.error("Failed to load the permission catalog.");
+      })
       .finally(() => setLoadingPermissions(false));
   }, [open, role]);
 
@@ -114,9 +119,11 @@ export default function RoleFormDialog({
         description: form.description.trim() || undefined,
         permissionIds: Array.from(form.permissionIds),
       });
+      toast.success(isEdit ? "Role updated successfully." : "Role created successfully.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -159,8 +166,8 @@ export default function RoleFormDialog({
             <Label>Permissions</Label>
             <div className="max-h-72 overflow-y-auto rounded-md border p-3">
               {loadingPermissions ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  Loading permissions...
+                <p className="flex items-center justify-center gap-2 py-4 text-center text-sm text-muted-foreground">
+                  <Spinner /> Loading permissions...
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -212,6 +219,7 @@ export default function RoleFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add Role"}
             </Button>
           </DialogFooter>

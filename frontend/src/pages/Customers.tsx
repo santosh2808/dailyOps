@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/table";
 import CustomerFormDialog from "@/components/customers/CustomerFormDialog";
 import DeactivateConfirmDialog from "@/components/customers/DeactivateConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createCustomer,
   deactivateCustomer,
@@ -53,6 +55,7 @@ export default function Customers() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load customers.");
+      toast.error("Failed to load customers.");
     } finally {
       setLoading(false);
     }
@@ -98,6 +101,7 @@ export default function Customers() {
   async function handleDeactivateConfirm() {
     if (!selectedCustomer) return;
     await deactivateCustomer(selectedCustomer.id);
+    toast.success(`Customer "${selectedCustomer.companyName}" deactivated.`);
     await fetchCustomers();
   }
 
@@ -140,7 +144,9 @@ export default function Customers() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Loading customers...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading customers...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : customers.length === 0 ? (

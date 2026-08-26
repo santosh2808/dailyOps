@@ -16,6 +16,8 @@ import {
 import UserFormDialog from "@/components/users/UserFormDialog";
 import ResetPasswordDialog from "@/components/users/ResetPasswordDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createUser,
   deleteUser,
@@ -53,6 +55,7 @@ export default function Users() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load users.");
+      toast.error("Failed to load users.");
     } finally {
       setLoading(false);
     }
@@ -103,12 +106,14 @@ export default function Users() {
   // separate "enable" route, just isActive: true.
   async function handleEnable(user: RbacUser) {
     await updateUser(user.id, { isActive: true });
+    toast.success(`User "${user.name}" enabled.`);
     await fetchUsers();
   }
 
   async function handleDisableConfirm() {
     if (!selected) return;
     await deleteUser(selected.id);
+    toast.success(`User "${selected.name}" disabled.`);
     await fetchUsers();
   }
 
@@ -158,7 +163,9 @@ export default function Users() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Loading users...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading users...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (

@@ -18,6 +18,8 @@ import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import ChangeQuotationStatusDialog from "@/components/quotations/ChangeQuotationStatusDialog";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
 import SendQuotationDialog from "@/components/quotations/SendQuotationDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   deleteQuotation,
   getQuotation,
@@ -92,6 +94,7 @@ export default function QuotationDetails() {
       setQuotation(data);
     } catch {
       setError("Could not load this quotation.");
+      toast.error("Could not load this quotation.");
     } finally {
       setLoading(false);
     }
@@ -131,15 +134,18 @@ export default function QuotationDetails() {
     // QuotationsService.updateStatus()) — for any other status change this
     // is null and the page just refreshes as before.
     if (result.salesOrder?.id) {
+      toast.success("Quotation approved. Sales Order created.");
       navigate(`/sales-orders/${result.salesOrder.id}`);
       return;
     }
+    toast.success("Quotation status updated.");
     await fetchQuotation();
   }
 
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteQuotation(id);
+    toast.success("Quotation deleted.");
     navigate("/quotations");
   }
 
@@ -155,7 +161,9 @@ export default function QuotationDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading quotation...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading quotation...
+            </p>
           ) : error || !quotation ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Quotation not found."}</span>
@@ -193,9 +201,10 @@ export default function QuotationDetails() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      openQuotationPdf(quotation.id).catch(() =>
-                        setPdfError("Could not load the PDF. Please try again."),
-                      )
+                      openQuotationPdf(quotation.id).catch(() => {
+                        setPdfError("Could not load the PDF. Please try again.");
+                        toast.error("Could not load the PDF. Please try again.");
+                      })
                     }
                   >
                     <FileDown className="mr-2 h-4 w-4" />
@@ -330,7 +339,9 @@ export default function QuotationDetails() {
                 </CardHeader>
                 <CardContent>
                   {emailHistoryLoading ? (
-                    <p className="text-sm text-muted-foreground">Loading email history...</p>
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Spinner /> Loading email history...
+                    </p>
                   ) : emailHistory.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No emails sent yet.</p>
                   ) : (

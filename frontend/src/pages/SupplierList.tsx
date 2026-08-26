@@ -19,6 +19,8 @@ import SupplierFiltersBar, {
 } from "@/components/suppliers/SupplierFiltersBar";
 import DeleteSupplierConfirmDialog from "@/components/suppliers/DeleteSupplierConfirmDialog";
 import ImportSupplierDialog from "@/components/suppliers/ImportSupplierDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   deleteSupplier,
   downloadSupplierImportTemplate,
@@ -63,6 +65,7 @@ export default function SupplierList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load suppliers.");
+      toast.error("Failed to load suppliers.");
     } finally {
       setLoading(false);
     }
@@ -91,6 +94,7 @@ export default function SupplierList() {
   async function handleDeleteConfirm() {
     if (!selectedSupplier) return;
     await deleteSupplier(selectedSupplier.id);
+    toast.success(`Supplier "${selectedSupplier.supplierName}" deleted.`);
     await fetchSuppliers();
   }
 
@@ -99,7 +103,7 @@ export default function SupplierList() {
     try {
       await downloadSupplierImportTemplate();
     } catch {
-      setError("Failed to download the import template.");
+      toast.error("Failed to download the import template.");
     } finally {
       setDownloadingTemplate(false);
     }
@@ -109,8 +113,9 @@ export default function SupplierList() {
     setExporting(true);
     try {
       await exportSuppliers();
+      toast.success("Suppliers exported.");
     } catch {
-      setError("Failed to export suppliers.");
+      toast.error("Failed to export suppliers.");
     } finally {
       setExporting(false);
     }
@@ -126,7 +131,11 @@ export default function SupplierList() {
             <SupplierFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-                <Download className="mr-2 h-4 w-4" />
+                {downloadingTemplate ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
                 {downloadingTemplate ? "Downloading..." : "Download Template"}
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -134,7 +143,7 @@ export default function SupplierList() {
                 Import Excel
               </Button>
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
-                <Download className="mr-2 h-4 w-4" />
+                {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
                 {exporting ? "Exporting..." : "Export Excel"}
               </Button>
               <Button onClick={() => navigate("/suppliers/new")}>
@@ -164,7 +173,9 @@ export default function SupplierList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    Loading suppliers...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading suppliers...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : suppliers.length === 0 ? (

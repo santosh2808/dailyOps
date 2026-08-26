@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import RoleFormDialog from "@/components/roles/RoleFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { createRole, deleteRole, listRoles, updateRole, type RolePayload } from "@/api/roles";
 import type { Role } from "@/types";
 
@@ -33,6 +35,7 @@ export default function Roles() {
       setRoles(await listRoles());
     } catch {
       setError("Failed to load roles.");
+      toast.error("Failed to load roles.");
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,7 @@ export default function Roles() {
   async function handleDeleteConfirm() {
     if (!selected) return;
     await deleteRole(selected.id);
+    toast.success(`Role "${selected.name}" deleted.`);
     await fetchRoles();
   }
 
@@ -105,7 +109,9 @@ export default function Roles() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    Loading roles...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading roles...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : roles.length === 0 ? (

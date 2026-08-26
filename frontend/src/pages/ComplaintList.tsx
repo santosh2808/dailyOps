@@ -18,6 +18,8 @@ import ComplaintFiltersBar, {
   type ComplaintFilters,
 } from "@/components/complaints/ComplaintFiltersBar";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteComplaint, listComplaints } from "@/api/complaints";
 import type { Complaint, ComplaintStatus } from "@/types";
 
@@ -69,6 +71,7 @@ export default function ComplaintList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load complaints.");
+      toast.error("Failed to load complaints.");
     } finally {
       setLoading(false);
     }
@@ -97,6 +100,7 @@ export default function ComplaintList() {
   async function handleDeleteConfirm() {
     if (!selectedComplaint) return;
     await deleteComplaint(selectedComplaint.id);
+    toast.success(`Complaint ${selectedComplaint.complaintNumber} deleted.`);
     await fetchComplaints();
   }
 
@@ -132,7 +136,9 @@ export default function ComplaintList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Loading complaints...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading complaints...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : complaints.length === 0 ? (

@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Lead } from "@/types";
 
 interface ConvertToCustomerDialogProps {
@@ -34,6 +36,7 @@ export default function ConvertToCustomerDialog({
       onOpenChange(false);
     } catch {
       setError("Could not convert this lead. Please try again.");
+      toast.error("Could not convert this lead.");
     } finally {
       setSubmitting(false);
     }
@@ -66,6 +69,7 @@ export default function ConvertToCustomerDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Converting..." : "Convert to Customer"}
           </Button>
         </DialogFooter>

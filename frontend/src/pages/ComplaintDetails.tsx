@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ComplaintStatusBadge from "@/components/complaints/ComplaintStatusBadge";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
 import ChangeComplaintStatusDialog from "@/components/complaints/ChangeComplaintStatusDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteComplaint, getComplaint, updateComplaintStatus } from "@/api/complaints";
 import type { Complaint, ComplaintStatus } from "@/types";
 
@@ -49,6 +51,7 @@ export default function ComplaintDetails() {
       setComplaint(data);
     } catch {
       setError("Could not load this complaint.");
+      toast.error("Could not load this complaint.");
     } finally {
       setLoading(false);
     }
@@ -61,12 +64,14 @@ export default function ComplaintDetails() {
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteComplaint(id);
+    toast.success("Complaint deleted.");
     navigate("/complaints");
   }
 
   async function handleStatusConfirm(status: ComplaintStatus, resolutionNotes?: string) {
     if (!id) return;
     await updateComplaintStatus(id, { status, resolutionNotes });
+    toast.success(`Status updated to ${status.replace("_", " ")}.`);
     await fetchComplaint();
   }
 
@@ -81,7 +86,9 @@ export default function ComplaintDetails() {
         <Topbar title="Complaint Details" showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading complaint...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading complaint...
+            </div>
           ) : error || !complaint ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Complaint not found."}</span>

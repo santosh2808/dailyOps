@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Material } from "@/types";
 
 interface DeleteMaterialConfirmDialogProps {
@@ -34,6 +36,7 @@ export default function DeleteMaterialConfirmDialog({
       onOpenChange(false);
     } catch {
       setError("Could not delete this material. Please try again.");
+      toast.error("Could not delete this material.");
     } finally {
       setSubmitting(false);
     }
@@ -71,6 +74,7 @@ export default function DeleteMaterialConfirmDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>

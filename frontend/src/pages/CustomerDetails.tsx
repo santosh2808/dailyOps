@@ -9,6 +9,8 @@ import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import SalesOrderStatusBadge from "@/components/sales-orders/SalesOrderStatusBadge";
 import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/GenerateProformaInvoiceDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { getCustomer } from "@/api/customers";
 import { listQuotations, updateQuotationStatus, type QuotationApprovalErrorBody } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
@@ -75,6 +77,7 @@ export default function CustomerDetails() {
       setSalesOrders(salesOrdersRes.data);
     } catch {
       setError("Could not load this customer.");
+      toast.error("Could not load this customer.");
     } finally {
       setLoading(false);
     }
@@ -145,6 +148,7 @@ export default function CustomerDetails() {
     try {
       const result = await updateQuotationStatus(quotationId, "ACCEPTED");
       if (result.salesOrder?.id) {
+        toast.success("Sales Order generated.");
         navigate(`/sales-orders/${result.salesOrder.id}`);
         return;
       }
@@ -153,10 +157,11 @@ export default function CustomerDetails() {
       const body: QuotationApprovalErrorBody | { message?: string } | undefined = err?.response?.data;
       if (body && "code" in body && (body.code === "PRICE_BELOW_MINIMUM" || body.code === "APPROVAL_REQUIRED")) {
         setSalesOrderError({ message: body.message, quotationId });
+        toast.error(body.message);
       } else {
-        setSalesOrderError({
-          message: body?.message || "Could not generate the sales order. Please try again.",
-        });
+        const message = body?.message || "Could not generate the sales order. Please try again.";
+        setSalesOrderError({ message });
+        toast.error(message);
       }
     } finally {
       setGeneratingSalesOrder(false);
@@ -166,6 +171,7 @@ export default function CustomerDetails() {
   async function handleGenerateInvoiceConfirm(payload: Omit<ProformaInvoicePayload, "salesOrderId">) {
     if (!salesOrder) return;
     const created = await createProformaInvoice({ ...payload, salesOrderId: salesOrder.id });
+    toast.success("Proforma invoice generated.");
     await checkActiveInvoice();
     navigate(`/proforma-invoices/${created.id}`);
   }
@@ -173,6 +179,7 @@ export default function CustomerDetails() {
   async function handleGenerateJeoConfirm(payload: Omit<JeoPayload, "salesOrderId">) {
     if (!salesOrder) return;
     const created = await createJobExecutionOrder({ ...payload, salesOrderId: salesOrder.id });
+    toast.success("Job execution order generated.");
     await checkActiveJeo();
     navigate(`/job-execution-orders/${created.id}`);
   }
@@ -189,7 +196,9 @@ export default function CustomerDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading customer...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading customer...
+            </p>
           ) : error || !customer ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Customer not found."}</span>
@@ -254,7 +263,11 @@ export default function CustomerDetails() {
                         onClick={() => handleGenerateSalesOrder(pendingQuotation.id)}
                         disabled={generatingSalesOrder}
                       >
-                        <FileText className="mr-2 h-4 w-4" />
+                        {generatingSalesOrder ? (
+                          <Spinner className="mr-2 h-4 w-4" />
+                        ) : (
+                          <FileText className="mr-2 h-4 w-4" />
+                        )}
                         {generatingSalesOrder ? "Generating..." : "Generate Sales Order"}
                       </Button>
                     ) : (

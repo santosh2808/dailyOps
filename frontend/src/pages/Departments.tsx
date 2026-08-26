@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import DepartmentFormDialog from "@/components/departments/DepartmentFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createDepartment,
   deleteDepartment,
@@ -39,6 +41,7 @@ export default function Departments() {
       setDepartments(await listDepartments());
     } catch {
       setError("Failed to load departments.");
+      toast.error("Failed to load departments.");
     } finally {
       setLoading(false);
     }
@@ -75,6 +78,7 @@ export default function Departments() {
   async function handleDeleteConfirm() {
     if (!selected) return;
     await deleteDepartment(selected.id);
+    toast.success(`Department "${selected.name}" deleted.`);
     await fetchDepartments();
   }
 
@@ -109,7 +113,9 @@ export default function Departments() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    Loading departments...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading departments...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : departments.length === 0 ? (

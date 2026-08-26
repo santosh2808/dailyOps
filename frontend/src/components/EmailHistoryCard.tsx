@@ -1,5 +1,6 @@
 import { Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import type { EmailHistoryEntry } from "@/types";
 
 // Shared "Email History" section (requirement #16) — used on Sales Order,
@@ -20,7 +21,9 @@ export default function EmailHistoryCard({ loading, entries }: EmailHistoryCardP
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading email history...</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner /> Loading email history...
+          </p>
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">No emails sent yet.</p>
         ) : (

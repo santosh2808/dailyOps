@@ -11,6 +11,9 @@ import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSales
 import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/GenerateProformaInvoiceDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
+import { statusLabel } from "@/components/sales-orders/salesOrderOptions";
 import {
   deleteSalesOrder,
   getSalesOrder,
@@ -77,6 +80,7 @@ export default function SalesOrderDetails() {
       setSalesOrder(data);
     } catch {
       setError("Could not load this sales order.");
+      toast.error("Could not load this sales order.");
     } finally {
       setLoading(false);
     }
@@ -135,6 +139,7 @@ export default function SalesOrderDetails() {
   async function handleGenerateInvoiceConfirm(payload: Omit<ProformaInvoicePayload, "salesOrderId">) {
     if (!id) return;
     const created = await createProformaInvoice({ ...payload, salesOrderId: id });
+    toast.success("Proforma Invoice generated.");
     await checkActiveInvoice();
     navigate(`/proforma-invoices/${created.id}`);
   }
@@ -142,6 +147,7 @@ export default function SalesOrderDetails() {
   async function handleGenerateJeoConfirm(payload: Omit<JeoPayload, "salesOrderId">) {
     if (!id) return;
     const created = await createJobExecutionOrder({ ...payload, salesOrderId: id });
+    toast.success("Job Execution Order generated.");
     await checkActiveJeo();
     navigate(`/job-execution-orders/${created.id}`);
   }
@@ -149,12 +155,14 @@ export default function SalesOrderDetails() {
   async function handleStatusConfirm(status: SalesOrderStatus) {
     if (!id) return;
     await updateSalesOrderStatus(id, status);
+    toast.success(`Sales Order status updated to ${statusLabel(status)}.`);
     await fetchSalesOrder();
   }
 
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteSalesOrder(id);
+    toast.success("Sales Order deleted.");
     navigate("/sales-orders");
   }
 
@@ -170,7 +178,9 @@ export default function SalesOrderDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading sales order...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading sales order...
+            </div>
           ) : error || !salesOrder ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Sales order not found."}</span>

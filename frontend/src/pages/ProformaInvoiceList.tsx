@@ -17,6 +17,8 @@ import ProformaInvoiceFiltersBar, {
   emptyProformaInvoiceFilters,
   type ProformaInvoiceFilters,
 } from "@/components/proforma-invoices/ProformaInvoiceFiltersBar";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listProformaInvoices } from "@/api/proforma-invoices";
 import type { ProformaInvoice } from "@/types";
 
@@ -71,6 +73,7 @@ export default function ProformaInvoiceList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load proforma invoices.");
+      toast.error("Failed to load proforma invoices.");
     } finally {
       setLoading(false);
     }
@@ -167,7 +170,9 @@ export default function ProformaInvoiceList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Loading proforma invoices...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading proforma invoices...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : invoices.length === 0 ? (

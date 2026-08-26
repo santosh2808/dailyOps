@@ -38,6 +38,8 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SOURCE_OPTIONS, sourceLabel } from "@/components/leads/leadOptions";
@@ -476,6 +478,7 @@ export default function Dashboard() {
       setTodaysFollowUps(followUps);
     } catch {
       setError("Failed to load dashboard data.");
+      toast.error("Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -689,7 +692,9 @@ export default function Dashboard() {
                   Colored by revenue. Click a state to see its sales orders (with the sales executive on each).
                 </p>
                 {filteredLoading && salesByState.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Loading...</p>
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner /> Loading...
+                  </p>
                 ) : (
                   <IndiaSalesMap
                     data={salesByState}
@@ -746,7 +751,9 @@ export default function Dashboard() {
               <CardContent>
                 {revenueLoading ? (
                   <div className="flex h-[300px] items-center justify-center">
-                    <p className="text-sm text-muted-foreground">Loading...</p>
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Spinner /> Loading...
+                    </p>
                   </div>
                 ) : (
                   // The chart itself always renders — the backend always

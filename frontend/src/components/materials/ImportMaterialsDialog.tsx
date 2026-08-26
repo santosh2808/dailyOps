@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { importMaterials } from "@/api/materials";
 import type { MaterialImportResult } from "@/types";
 
@@ -42,9 +44,11 @@ export default function ImportMaterialsDialog({
     try {
       const res = await importMaterials(file);
       setResult(res);
+      toast.success(`Imported: ${res.created} created, ${res.updated} updated.`);
       await onImported();
     } catch {
       setError("Could not import this file. Please check its format and try again.");
+      toast.error("Could not import this file. Please check its format and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +105,7 @@ export default function ImportMaterialsDialog({
             Close
           </Button>
           <Button type="button" onClick={handleImport} disabled={!file || submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Importing..." : "Import"}
           </Button>
         </DialogFooter>

@@ -13,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import EditEmailTemplateDialog from "@/components/email-templates/EditEmailTemplateDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listEmailTemplates } from "@/api/email-templates";
 import type { EmailTemplate } from "@/types";
 
@@ -37,6 +39,7 @@ export default function EmailTemplates() {
       setTemplates(await listEmailTemplates());
     } catch {
       setError("Could not load email templates.");
+      toast.error("Could not load email templates.");
     } finally {
       setLoading(false);
     }
@@ -74,7 +77,9 @@ export default function EmailTemplates() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Loading email templates...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading email templates...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : templates.length === 0 ? (

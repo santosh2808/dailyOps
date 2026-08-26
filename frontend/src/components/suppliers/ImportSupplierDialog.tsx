@@ -18,6 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { importSuppliers, previewSupplierImport } from "@/api/suppliers";
 import type { SupplierImportRowResult, SupplierImportSummary } from "@/types";
 
@@ -84,9 +86,11 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
       const result = await importSuppliers(validRows);
       setFinalResult(result);
       setStep("summary");
+      toast.success(`Imported ${result.createdCount} of ${result.totalRows} suppliers.`);
       await onImported();
     } catch {
       setError("Something went wrong while importing. Please try again.");
+      toast.error("Something went wrong while importing suppliers.");
     } finally {
       setSubmitting(false);
     }
@@ -187,6 +191,7 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
                 Cancel
               </Button>
               <Button type="button" onClick={handlePreview} disabled={!file || submitting}>
+                {submitting && <Spinner className="mr-2 h-4 w-4" />}
                 {submitting ? "Reading file..." : "Preview"}
               </Button>
             </>
@@ -201,6 +206,7 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
                 onClick={handleImport}
                 disabled={submitting || !preview || preview.validCount === 0}
               >
+                {submitting && <Spinner className="mr-2 h-4 w-4" />}
                 {submitting
                   ? "Importing..."
                   : `Import ${preview?.validCount ?? 0} Valid Row${preview?.validCount === 1 ? "" : "s"}`}

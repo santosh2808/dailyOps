@@ -11,6 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 
 // Force Password Change on First Login: ProtectedRoute redirects here for
 // as long as user.mustChangePassword is true (seeded admin's very first
@@ -44,9 +46,11 @@ export default function ChangePassword() {
     setLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
+      toast.success("Password updated successfully.");
       navigate("/dashboard");
     } catch {
       setError("Current password is incorrect");
+      toast.error("Current password is incorrect.");
     } finally {
       setLoading(false);
     }
@@ -100,6 +104,7 @@ export default function ChangePassword() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Spinner className="mr-2 h-4 w-4" />}
               {loading ? "Updating..." : "Update Password"}
             </Button>
             <button

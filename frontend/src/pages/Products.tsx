@@ -17,6 +17,8 @@ import {
 import ProductFormDialog from "@/components/products/ProductFormDialog";
 import ProductViewDialog from "@/components/products/ProductViewDialog";
 import DeactivateProductConfirmDialog from "@/components/products/DeactivateProductConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   createProduct,
   deactivateProduct,
@@ -79,6 +81,7 @@ export default function Products() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load products.");
+      toast.error("Failed to load products.");
     } finally {
       setLoading(false);
     }
@@ -133,6 +136,7 @@ export default function Products() {
   async function handleDeactivateConfirm() {
     if (!selectedProduct) return;
     await deactivateProduct(selectedProduct.id);
+    toast.success(`Product "${selectedProduct.name}" deactivated.`);
     await fetchProducts();
   }
 
@@ -191,7 +195,9 @@ export default function Products() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    Loading products...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading products...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : products.length === 0 ? (

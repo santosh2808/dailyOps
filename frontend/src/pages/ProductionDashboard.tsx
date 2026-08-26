@@ -22,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { STATUS_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
 import { getProductionDashboard, updateJeoStatus } from "@/api/job-execution-orders";
 import type { JeoDashboardResponse, JeoStatus } from "@/types";
@@ -63,6 +65,7 @@ export default function ProductionDashboard() {
       setData(res);
     } catch {
       setError("Failed to load the production dashboard.");
+      toast.error("Failed to load the production dashboard.");
     } finally {
       setLoading(false);
     }
@@ -80,9 +83,11 @@ export default function ProductionDashboard() {
     setUpdatingId(id);
     try {
       await updateJeoStatus(id, status);
+      toast.success("Job execution order status updated.");
       await fetchDashboard();
     } catch {
       setError("Could not update that JEO's status. Please try again.");
+      toast.error("Could not update that JEO's status.");
     } finally {
       setUpdatingId(null);
     }
@@ -152,7 +157,9 @@ export default function ProductionDashboard() {
                   {loading ? (
                     <TableRow>
                       <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        Loading active job execution orders...
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading active job execution orders...
+                        </span>
                       </TableCell>
                     </TableRow>
                   ) : !data || data.activeOrders.length === 0 ? (
@@ -184,18 +191,21 @@ export default function ProductionDashboard() {
                           <TableCell>{quantity || "—"}</TableCell>
                           <TableCell>{jeo.assignedTo ?? "—"}</TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              className="w-44"
-                              value={jeo.status}
-                              disabled={updatingId === jeo.id}
-                              onChange={(e) => handleStatusChange(jeo.id, e.target.value as JeoStatus)}
-                            >
-                              {STATUS_OPTIONS.map((s) => (
-                                <option key={s.value} value={s.value}>
-                                  {s.label}
-                                </option>
-                              ))}
-                            </Select>
+                            <div className="flex items-center gap-2">
+                              <Select
+                                className="w-44"
+                                value={jeo.status}
+                                disabled={updatingId === jeo.id}
+                                onChange={(e) => handleStatusChange(jeo.id, e.target.value as JeoStatus)}
+                              >
+                                {STATUS_OPTIONS.map((s) => (
+                                  <option key={s.value} value={s.value}>
+                                    {s.label}
+                                  </option>
+                                ))}
+                              </Select>
+                              {updatingId === jeo.id && <Spinner className="h-4 w-4" />}
+                            </div>
                           </TableCell>
                           <TableCell>{formatDate(jeo.deliveryDate)}</TableCell>
                         </TableRow>

@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listDepartments } from "@/api/departments";
 import { listRoles } from "@/api/roles";
 import type { RbacUser, Department, Role } from "@/types";
@@ -93,7 +95,10 @@ export default function UserFormDialog({
         setDepartments(deps);
         setRoles(rls);
       })
-      .catch(() => setSubmitError("Failed to load departments/roles."))
+      .catch(() => {
+        setSubmitError("Failed to load departments/roles.");
+        toast.error("Failed to load departments/roles.");
+      })
       .finally(() => setLoadingOptions(false));
   }, [open, user]);
 
@@ -144,9 +149,11 @@ export default function UserFormDialog({
       if (isEdit) payload.isActive = form.isActive;
 
       await onSubmit(payload);
+      toast.success(isEdit ? "User updated successfully." : "User created successfully.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -244,8 +251,8 @@ export default function UserFormDialog({
             <Label>Roles</Label>
             <div className="max-h-48 overflow-y-auto rounded-md border p-3">
               {loadingOptions ? (
-                <p className="py-2 text-center text-sm text-muted-foreground">
-                  Loading roles...
+                <p className="flex items-center justify-center gap-2 py-2 text-center text-sm text-muted-foreground">
+                  <Spinner /> Loading roles...
                 </p>
               ) : roles.length === 0 ? (
                 <p className="py-2 text-center text-sm text-muted-foreground">
@@ -279,6 +286,7 @@ export default function UserFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add User"}
             </Button>
           </DialogFooter>

@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { updateEmailTemplate } from "@/api/email-templates";
 import type { EmailTemplate } from "@/types";
 
@@ -51,12 +53,14 @@ export default function EditEmailTemplateDialog({
     setError("");
     try {
       await updateEmailTemplate(template.id, { name, subject, bodyHtml, isActive });
+      toast.success("Email template saved.");
       onSaved();
       onOpenChange(false);
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message || "Could not save this email template. Please try again.",
-      );
+      const message =
+        err?.response?.data?.message || "Could not save this email template. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -120,6 +124,7 @@ export default function EditEmailTemplateDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleSave} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Saving..." : "Save Template"}
           </Button>
         </DialogFooter>

@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Product, ProductTechnicalSpec } from "@/types";
 import type { ProductPayload } from "@/api/products";
 
@@ -212,9 +214,11 @@ export default function ProductFormDialog({
           : undefined,
         technicalSpec: buildTechnicalSpec(form.spec, form.scopeRows),
       });
+      toast.success(isEdit ? "Product updated successfully." : "Product created successfully.");
       onOpenChange(false);
     } catch {
       setSubmitError("Something went wrong. Please try again.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -448,6 +452,7 @@ export default function ProductFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
               {submitting ? "Saving..." : isEdit ? "Save Changes" : "Add Product"}
             </Button>
           </DialogFooter>

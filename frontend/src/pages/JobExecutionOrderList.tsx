@@ -18,6 +18,8 @@ import JeoFiltersBar, {
   emptyJeoFilters,
   type JeoFilters,
 } from "@/components/job-execution-orders/JeoFiltersBar";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
 
@@ -76,6 +78,7 @@ export default function JobExecutionOrderList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load job execution orders.");
+      toast.error("Failed to load job execution orders.");
     } finally {
       setLoading(false);
     }
@@ -165,7 +168,9 @@ export default function JobExecutionOrderList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Loading job execution orders...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading job execution orders...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : jeos.length === 0 ? (

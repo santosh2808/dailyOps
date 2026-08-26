@@ -18,6 +18,8 @@ import SalesOrderFiltersBar, {
   type SalesOrderFilters,
 } from "@/components/sales-orders/SalesOrderFiltersBar";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
 import type { SalesOrder, SalesOrderStatus } from "@/types";
 
@@ -100,6 +102,7 @@ export default function SalesOrderList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load sales orders.");
+      toast.error("Failed to load sales orders.");
     } finally {
       setLoading(false);
     }
@@ -145,6 +148,7 @@ export default function SalesOrderList() {
   async function handleDeleteConfirm() {
     if (!selectedSalesOrder) return;
     await deleteSalesOrder(selectedSalesOrder.id);
+    toast.success(`Sales Order "${selectedSalesOrder.salesOrderNumber}" deleted.`);
     await fetchSalesOrders();
   }
 
@@ -253,7 +257,9 @@ export default function SalesOrderList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    Loading sales orders...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading sales orders...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : salesOrders.length === 0 ? (

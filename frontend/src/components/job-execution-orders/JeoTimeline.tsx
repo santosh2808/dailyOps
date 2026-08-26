@@ -1,5 +1,6 @@
 import { Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/ui/spinner";
 import type { JeoTimelineStep } from "@/types";
 
 function formatDateTime(value?: string | null) {
@@ -20,7 +21,11 @@ interface JeoTimelineProps {
 // for exactly which steps fall into each case.
 export default function JeoTimeline({ steps, loading }: JeoTimelineProps) {
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading timeline...</p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Spinner /> Loading timeline...
+      </p>
+    );
   }
 
   if (!steps.length) {

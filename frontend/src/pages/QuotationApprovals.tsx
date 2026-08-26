@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { decideQuotationApproval, listQuotationApprovalRequests } from "@/api/quotations";
 import type { QuotationApprovalRequest } from "@/types";
 
@@ -46,6 +48,7 @@ export default function QuotationApprovals() {
       setRequests(await listQuotationApprovalRequests(statusFilter || undefined));
     } catch {
       setError("Could not load approval requests.");
+      toast.error("Could not load approval requests.");
     } finally {
       setLoading(false);
     }
@@ -60,12 +63,13 @@ export default function QuotationApprovals() {
     setError("");
     try {
       await decideQuotationApproval(requestId, approve);
+      toast.success(approve ? "Quotation approved." : "Quotation rejected.");
       await fetchRequests();
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          "Could not record this decision. Please try again.",
-      );
+      const message =
+        err?.response?.data?.message || "Could not record this decision. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setDecidingId(null);
     }
@@ -111,7 +115,9 @@ export default function QuotationApprovals() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    Loading approval requests...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading approval requests...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : requests.length === 0 ? (
@@ -161,7 +167,11 @@ export default function QuotationApprovals() {
                             disabled={decidingId === request.id}
                             onClick={() => handleDecide(request.id, true)}
                           >
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            {decidingId === request.id ? (
+                              <Spinner className="h-4 w-4" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            )}
                           </Button>
                           <Button
                             variant="ghost"
@@ -170,7 +180,11 @@ export default function QuotationApprovals() {
                             disabled={decidingId === request.id}
                             onClick={() => handleDecide(request.id, false)}
                           >
-                            <XCircle className="h-4 w-4 text-destructive" />
+                            {decidingId === request.id ? (
+                              <Spinner className="h-4 w-4" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            )}
                           </Button>
                         </div>
                       ) : (

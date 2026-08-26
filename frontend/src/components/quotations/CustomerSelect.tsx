@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Select } from "@/components/ui/select";
+import { toast } from "@/lib/toast";
 import { listCustomers } from "@/api/customers";
 import type { Customer } from "@/types";
 
@@ -23,7 +24,10 @@ export default function CustomerSelect({ value, onChange, id }: CustomerSelectPr
         const res = await listCustomers({ page: 1, limit: 100 });
         if (!cancelled) setCustomers(res.data);
       } catch {
-        if (!cancelled) setLoadError("Could not load the customer list.");
+        if (!cancelled) {
+          setLoadError("Could not load the customer list.");
+          toast.error("Could not load the customer list.");
+        }
       }
     }
     loadCustomers();

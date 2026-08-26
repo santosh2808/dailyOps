@@ -18,6 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { importLeads, previewLeadImport } from "@/api/leads";
 import type { LeadImportRowResult, LeadImportSummary } from "@/types";
 
@@ -64,7 +66,9 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
       setPreview(result);
       setStep("preview");
     } catch {
-      setError("Could not read this file. Please check its format and try again.");
+      const message = "Could not read this file. Please check its format and try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -80,9 +84,12 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
       const result = await importLeads(validRows);
       setFinalResult(result);
       setStep("summary");
+      toast.success(`Imported ${result.createdCount} of ${result.totalRows} leads.`);
       await onImported();
     } catch {
-      setError("Something went wrong while importing. Please try again.");
+      const message = "Something went wrong while importing. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -183,6 +190,7 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
                 Cancel
               </Button>
               <Button type="button" onClick={handlePreview} disabled={!file || submitting}>
+                {submitting && <Spinner className="mr-2 h-4 w-4" />}
                 {submitting ? "Reading file..." : "Preview"}
               </Button>
             </>
@@ -197,6 +205,7 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
                 onClick={handleImport}
                 disabled={submitting || !preview || preview.validCount === 0}
               >
+                {submitting && <Spinner className="mr-2 h-4 w-4" />}
                 {submitting
                   ? "Importing..."
                   : `Import ${preview?.validCount ?? 0} Valid Row${preview?.validCount === 1 ? "" : "s"}`}

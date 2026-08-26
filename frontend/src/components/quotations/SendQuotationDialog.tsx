@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { sendQuotation, type SendQuotationResult } from "@/api/quotations";
 import type { Quotation } from "@/types";
 
@@ -60,12 +62,14 @@ export default function SendQuotationDialog({
         recipientEmail: recipientEmail.trim(),
         ccEmails: ccEmails.trim() || undefined,
       });
+      toast.success("Quotation sent.");
       onSent(result);
       onOpenChange(false);
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message || "Could not send the quotation. Please try again.",
-      );
+      const message =
+        err?.response?.data?.message || "Could not send the quotation. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -119,6 +123,7 @@ export default function SendQuotationDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Sending..." : "Send Quotation"}
           </Button>
         </DialogFooter>

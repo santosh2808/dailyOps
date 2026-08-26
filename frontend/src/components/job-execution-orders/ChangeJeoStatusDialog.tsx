@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { STATUS_OPTIONS } from "./jeoOptions";
 import type { JeoStatus, JobExecutionOrder } from "@/types";
 
@@ -51,6 +53,7 @@ export default function ChangeJeoStatusDialog({
       onOpenChange(false);
     } catch {
       setError("Could not update the JEO status. Please try again.");
+      toast.error("Could not update the JEO status.");
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +104,7 @@ export default function ChangeJeoStatusDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Updating..." : "Update Status"}
           </Button>
         </DialogFooter>

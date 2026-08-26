@@ -18,6 +18,8 @@ import QuotationFiltersBar, {
   type QuotationFilters,
 } from "@/components/quotations/QuotationFiltersBar";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
 import type { Quotation, QuotationStatus } from "@/types";
 
@@ -89,6 +91,7 @@ export default function QuotationList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load quotations.");
+      toast.error("Failed to load quotations.");
     } finally {
       setLoading(false);
     }
@@ -134,6 +137,7 @@ export default function QuotationList() {
   async function handleDeleteConfirm() {
     if (!selectedQuotation) return;
     await deleteQuotation(selectedQuotation.id);
+    toast.success(`Quotation "${selectedQuotation.quotationNumber}" deleted.`);
     await fetchQuotations();
   }
 
@@ -196,7 +200,9 @@ export default function QuotationList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Loading quotations...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading quotations...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : quotations.length === 0 ? (

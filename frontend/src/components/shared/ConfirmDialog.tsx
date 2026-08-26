@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 
 // Generic confirm dialog shared across the RBAC admin screens (Departments,
 // Roles, Users) so each module doesn't need its own near-identical
@@ -45,6 +47,7 @@ export default function ConfirmDialog({
       onOpenChange(false);
     } catch {
       setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -75,6 +78,7 @@ export default function ConfirmDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? confirmingLabel : confirmLabel}
           </Button>
         </DialogFooter>

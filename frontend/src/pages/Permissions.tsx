@@ -10,6 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { listPermissions } from "@/api/permissions";
 import type { Permission } from "@/types";
 
@@ -26,6 +28,7 @@ export default function Permissions() {
         setPermissions(await listPermissions());
       } catch {
         setError("Failed to load permissions.");
+        toast.error("Failed to load permissions.");
       } finally {
         setLoading(false);
       }
@@ -65,7 +68,9 @@ export default function Permissions() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    Loading permissions...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading permissions...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : permissions.length === 0 ? (

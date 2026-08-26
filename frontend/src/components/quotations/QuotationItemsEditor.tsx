@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "@/lib/toast";
 import { listProducts } from "@/api/products";
 import type { QuotationItemPayload } from "@/api/quotations";
 import type { Product } from "@/types";
@@ -56,7 +57,10 @@ export default function QuotationItemsEditor({ value, onChange }: QuotationItems
         const res = await listProducts({ page: 1, limit: 100 });
         if (!cancelled) setCatalog(res.data);
       } catch {
-        if (!cancelled) setLoadError("Could not load the product catalog.");
+        if (!cancelled) {
+          setLoadError("Could not load the product catalog.");
+          toast.error("Could not load the product catalog.");
+        }
       }
     }
     loadCatalog();

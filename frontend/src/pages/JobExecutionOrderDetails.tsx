@@ -11,6 +11,8 @@ import ChangeJeoStatusDialog from "@/components/job-execution-orders/ChangeJeoSt
 import ProductionChecklistCard from "@/components/job-execution-orders/ProductionChecklistCard";
 import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   getJeoEmailHistory,
   getJeoTimeline,
@@ -74,6 +76,7 @@ export default function JobExecutionOrderDetails() {
       setJeo(data);
     } catch {
       setError("Could not load this job execution order.");
+      toast.error("Could not load this job execution order.");
     } finally {
       setLoading(false);
     }
@@ -112,13 +115,18 @@ export default function JobExecutionOrderDetails() {
   async function handleStatusConfirm(status: JeoStatus) {
     if (!id) return;
     await updateJeoStatus(id, status);
+    toast.success("Job execution order status updated.");
     await Promise.all([fetchJeo(), fetchTimeline()]);
   }
 
   async function handleChecklistToggle(key: ChecklistKey, value: boolean) {
     if (!id) return;
-    await updateProductionChecklist(id, { [key]: value });
-    await Promise.all([fetchJeo(), fetchTimeline()]);
+    try {
+      await updateProductionChecklist(id, { [key]: value });
+      await Promise.all([fetchJeo(), fetchTimeline()]);
+    } catch {
+      toast.error("Could not update the checklist. Please try again.");
+    }
   }
 
   // Quick-action shortcuts layered on top of the generic Change Status
@@ -133,7 +141,10 @@ export default function JobExecutionOrderDetails() {
     try {
       await updateProductionChecklist(id, { materialIssued: true, assemblyStarted: true });
       await updateJeoStatus(id, "ASSEMBLY_STARTED");
+      toast.success("Production started.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
+    } catch {
+      toast.error("Could not start production. Please try again.");
     } finally {
       setActionBusy(false);
     }
@@ -145,7 +156,10 @@ export default function JobExecutionOrderDetails() {
     try {
       await updateProductionChecklist(id, { qcPassed: true });
       await updateJeoStatus(id, "QC");
+      toast.success("Marked QC complete.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
+    } catch {
+      toast.error("Could not mark QC complete. Please try again.");
     } finally {
       setActionBusy(false);
     }
@@ -157,7 +171,10 @@ export default function JobExecutionOrderDetails() {
     try {
       await updateProductionChecklist(id, { packed: true, readyForDispatch: true });
       await updateJeoStatus(id, "READY_FOR_DISPATCH");
+      toast.success("Marked ready for dispatch.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
+    } catch {
+      toast.error("Could not update to ready for dispatch. Please try again.");
     } finally {
       setActionBusy(false);
     }
@@ -180,7 +197,9 @@ export default function JobExecutionOrderDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading job execution order...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading job execution order...
+            </p>
           ) : error || !jeo ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Job execution order not found."}</span>
@@ -201,19 +220,31 @@ export default function JobExecutionOrderDetails() {
                 <div className="flex flex-wrap gap-2">
                   {(jeo.status === "PENDING" || jeo.status === "MATERIAL_READY") && (
                     <Button onClick={handleStartProduction} disabled={actionBusy}>
-                      <PlayCircle className="mr-2 h-4 w-4" />
+                      {actionBusy ? (
+                        <Spinner className="mr-2 h-4 w-4" />
+                      ) : (
+                        <PlayCircle className="mr-2 h-4 w-4" />
+                      )}
                       Start Production
                     </Button>
                   )}
                   {jeo.status === "ASSEMBLY_STARTED" && (
                     <Button onClick={handleMarkQcComplete} disabled={actionBusy}>
-                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      {actionBusy ? (
+                        <Spinner className="mr-2 h-4 w-4" />
+                      ) : (
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                      )}
                       Mark QC Complete
                     </Button>
                   )}
                   {jeo.status === "QC" && (
                     <Button onClick={handleReadyForDispatch} disabled={actionBusy}>
-                      <Truck className="mr-2 h-4 w-4" />
+                      {actionBusy ? (
+                        <Spinner className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Truck className="mr-2 h-4 w-4" />
+                      )}
                       Ready For Dispatch
                     </Button>
                   )}

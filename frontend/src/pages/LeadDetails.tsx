@@ -12,6 +12,8 @@ import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
 import { generateQuotationFromLead } from "@/api/quotations";
 import type { Lead, LeadStatus } from "@/types";
@@ -75,6 +77,7 @@ export default function LeadDetails() {
       setLead(data);
     } catch {
       setError("Could not load this lead.");
+      toast.error("Could not load this lead.");
     } finally {
       setLoading(false);
     }
@@ -87,6 +90,7 @@ export default function LeadDetails() {
   async function handleStatusConfirm(status: LeadStatus, remarks?: string) {
     if (!id) return;
     await updateLeadStatus(id, status, remarks);
+    toast.success("Lead status updated.");
     await fetchLead();
     setHistoryRefreshKey((k) => k + 1);
   }
@@ -94,6 +98,7 @@ export default function LeadDetails() {
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteLead(id);
+    toast.success("Lead deleted.");
     navigate("/leads");
   }
 
@@ -106,6 +111,7 @@ export default function LeadDetails() {
   async function handleConvertConfirm() {
     if (!id) return;
     const { customer } = await convertLeadToCustomer(id);
+    toast.success("Lead converted to customer.");
     navigate(`/customers/${customer.id}`);
   }
 
@@ -119,11 +125,13 @@ export default function LeadDetails() {
     setGenerateError("");
     try {
       const quotation = await generateQuotationFromLead(id);
+      toast.success("Quotation generated.");
       navigate(`/quotations/${quotation.id}`);
     } catch (err: any) {
-      setGenerateError(
-        err?.response?.data?.message || "Could not generate a quotation for this lead. Please try again.",
-      );
+      const message =
+        err?.response?.data?.message || "Could not generate a quotation for this lead. Please try again.";
+      setGenerateError(message);
+      toast.error(message);
       setGeneratingQuotation(false);
     }
   }
@@ -164,7 +172,9 @@ export default function LeadDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading lead...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading lead...
+            </div>
           ) : error || !lead ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Lead not found."}</span>
@@ -218,7 +228,10 @@ export default function LeadDetails() {
                         variant={nextAction.label === "Waiting for Customer Response" ? "outline" : "default"}
                       >
                         {generatingQuotation && nextAction.label === "Generate Quotation" ? (
-                          "Generating..."
+                          <>
+                            <Spinner className="mr-2 h-4 w-4" />
+                            Generating...
+                          </>
                         ) : (
                           <>
                             <FileText className="mr-2 h-4 w-4" />

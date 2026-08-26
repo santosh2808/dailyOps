@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
@@ -188,7 +190,9 @@ export default function QuotationForm() {
           }))
         );
       } catch {
-        setSubmitError("Could not load this quotation.");
+        const message = "Could not load this quotation.";
+        setSubmitError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -261,13 +265,17 @@ export default function QuotationForm() {
     try {
       if (isEdit && id) {
         await updateQuotation(id, payload);
+        toast.success("Quotation updated successfully.");
         navigate(`/quotations/${id}`);
       } else {
         const created = await createQuotation(payload);
+        toast.success("Quotation created successfully.");
         navigate(`/quotations/${created.id}`);
       }
     } catch {
-      setSubmitError("Something went wrong while saving this quotation. Please try again.");
+      const message = "Something went wrong while saving this quotation. Please try again.";
+      setSubmitError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -290,7 +298,9 @@ export default function QuotationForm() {
         <Topbar title={isEdit ? "Edit Quotation" : "Create Quotation"} />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading quotation...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading quotation...
+            </p>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
               <Card>
@@ -482,6 +492,7 @@ export default function QuotationForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Save Draft"}
                 </Button>
               </div>

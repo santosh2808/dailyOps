@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import type { Quotation } from "@/types";
 
 interface DeleteQuotationConfirmDialogProps {
@@ -34,6 +36,7 @@ export default function DeleteQuotationConfirmDialog({
       onOpenChange(false);
     } catch {
       setError("Could not delete this quotation. Please try again.");
+      toast.error("Could not delete this quotation.");
     } finally {
       setSubmitting(false);
     }
@@ -70,6 +73,7 @@ export default function DeleteQuotationConfirmDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>

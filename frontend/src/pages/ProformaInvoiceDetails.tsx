@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaInvoiceStatusBadge";
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   getProformaInvoice,
   getProformaInvoiceEmailHistory,
@@ -59,6 +61,7 @@ export default function ProformaInvoiceDetails() {
       setInvoice(data);
     } catch {
       setError("Could not load this proforma invoice.");
+      toast.error("Could not load this proforma invoice.");
     } finally {
       setLoading(false);
     }
@@ -80,6 +83,7 @@ export default function ProformaInvoiceDetails() {
   async function handleStatusConfirm(status: ProformaInvoiceStatus) {
     if (!id) return;
     await updateProformaInvoiceStatus(id, status);
+    toast.success("Invoice status updated.");
     await fetchInvoice();
   }
 
@@ -100,7 +104,9 @@ export default function ProformaInvoiceDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading proforma invoice...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading proforma invoice...
+            </p>
           ) : error || !invoice ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Proforma invoice not found."}</span>

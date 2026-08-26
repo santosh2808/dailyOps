@@ -27,6 +27,8 @@ import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
 
@@ -99,6 +101,7 @@ export default function LeadList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load leads.");
+      toast.error("Failed to load leads.");
     } finally {
       setLoading(false);
     }
@@ -144,6 +147,7 @@ export default function LeadList() {
   async function handleDeleteConfirm() {
     if (!selectedLead) return;
     await deleteLead(selectedLead.id);
+    toast.success(`Lead "${selectedLead.leadNumber}" deleted.`);
     await fetchLeads();
   }
 
@@ -153,6 +157,7 @@ export default function LeadList() {
       await downloadLeadImportTemplate();
     } catch {
       setError("Failed to download the import template.");
+      toast.error("Failed to download the import template.");
     } finally {
       setDownloadingTemplate(false);
     }
@@ -168,7 +173,11 @@ export default function LeadList() {
             <LeadFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-                <Download className="mr-2 h-4 w-4" />
+                {downloadingTemplate ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
                 {downloadingTemplate ? "Downloading..." : "Download Template"}
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -226,7 +235,9 @@ export default function LeadList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">
-                    Loading leads...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading leads...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : leads.length === 0 ? (

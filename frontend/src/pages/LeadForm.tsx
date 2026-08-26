@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { createLead, getLead, updateLead, type LeadPayload, type LeadProductPayload } from "@/api/leads";
 import type { LeadPriority, LeadSource } from "@/types";
 
@@ -124,6 +126,7 @@ export default function LeadForm() {
         );
       } catch {
         setSubmitError("Could not load this lead.");
+        toast.error("Could not load this lead.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -202,13 +205,17 @@ export default function LeadForm() {
     try {
       if (isEdit && id) {
         await updateLead(id, payload);
+        toast.success("Lead updated successfully.");
         navigate(`/leads/${id}`);
       } else {
         const created = await createLead(payload);
+        toast.success("Lead created successfully.");
         navigate(`/leads/${created.id}`);
       }
     } catch {
-      setSubmitError("Something went wrong while saving this lead. Please try again.");
+      const message = "Something went wrong while saving this lead. Please try again.";
+      setSubmitError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -220,7 +227,9 @@ export default function LeadForm() {
         <Topbar title={isEdit ? "Edit Lead" : "Create Lead"} />
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading lead...</p>
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Spinner /> Loading lead...
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
               <Card>
@@ -458,6 +467,7 @@ export default function LeadForm() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
+                  {submitting && <Spinner className="mr-2 h-4 w-4" />}
                   {submitting ? "Saving..." : isEdit ? "Save Changes" : "Create Lead"}
                 </Button>
               </div>

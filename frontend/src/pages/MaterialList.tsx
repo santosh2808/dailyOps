@@ -16,6 +16,8 @@ import {
 import MaterialStockBadge from "@/components/materials/MaterialStockBadge";
 import DeleteMaterialConfirmDialog from "@/components/materials/DeleteMaterialConfirmDialog";
 import ImportMaterialsDialog from "@/components/materials/ImportMaterialsDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
 import type { Material } from "@/types";
 
@@ -81,6 +83,7 @@ export default function MaterialList() {
       setTotalPages(res.totalPages);
     } catch {
       setError("Failed to load materials.");
+      toast.error("Failed to load materials.");
     } finally {
       setLoading(false);
     }
@@ -106,6 +109,7 @@ export default function MaterialList() {
   async function handleDeleteConfirm() {
     if (!selectedMaterial) return;
     await deactivateMaterial(selectedMaterial.id);
+    toast.success(`Material "${selectedMaterial.materialCode}" deleted.`);
     await fetchMaterials();
   }
 
@@ -113,8 +117,10 @@ export default function MaterialList() {
     setExporting(true);
     try {
       await exportMaterials();
+      toast.success("Materials exported.");
     } catch {
       setError("Failed to export materials.");
+      toast.error("Failed to export materials.");
     } finally {
       setExporting(false);
     }
@@ -155,7 +161,11 @@ export default function MaterialList() {
                 Import Excel
               </Button>
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
-                <Download className="mr-2 h-4 w-4" />
+                {exporting ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
                 {exporting ? "Exporting..." : "Export Excel"}
               </Button>
               <Button onClick={() => navigate("/materials/new")}>
@@ -184,7 +194,9 @@ export default function MaterialList() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    Loading materials...
+                    <span className="inline-flex items-center gap-2">
+                      <Spinner /> Loading materials...
+                    </span>
                   </TableCell>
                 </TableRow>
               ) : materials.length === 0 ? (

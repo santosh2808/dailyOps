@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import {
   Table,
   TableBody,
@@ -83,10 +85,10 @@ export default function ChangeQuotationStatusDialog({
       if (body?.code === "PRICE_BELOW_MINIMUM" || body?.code === "APPROVAL_REQUIRED") {
         setBlockedBy(body);
       } else {
-        setError(
-          body?.message ||
-            "Could not update the quotation status. Please try again.",
-        );
+        const message =
+          body?.message || "Could not update the quotation status. Please try again.";
+        setError(message);
+        toast.error(message);
       }
     } finally {
       setSubmitting(false);
@@ -106,11 +108,12 @@ export default function ChangeQuotationStatusDialog({
     try {
       await requestQuotationApproval(quotation.id, requestReason || undefined);
       setApprovalRequested(true);
+      toast.success("Approval request submitted.");
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          "Could not submit the approval request. Please try again.",
-      );
+      const message =
+        err?.response?.data?.message || "Could not submit the approval request. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setRequestingApproval(false);
     }
@@ -167,6 +170,7 @@ export default function ChangeQuotationStatusDialog({
                 Cancel
               </Button>
               <Button type="button" onClick={handleConfirm} disabled={submitting}>
+                {submitting && <Spinner className="mr-2 h-4 w-4" />}
                 {submitting ? "Updating..." : "Update Status"}
               </Button>
             </DialogFooter>
@@ -237,6 +241,7 @@ export default function ChangeQuotationStatusDialog({
                 </Button>
               )}
               <Button type="button" onClick={handleRequestApproval} disabled={requestingApproval}>
+                {requestingApproval && <Spinner className="mr-2 h-4 w-4" />}
                 {requestingApproval ? "Submitting..." : "Request Approval"}
               </Button>
             </DialogFooter>

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import MaterialStockBadge from "@/components/materials/MaterialStockBadge";
 import DeleteMaterialConfirmDialog from "@/components/materials/DeleteMaterialConfirmDialog";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/lib/toast";
 import { deactivateMaterial, getMaterial } from "@/api/materials";
 import type { Material } from "@/types";
 
@@ -51,6 +53,7 @@ export default function MaterialDetails() {
       setMaterial(data);
     } catch {
       setError("Could not load this material.");
+      toast.error("Could not load this material.");
     } finally {
       setLoading(false);
     }
@@ -63,6 +66,7 @@ export default function MaterialDetails() {
   async function handleDeleteConfirm() {
     if (!id) return;
     await deactivateMaterial(id);
+    toast.success("Material deleted.");
     navigate("/materials");
   }
 
@@ -78,7 +82,9 @@ export default function MaterialDetails() {
           </Button>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading material...</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Loading material...
+            </p>
           ) : error || !material ? (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span>{error || "Material not found."}</span>
