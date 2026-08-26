@@ -7,7 +7,7 @@
    index.html rather than an @import here — see the comment there. */
 
 .volt-scene {
-  --paper: #f4efe5;
+  --paper: #ffffff;
   --ink: #23252d;
   --accent: #ED3525;
   --accent-deep: #c22a1c;
