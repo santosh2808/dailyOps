@@ -5,7 +5,10 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("dailyops_token");
+  // Login's "Remember me" checkbox decides which of these actually has the
+  // token (see AuthContext.login()) — check both so either case works.
+  const token =
+    localStorage.getItem("dailyops_token") || sessionStorage.getItem("dailyops_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

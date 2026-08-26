@@ -14,7 +14,11 @@ interface AuthContextType {
   loading: boolean;
   // `identifier` is whatever the user typed — a username or an email; the
   // backend resolves which one it is (see LoginDto).
-  login: (identifier: string, password: string) => Promise<void>;
+  // `remember` controls where the token is persisted: true (default) keeps
+  // the session across browser restarts (localStorage); false keeps it only
+  // for the current tab/browser session (sessionStorage) — this is what the
+  // Login page's "Remember me" checkbox toggles.
+  login: (identifier: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   // Enterprise RBAC helper — checks the current user's computed permission
   // set (never a role name). Usage: hasPermission("Lead", "View").
@@ -30,7 +34,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(
-    localStorage.getItem("dailyops_token")
+    localStorage.getItem("dailyops_token") || sessionStorage.getItem("dailyops_token")
   );
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(res.data);
       } catch {
         localStorage.removeItem("dailyops_token");
+        sessionStorage.removeItem("dailyops_token");
         setToken(null);
         setUser(null);
       } finally {
@@ -54,15 +59,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadProfile();
   }, [token]);
 
-  async function login(identifier: string, password: string) {
+  async function login(identifier: string, password: string, remember = true) {
     const res = await api.post("/auth/login", { identifier, password });
-    localStorage.setItem("dailyops_token", res.data.accessToken);
+    // Clear both first so switching "Remember me" between logins never
+    // leaves a stale token sitting in the other storage.
+    localStorage.removeItem("dailyops_token");
+    sessionStorage.removeItem("dailyops_token");
+    (remember ? localStorage : sessionStorage).setItem(
+      "dailyops_token",
+      res.data.accessToken
+    );
     setToken(res.data.accessToken);
     setUser(res.data.user);
   }
 
   function logout() {
     localStorage.removeItem("dailyops_token");
+    sessionStorage.removeItem("dailyops_token");
     setToken(null);
     setUser(null);
   }
