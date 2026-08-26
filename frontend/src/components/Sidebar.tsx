@@ -201,7 +201,7 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
-      <div className="flex flex-col gap-1 px-6 pb-6">
+      <div className="flex flex-col px-6 pb-6">
         {/* h-16 matches Topbar's header height so the logo's vertical
             center lines up with the "Dashboard" title next to it, even
             though the logo image itself is taller than that row. */}
@@ -209,8 +209,12 @@ export default function Sidebar() {
           <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
         </div>
         {/* ml matches the logo image's icon width so this sits under the
-            "DailyOps" wordmark rather than under the gear/SR icon. */}
-        <span className="ml-[71px] text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
+            "DailyOps" wordmark rather than under the gear/SR icon; negative
+            margin-top pulls it up past the row's overflow so it hugs the
+            logo instead of floating below it. */}
+        <span className="ml-[71px] -mt-3 text-[11px] font-medium text-sidebar-foreground/60">
+          by Smart Rotamach
+        </span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
