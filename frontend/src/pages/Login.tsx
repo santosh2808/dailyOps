@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Cloud, Lock, ShieldCheck, User, Zap } from "lucide-react";
+import { ArrowRight, Lock, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,26 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-// Login page's feature-highlight strip, under the card — purely informational,
-// no data or state behind these.
-const FEATURE_HIGHLIGHTS = [
-  {
-    icon: ShieldCheck,
-    title: "Trusted & Secure",
-    description: "Your data is protected with enterprise grade security.",
-  },
-  {
-    icon: Cloud,
-    title: "Access Anywhere",
-    description: "Access your operations from anywhere, on any device.",
-  },
-  {
-    icon: Zap,
-    title: "Built for Growth",
-    description: "Scalable solutions designed to grow with your business.",
-  },
-];
 
 export default function Login() {
   // Enterprise RBAC: login accepts either Username or Email in this one
@@ -64,17 +44,7 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="flex h-screen w-full overflow-hidden"
-      style={{
-        // One continuous diagonal wash across the whole page (blue near the
-        // overview graphic, fading through green into a soft red/pink on
-        // the login side) so the two panels read as one background. Only
-        // three stops, evenly spaced — extra in-between stops caused a
-        // visible seam where the interpolation rate changed.
-        backgroundImage: "linear-gradient(135deg, #eaf1fb 0%, #eef7ec 50%, #fbe6e4 100%)",
-      }}
-    >
+    <div className="flex h-screen w-full overflow-hidden bg-[#f8f9fd]">
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
           Percentage-based (not a fixed pixel width) so it keeps roughly the same proportion
           of the screen — and the image stays large — at any window size. */}
@@ -86,14 +56,14 @@ export default function Login() {
         />
       </div>
 
-      {/* Right side — login card + feature highlights, centered together in the remaining space */}
+      {/* Right side — login card centered in the remaining space */}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
         {/* Soft brand-color glows behind the card */}
         <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-srm-green/25 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-14 h-72 w-72 rounded-full bg-srm-red/20 blur-3xl" />
 
-        <div className="relative z-10 flex w-full max-w-xl flex-col items-center gap-6">
-          <Card className="w-full max-w-md overflow-hidden rounded-2xl border-none shadow-2xl">
+        <div className="relative z-10 flex w-full max-w-md flex-col items-center">
+          <Card className="w-full overflow-hidden rounded-2xl border-none shadow-2xl">
             {/* Brand accent bar */}
             <div className="h-1.5 w-full bg-gradient-to-r from-srm-green via-srm-green to-srm-red" />
 
@@ -184,23 +154,6 @@ export default function Login() {
               </form>
             </CardContent>
           </Card>
-
-          {/* Feature highlights — wider than the card so the titles stay on one line and stay aligned */}
-          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
-            {FEATURE_HIGHLIGHTS.map(({ icon: Icon, title, description }) => (
-              <div key={title} className="flex items-start gap-3">
-                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-srm-green shadow-sm">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div className="leading-snug">
-                  <p className="whitespace-nowrap text-sm font-semibold text-slate-800">
-                    {title}
-                  </p>
-                  <p className="text-xs text-slate-500">{description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>
