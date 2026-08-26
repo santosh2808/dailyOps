@@ -287,16 +287,19 @@ export default function LoginRobot() {
       }
     }
 
+    const onBtnHypeOn = () => hype(true);
+    const onBtnHypeOff = () => hype(false);
+
     identifierI.addEventListener("focus", onIdentifierFocus);
     identifierI.addEventListener("input", onIdentifierInput);
     passI.addEventListener("focus", onPasswordFocus);
     passI.addEventListener("blur", onPasswordBlur);
     passI.addEventListener("input", onPasswordInput);
     peekBtn.addEventListener("click", onPeekClick);
-    btn.addEventListener("mouseenter", () => hype(true));
-    btn.addEventListener("mouseleave", () => hype(false));
-    btn.addEventListener("focus", () => hype(true));
-    btn.addEventListener("blur", () => hype(false));
+    btn.addEventListener("mouseenter", onBtnHypeOn);
+    btn.addEventListener("mouseleave", onBtnHypeOff);
+    btn.addEventListener("focus", onBtnHypeOn);
+    btn.addEventListener("blur", onBtnHypeOff);
     btn.addEventListener("pointerdown", onPointerDown);
     btn.addEventListener("pointerup", releasePress);
     btn.addEventListener("pointercancel", releasePress);
@@ -347,6 +350,10 @@ export default function LoginRobot() {
       passI.removeEventListener("input", onPasswordInput);
       peekBtn.removeEventListener("click", onPeekClick);
       form.removeEventListener("submit", onSubmit);
+      btn.removeEventListener("mouseenter", onBtnHypeOn);
+      btn.removeEventListener("mouseleave", onBtnHypeOff);
+      btn.removeEventListener("focus", onBtnHypeOn);
+      btn.removeEventListener("blur", onBtnHypeOff);
       btn.removeEventListener("pointerdown", onPointerDown);
       btn.removeEventListener("pointerup", releasePress);
       btn.removeEventListener("pointercancel", releasePress);
@@ -420,7 +427,6 @@ export default function LoginRobot() {
               placeholder="Username or email"
               autoComplete="username"
               aria-label="Username or email"
-              defaultValue=""
               required
             />
           </label>
@@ -435,7 +441,6 @@ export default function LoginRobot() {
               placeholder="Super secret password"
               autoComplete="current-password"
               aria-label="Password"
-              defaultValue=""
               required
             />
             <button

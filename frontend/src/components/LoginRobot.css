@@ -3,8 +3,8 @@
    back-panel, confetti on success). All selectors are prefixed with
    "volt-" and scoped under .volt-scene so nothing here leaks into the
    rest of the app. Colors remapped to SRM green/red instead of the
-   original orange/teal. */
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&display=swap');
+   original orange/teal. The Sora font itself is loaded via <link> tags in
+   index.html rather than an @import here — see the comment there. */
 
 .volt-scene {
   --paper: #f4efe5;
