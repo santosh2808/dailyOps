@@ -69,9 +69,10 @@ export default function Login() {
       style={{
         // One continuous diagonal wash across the whole page (blue near the
         // overview graphic, fading through green into a soft red/pink on
-        // the login side) so the two panels read as one background.
-        backgroundImage:
-          "linear-gradient(135deg, #eaf0fb 0%, #eef1fb 28%, #eef7ec 55%, #fbeeec 80%, #fbe6e4 100%)",
+        // the login side) so the two panels read as one background. Only
+        // three stops, evenly spaced — extra in-between stops caused a
+        // visible seam where the interpolation rate changed.
+        backgroundImage: "linear-gradient(135deg, #eaf1fb 0%, #eef7ec 50%, #fbe6e4 100%)",
       }}
     >
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
@@ -91,8 +92,8 @@ export default function Login() {
         <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-srm-green/25 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-14 h-72 w-72 rounded-full bg-srm-red/20 blur-3xl" />
 
-        <div className="relative z-10 flex w-full max-w-md flex-col gap-6">
-          <Card className="w-full overflow-hidden rounded-2xl border-none shadow-2xl">
+        <div className="relative z-10 flex w-full max-w-xl flex-col items-center gap-6">
+          <Card className="w-full max-w-md overflow-hidden rounded-2xl border-none shadow-2xl">
             {/* Brand accent bar */}
             <div className="h-1.5 w-full bg-gradient-to-r from-srm-green via-srm-green to-srm-red" />
 
@@ -184,16 +185,18 @@ export default function Login() {
             </CardContent>
           </Card>
 
-          {/* Feature highlights — same width as the card, below it */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Feature highlights — wider than the card so the titles stay on one line and stay aligned */}
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
             {FEATURE_HIGHLIGHTS.map(({ icon: Icon, title, description }) => (
-              <div key={title} className="flex items-start gap-2">
-                <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white text-srm-green shadow-sm">
-                  <Icon className="h-4 w-4" />
+              <div key={title} className="flex items-start gap-3">
+                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-srm-green shadow-sm">
+                  <Icon className="h-5 w-5" />
                 </span>
-                <div className="leading-tight">
-                  <p className="text-xs font-semibold text-slate-800">{title}</p>
-                  <p className="text-[11px] text-slate-500">{description}</p>
+                <div className="leading-snug">
+                  <p className="whitespace-nowrap text-sm font-semibold text-slate-800">
+                    {title}
+                  </p>
+                  <p className="text-xs text-slate-500">{description}</p>
                 </div>
               </div>
             ))}
