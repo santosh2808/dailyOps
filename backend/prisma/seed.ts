@@ -87,6 +87,12 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'EmailTemplate', action: 'Edit', description: 'Edit email templates' },
 
   { module: 'AuditLog', action: 'View', description: 'View the system audit log' },
+
+  // Additive: Complaints module.
+  { module: 'Complaint', action: 'View', description: 'View customer complaints' },
+  { module: 'Complaint', action: 'Create', description: 'Log a new customer complaint against a sales order' },
+  { module: 'Complaint', action: 'Edit', description: 'Edit complaint details and change status' },
+  { module: 'Complaint', action: 'Delete', description: 'Delete (soft-delete) complaints' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -106,6 +112,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     ...permissionsForModule('Customer'),
     ...permissionsForModule('Quotation'),
     ...permissionsForModule('SalesOrder'),
+    ...permissionsForModule('Complaint'),
     'product.view',
   ],
   'Sales Executive': [
@@ -120,6 +127,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'quotation.edit',
     'salesorder.view',
     'salesorder.create',
+    'complaint.view',
+    'complaint.create',
+    'complaint.edit',
     'product.view',
   ],
   Production: ['jeo.view', 'jeo.create', 'jeo.update', 'salesorder.view', 'material.view', 'proformainvoice.view'],

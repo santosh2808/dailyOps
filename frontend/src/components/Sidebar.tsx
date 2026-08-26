@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   CheckSquare,
   Mail,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,12 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/quotations/approvals",
         icon: CheckSquare,
         permission: { module: "Quotation", action: "View" },
+      },
+      {
+        label: "Complaints",
+        to: "/complaints",
+        icon: AlertCircle,
+        permission: { module: "Complaint", action: "View" },
       },
     ],
   },

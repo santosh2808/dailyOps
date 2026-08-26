@@ -567,6 +567,12 @@ model SalesOrder {
   // notifications sent from this Sales Order — see SalesOrdersService).
   emailHistory        EmailHistory[]
 
+  // Additive: Complaints module. A Complaint links to the Sales Order (not
+  // directly to Customer) so the customer and any generated Proforma
+  // Invoice are both reached through this one relation — see Complaint's
+  // own comment.
+  complaints          Complaint[]
+
   @@index([status])
   @@index([customerId])
   @@index([quotationId])
@@ -645,6 +651,42 @@ model ProformaInvoice {
   @@index([status])
   @@index([salesOrderId])
   @@index([customerId])
+}
+
+// Additive: Complaints module. Links to SalesOrder rather than Customer
+// directly — the customer is reached via salesOrder.customer, and any
+// generated Proforma Invoice via salesOrder.proformaInvoices, so there's
+// exactly one place a complaint is anchored to instead of two relations
+// that could disagree. A complaint about a customer with no Sales Order
+// yet isn't representable by design; log it once an order exists.
+model Complaint {
+  id              String          @id @default(uuid())
+  complaintNumber String          @unique
+  salesOrderId    String
+  salesOrder      SalesOrder      @relation(fields: [salesOrderId], references: [id])
+  subject         String
+  description     String?
+  status          ComplaintStatus @default(OPEN)
+  // Set when status moves to RESOLVED or CLOSED; cleared if it's reopened.
+  resolutionNotes String?
+  resolvedAt      DateTime?
+  // Plain scalar (the authenticated user's name from the JWT payload) — no
+  // enforced User relation, same convention as SalesOrder.createdBy.
+  createdBy       String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  @@index([status])
+  @@index([salesOrderId])
+  @@index([deletedAt])
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }
 
 // Scoped to JobExecutionOrder only (not shared with LeadPriority), the same

@@ -8,7 +8,6 @@ import {
   UserPlus,
   FileText,
   ClipboardList,
-  Wallet,
   Truck,
   CalendarClock,
   Hourglass,
@@ -18,6 +17,7 @@ import {
   FileSpreadsheet,
   PackageSearch,
   X,
+  MessageSquareWarning,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -440,7 +440,6 @@ export default function Dashboard() {
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [charts, setCharts] = useState<DashboardChartsData | null>(null);
-  const [monthRevenue, setMonthRevenue] = useState(0);
   const [todaysFollowUps, setTodaysFollowUps] = useState<TodaysFollowUpEntry[]>([]);
   const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -467,15 +466,13 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const [statsData, chartsData, thisMonthRevenue, followUps] = await Promise.all([
+      const [statsData, chartsData, followUps] = await Promise.all([
         getDashboardStats(),
         getDashboardCharts(),
-        getDashboardRevenue({ period: "monthly", year: currentYear }),
         getDashboardTodaysFollowUps(),
       ]);
       setStats(statsData);
       setCharts(chartsData);
-      setMonthRevenue(thisMonthRevenue[now.getMonth()]?.value ?? 0);
       setTodaysFollowUps(followUps);
     } catch {
       setError("Failed to load dashboard data.");
@@ -590,8 +587,6 @@ export default function Dashboard() {
     value: entry.count,
   }));
 
-  const monthEndDay = new Date(currentYear, currentMonth, 0).getDate();
-
   return (
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
@@ -641,20 +636,16 @@ export default function Dashboard() {
               loading={loading}
               onClick={() => navigate("/sales-orders")}
             />
+            {/* Additive: Complaints module — replaces the old Revenue (This
+                Month) KPI card (revenue is already covered by the Revenue
+                Trend chart below, so this slot now surfaces customer-service
+                visibility instead). */}
             <KpiCard
-              label="Revenue (This Month)"
-              value={formatINR(monthRevenue)}
-              icon={Wallet}
+              label="Open Complaints"
+              value={stats?.openComplaintsCount ?? 0}
+              icon={MessageSquareWarning}
               loading={loading}
-              onClick={() =>
-                navigate(
-                  `/sales-orders?dateFrom=${isoDate(currentYear, currentMonth, 1)}&dateTo=${isoDate(
-                    currentYear,
-                    currentMonth,
-                    monthEndDay,
-                  )}`,
-                )
-              }
+              onClick={() => navigate("/complaints?status=OPEN")}
             />
             <KpiCard
               label="Dispatch"

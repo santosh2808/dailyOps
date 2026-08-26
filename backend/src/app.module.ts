@@ -24,6 +24,7 @@ import { ApprovalMatrixModule } from './approval-matrix/approval-matrix.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { MailerModule } from './mailer/mailer.module';
 import { PdfModule } from './pdf/pdf.module';
+import { ComplaintsModule } from './complaints/complaints.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { PdfModule } from './pdf/pdf.module';
     EmailTemplatesModule,
     MailerModule,
     PdfModule,
+    ComplaintsModule,
   ],
 })
 export class AppModule {}

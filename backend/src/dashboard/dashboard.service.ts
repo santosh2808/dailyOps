@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LeadSource, LeadStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { OPEN_COMPLAINT_STATUSES } from '../complaints/complaints.service';
 
 export interface LeadSourceSummaryEntry {
   source: LeadSource;
@@ -61,6 +62,10 @@ export interface DashboardStats {
   // Pending Approvals: QuotationApprovalRequest rows awaiting a decision —
   // see quotations.service.ts for how these get created/decided.
   pendingApprovalsCount: number;
+  // Additive: Complaints module — complaints not yet resolved (OPEN or
+  // IN_PROGRESS), for the Dashboard's Open Complaints KPI card (replaces
+  // the old Revenue (This Month) card — see Dashboard.tsx).
+  openComplaintsCount: number;
 }
 
 // Additive: Dashboard Redesign — Sales Funnel (requirement #2). Each stage
@@ -278,6 +283,7 @@ export class DashboardService {
       dispatchCount,
       delayedOrdersCount,
       pendingApprovalsCount,
+      openComplaintsCount,
     ] = await Promise.all([
       this.prisma.customer.count({ where: { isActive: true } }),
       this.prisma.product.count({ where: { isActive: true } }),
@@ -364,6 +370,10 @@ export class DashboardService {
         },
       }),
       this.prisma.quotationApprovalRequest.count({ where: { status: 'PENDING' } }),
+      // Additive: Complaints module — see DashboardStats.openComplaintsCount.
+      this.prisma.complaint.count({
+        where: { deletedAt: null, status: { in: [...OPEN_COMPLAINT_STATUSES] } },
+      }),
     ]);
 
     const salesByExecutiveMap = new Map<string, { orderCount: number; totalValue: number }>();
@@ -416,6 +426,7 @@ export class DashboardService {
       dispatchCount,
       delayedOrdersCount,
       pendingApprovalsCount,
+      openComplaintsCount,
     };
   }
 

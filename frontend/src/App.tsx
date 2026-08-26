@@ -29,6 +29,9 @@ import MaterialDetails from "@/pages/MaterialDetails";
 import SupplierList from "@/pages/SupplierList";
 import SupplierForm from "@/pages/SupplierForm";
 import SupplierDetails from "@/pages/SupplierDetails";
+import ComplaintList from "@/pages/ComplaintList";
+import ComplaintForm from "@/pages/ComplaintForm";
+import ComplaintDetails from "@/pages/ComplaintDetails";
 import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
 import Permissions from "@/pages/Permissions";
@@ -293,6 +296,38 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SupplierDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/complaints"
+            element={
+              <ProtectedRoute>
+                <ComplaintList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/complaints/new"
+            element={
+              <ProtectedRoute>
+                <ComplaintForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/complaints/:id/edit"
+            element={
+              <ProtectedRoute>
+                <ComplaintForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/complaints/:id"
+            element={
+              <ProtectedRoute>
+                <ComplaintDetails />
               </ProtectedRoute>
             }
           />

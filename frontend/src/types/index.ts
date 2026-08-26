@@ -190,6 +190,9 @@ export interface DashboardStats {
   dispatchCount: number;
   delayedOrdersCount: number;
   pendingApprovalsCount: number;
+  // Additive: Complaints module — replaces the Revenue (This Month) KPI
+  // card (see Dashboard.tsx).
+  openComplaintsCount: number;
 }
 
 // Additive: Dashboard Redesign types — mirror
@@ -898,4 +901,44 @@ export interface SupplierImportSummary {
   invalidCount: number;
   duplicateCount: number;
   rows: SupplierImportRowResult[];
+}
+
+// Additive: Complaints module — a Complaint links to the Sales Order (not
+// directly to Customer), so the customer and any generated Proforma Invoice
+// are both reached through `salesOrder` (see backend Complaint schema
+// comment).
+export const COMPLAINT_STATUSES = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const;
+export type ComplaintStatus = (typeof COMPLAINT_STATUSES)[number];
+
+export interface Complaint {
+  id: string;
+  complaintNumber: string;
+  salesOrderId: string;
+  salesOrder?: {
+    id: string;
+    salesOrderNumber: string;
+    grandTotal: number;
+    customer?: {
+      id: string;
+      companyName: string;
+      contactPerson: string;
+      phone: string;
+      email?: string | null;
+    };
+    proformaInvoices?: {
+      id: string;
+      invoiceNumber: string;
+      grandTotal: number;
+      status: ProformaInvoiceStatus;
+    }[];
+  };
+  subject: string;
+  description?: string | null;
+  status: ComplaintStatus;
+  resolutionNotes?: string | null;
+  resolvedAt?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
 }
