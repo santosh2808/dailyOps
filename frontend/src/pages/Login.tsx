@@ -4,13 +4,13 @@ export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
       {/* Page header — full SR DailyOps lockup image, shared across both panels below */}
-      <header className="flex flex-shrink-0 flex-col border-b border-slate-200 bg-white px-6 pb-2">
+      <header className="flex flex-shrink-0 flex-col border-b border-slate-200 bg-white px-6 pb-3">
         <div className="flex h-16 items-center">
-          <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
+          <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-20 w-auto" />
         </div>
         {/* Same offset/tightening as the Sidebar's caption, so it sits under
             the "DailyOps" wordmark rather than under the gear/SR icon. */}
-        <span className="ml-[71px] -mt-3 text-[11px] font-medium text-muted-foreground">
+        <span className="ml-[71px] -mt-1 text-[11px] font-medium text-muted-foreground">
           by Smart Rotamach
         </span>
       </header>
@@ -40,7 +40,7 @@ export default function Login() {
       </div>
 
       {/* Page footer — copyright */}
-      <footer className="flex-shrink-0 py-3 text-center text-xs text-muted-foreground">
+      <footer className="flex-shrink-0 border-t border-slate-200 bg-white py-3 text-center text-xs text-muted-foreground">
         © {new Date().getFullYear()} Smart Rotamach. All rights reserved.
       </footer>
     </div>
