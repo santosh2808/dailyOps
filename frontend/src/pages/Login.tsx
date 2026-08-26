@@ -4,8 +4,15 @@ export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
       {/* Page header — full SR DailyOps lockup image, shared across both panels below */}
-      <header className="flex flex-shrink-0 items-center px-6 pb-2">
-        <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
+      <header className="flex flex-shrink-0 flex-col px-6 pb-2">
+        <div className="flex h-16 items-center">
+          <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
+        </div>
+        {/* Same offset/tightening as the Sidebar's caption, so it sits under
+            the "DailyOps" wordmark rather than under the gear/SR icon. */}
+        <span className="ml-[71px] -mt-3 text-[11px] font-medium text-muted-foreground">
+          by Smart Rotamach
+        </span>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
