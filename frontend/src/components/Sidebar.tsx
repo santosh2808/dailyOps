@@ -208,7 +208,7 @@ export default function Sidebar() {
         <div className="flex h-16 items-center">
           <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-24 w-auto" />
         </div>
-        <span className="text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
+        <span className="ml-2 text-[11px] font-medium text-sidebar-foreground/60">by Smart Rotamach</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
