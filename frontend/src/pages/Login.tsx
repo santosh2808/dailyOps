@@ -77,12 +77,12 @@ export default function Login() {
           </div>
 
           {/* card */}
-          <div className="relative w-full rounded-[28px] border-[3px] border-slate-900 bg-white px-7 pb-7 pt-10 shadow-[6px_6px_0_0_#0f172a]">
-            {/* little ear/foot nubs poking out of the card, echoing the mascot's ears */}
-            <div className="absolute -top-3 left-9 h-6 w-3 rounded-full border-2 border-slate-900 bg-white" />
-            <div className="absolute -top-3 right-9 h-6 w-3 rounded-full border-2 border-slate-900 bg-white" />
-            <div className="absolute -bottom-3 left-14 h-3 w-9 rounded-full border-2 border-slate-900 bg-white" />
-            <div className="absolute -bottom-3 right-14 h-3 w-9 rounded-full border-2 border-slate-900 bg-white" />
+          <div className="relative w-full rounded-[28px] border-[3px] border-srm-green bg-white px-7 pb-7 pt-10 shadow-[6px_6px_0_0_#7a9633]">
+            {/* little nubs poking out of the card */}
+            <div className="absolute -top-3 left-9 h-6 w-3 rounded-full border-2 border-srm-green bg-white" />
+            <div className="absolute -top-3 right-9 h-6 w-3 rounded-full border-2 border-srm-green bg-white" />
+            <div className="absolute -bottom-3 left-14 h-3 w-9 rounded-full border-2 border-srm-green bg-white" />
+            <div className="absolute -bottom-3 right-14 h-3 w-9 rounded-full border-2 border-srm-green bg-white" />
 
             <h1 className="text-xl font-bold text-slate-900">Hey there! Who's this?</h1>
             <p className="mt-1 text-sm text-slate-500">Sign in to your DailyOps account.</p>
@@ -101,7 +101,7 @@ export default function Login() {
                   onBlur={() => setFocusField(null)}
                   placeholder="Your username or email"
                   required
-                  className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
+                  className="h-12 w-full rounded-xl border-2 border-srm-green bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
                 />
               </div>
               <div className="relative">
@@ -118,7 +118,7 @@ export default function Login() {
                   onBlur={() => setFocusField(null)}
                   placeholder="Super secret password"
                   required
-                  className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
+                  className="h-12 w-full rounded-xl border-2 border-srm-green bg-white pl-10 pr-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-srm-green/40"
                 />
               </div>
 
@@ -128,7 +128,7 @@ export default function Login() {
                     id="remember"
                     checked={remember}
                     onChange={(e) => setRemember(e.target.checked)}
-                    className="rounded border-2 border-slate-900 checked:border-srm-green checked:bg-srm-green"
+                    className="rounded border-2 border-srm-green checked:bg-srm-green"
                   />
                   Remember me
                 </label>
@@ -148,7 +148,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 h-12 w-full rounded-xl border-2 border-slate-900 bg-srm-red text-sm font-bold uppercase tracking-wide text-white shadow-[4px_4px_0_0_#0f172a] transition-all hover:brightness-105 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_0_#0f172a] disabled:opacity-60"
+                className="mt-2 h-12 w-full rounded-xl border-2 border-srm-green bg-srm-red text-sm font-bold uppercase tracking-wide text-white shadow-[4px_4px_0_0_#7a9633] transition-all hover:brightness-105 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_0_#7a9633] disabled:opacity-60"
               >
                 {loading ? "Signing in..." : "Sign Me In"}
               </button>
