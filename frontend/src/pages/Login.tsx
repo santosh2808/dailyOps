@@ -42,9 +42,11 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50">
-      {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar */}
+      {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
+          Percentage-based (not a fixed pixel width) so it keeps roughly the same proportion
+          of the screen — and the image stays large — at any window size. */}
       <div
-        className="hidden flex-shrink-0 items-center justify-center lg:flex lg:w-[480px] xl:w-[600px] 2xl:w-[720px]"
+        className="hidden flex-shrink-0 items-center justify-center lg:flex lg:w-[55%] xl:w-[58%]"
         style={{ backgroundColor: "#f8f9fd" }}
       >
         <img
@@ -58,41 +60,47 @@ export default function Login() {
       <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
         <ParticlesBackground />
 
-        <Card className="relative z-10 w-full max-w-sm border-none shadow-lg">
-          <CardHeader className="space-y-1 text-center">
+        <Card className="relative z-10 w-full max-w-md border-none shadow-lg">
+          <CardHeader className="space-y-1 text-center px-10 pt-10">
             <img
               src="/logo-smart-rotamach.jpg"
               alt="Smart Rotamach"
               className="mx-auto mb-2 h-32 w-32 rounded-md object-contain"
             />
-            <CardTitle className="text-2xl">DailyOps</CardTitle>
-            <p className="text-xs font-medium text-slate-400">by Smart Rotamach</p>
-            <CardDescription>Sign in to your account</CardDescription>
+            <CardTitle className="text-3xl">DailyOps</CardTitle>
+            <p className="text-sm font-medium text-slate-400">by Smart Rotamach</p>
+            <CardDescription className="text-base">Sign in to your account</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="px-10 pb-10">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="identifier">Username or Email</Label>
+                <Label htmlFor="identifier" className="text-base">
+                  Username or Email
+                </Label>
                 <Input
                   id="identifier"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="admin"
                   required
+                  className="h-12 text-base"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-base">
+                  Password
+                </Label>
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="h-12 text-base"
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="h-12 w-full text-base" disabled={loading}>
                 {loading ? "Signing in..." : "Sign in"}
               </Button>
             </form>
