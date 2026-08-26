@@ -12,7 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import ParticlesBackground from "@/components/ParticlesBackground";
 
 export default function Login() {
   // Enterprise RBAC: login accepts either Username or Email in this one
@@ -57,10 +56,11 @@ export default function Login() {
         />
       </div>
 
-      {/* Right side — particle background with the login card centered in the remaining whitespace */}
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
-        <ParticlesBackground />
-
+      {/* Right side — same off-white as the left panel, so the two blend together, with the login card centered */}
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8"
+        style={{ backgroundColor: "#f8f9fd" }}
+      >
         {/* Soft brand-color glows behind the card */}
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-srm-green/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-srm-red/15 blur-3xl" />
@@ -75,11 +75,13 @@ export default function Login() {
               alt="Smart Rotamach"
               className="mx-auto mb-2 h-32 w-32 rounded-md object-contain"
             />
-            <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">
-              DailyOps
-            </CardTitle>
-            <p className="text-sm font-medium text-srm-green">by Smart Rotamach</p>
-            <CardDescription className="text-base">Sign in to your account</CardDescription>
+            <div className="flex flex-col items-center leading-tight">
+              <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">
+                DailyOps
+              </CardTitle>
+              <span className="text-sm font-medium text-srm-green">by Smart Rotamach</span>
+            </div>
+            <CardDescription className="!mt-4 text-base">Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent className="px-10 pb-10">
             <form onSubmit={handleSubmit} className="space-y-5">
