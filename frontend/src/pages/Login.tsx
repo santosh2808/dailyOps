@@ -44,7 +44,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#f8f9fd]">
+    <div className="flex h-screen w-full overflow-hidden bg-white">
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar.
           Percentage-based (not a fixed pixel width) so it keeps roughly the same proportion
           of the screen — and the image stays large — at any window size. */}
@@ -58,14 +58,8 @@ export default function Login() {
 
       {/* Right side — login card centered in the remaining space */}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
-        {/* Soft brand-color glows behind the card */}
-        <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-srm-green/25 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-14 h-72 w-72 rounded-full bg-srm-red/20 blur-3xl" />
-
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Card className="w-full overflow-hidden rounded-2xl border-none shadow-2xl">
-            {/* Brand accent bar */}
-            <div className="h-1.5 w-full bg-gradient-to-r from-srm-green via-srm-green to-srm-red" />
+          <Card className="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-lg">
 
             <CardHeader className="space-y-1 text-center px-10 pt-8">
               <img
@@ -143,7 +137,7 @@ export default function Login() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button
                   type="submit"
-                  className="group h-12 w-full gap-2 bg-gradient-to-r from-srm-green to-[#7ea82f] text-base font-semibold text-white shadow-lg shadow-srm-green/30 transition-all hover:shadow-xl hover:shadow-srm-green/40"
+                  className="group h-12 w-full gap-2 bg-srm-green text-base font-semibold text-white hover:bg-srm-green/90"
                   disabled={loading}
                 >
                   {loading ? "Signing in..." : "Sign In"}
