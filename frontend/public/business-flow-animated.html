@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DailyOps — Business Operations Flow (animated)</title>
+<title>DailyOps — Business Operations Flow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -176,116 +176,11 @@
   .foot .f{display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:700;color:var(--dk);}
   .foot .f svg{width:23px;height:23px;color:var(--sol);}
   .foot .sep{width:5px;height:5px;border-radius:50%;background:#B7D563;}
-
-  /* =========================================================
-     MOTION
-     ---------------------------------------------------------
-     .anim            everything hidden, waiting
-     .anim.go         entrance runs (staggered via --d)
-     .anim.go.settled entrance stripped; ambient + step loop own the stage
-     ========================================================= */
-  @keyframes fadeDown  { from{opacity:0; transform:translateY(-14px)} to{opacity:1; transform:translateY(0)} }
-  @keyframes fadeUp    { from{opacity:0; transform:translateY(18px)}  to{opacity:1; transform:translateY(0)} }
-  @keyframes hubIn     { from{opacity:0; transform:translate(-50%,-50%) scale(.82)}
-                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
-  @keyframes hubBreathe{ 0%,100%{transform:translate(-50%,-50%) scale(1)}
-                         50%    {transform:translate(-50%,-50%) scale(1.018)} }
-  @keyframes chipIn    { from{opacity:0; transform:translate(-50%,-50%) scale(.7)}
-                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
-  @keyframes chipFloat { 0%,100%{transform:translate(-50%,-50%) translateY(0)}
-                         50%    {transform:translate(-50%,-50%) translateY(-5px)} }
-  @keyframes nodeIn    { 0%{opacity:0; transform:scale(.3)} 62%{opacity:1; transform:scale(1.12)}
-                         100%{opacity:1; transform:scale(1)} }
-  @keyframes pillIn    { from{opacity:0; transform:translate(-50%,-50%) scale(.72)}
-                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
-  @keyframes cardIn    { from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
-  @keyframes cardInMid { from{opacity:0; transform:translateY(calc(-50% + 20px))}
-                         to  {opacity:1; transform:translateY(-50%)} }
-  @keyframes march11   { to{ stroke-dashoffset:-11px; } }
-  @keyframes march6    { to{ stroke-dashoffset:-6px;  } }
-  @keyframes cometRun  { 0%  { opacity:0; stroke-dashoffset:var(--len); }
-                         14% { opacity:1; }
-                         86% { opacity:1; }
-                         100%{ opacity:0; stroke-dashoffset:0; } }
-
-  /* --- waiting state --- */
-  .anim .headline, .anim .hub, .anim .chip, .anim .node,
-  .anim .pill, .anim .card, .anim .bar, .anim .foot{ opacity:0; }
-  /* connectors are drawn by script on first paint, long before the entrance
-     starts — keep the whole layer dark until .go hands it over to svgEntrance */
-  .anim:not(.go) .lines path,
-  .anim:not(.go) .lines circle{ opacity:0; }
-
-  /* --- entrance --- */
-  .anim.go .headline { animation:fadeDown .85s cubic-bezier(.22,1,.36,1) both; }
-  .anim.go .hub      { animation:hubIn .95s cubic-bezier(.22,1,.36,1) .18s both; }
-  .anim.go .chip     { animation:chipIn .65s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
-  .anim.go .node     { animation:nodeIn .70s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
-  .anim.go .pill     { animation:pillIn .55s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
-  .anim.go .card     { animation:cardIn .70s cubic-bezier(.22,1,.36,1)   var(--d,0s) both; }
-  .anim.go .card.mid { animation-name:cardInMid; }
-  .anim.go .bar      { animation:fadeUp .8s cubic-bezier(.22,1,.36,1) 2.45s both; }
-  .anim.go .foot     { animation:fadeUp .8s cubic-bezier(.22,1,.36,1) 2.60s both; }
-
-  /* --- settled: drop the entrance, keep the ambient drift --- */
-  .anim.go.settled .headline,
-  .anim.go.settled .node,
-  .anim.go.settled .pill,
-  .anim.go.settled .card,
-  .anim.go.settled .bar,
-  .anim.go.settled .foot { animation:none; opacity:1; }
-  .anim.go.settled .hub  { opacity:1; animation:hubBreathe 7s ease-in-out infinite; }
-  .anim.go.settled .chip { opacity:1; animation:chipFloat 6.5s ease-in-out var(--d,0s) infinite; }
-
-  /* --- the travelling highlight --- */
-  .node{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease; }
-  .settled .node.is-active{
-    transform:scale(1.1);
-    box-shadow:0 0 0 6px rgba(255,255,255,.98), 0 0 0 10px var(--sol), 0 22px 44px var(--glow);
-  }
-  .card{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease, border-color .5s ease; }
-  .settled .card.is-active{
-    transform:translateY(-5px); border-color:var(--sol);
-    box-shadow:0 20px 42px rgba(60,80,20,.20), 0 3px 8px rgba(60,80,20,.08);
-  }
-  .settled .card.mid.is-active{ transform:translateY(calc(-50% - 5px)); }
-  .badge{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease; }
-  .settled .card.is-active .badge{
-    transform:translateY(-50%) scale(1.12);
-    box-shadow:0 0 0 5px rgba(255,255,255,.98), 0 10px 22px var(--glow);
-  }
-  .pill{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease, border-color .5s ease; }
-  .settled .pill.is-active{
-    transform:translate(-50%,-50%) scale(1.07);
-    border-color:var(--sol); box-shadow:0 10px 24px rgba(60,80,20,.20);
-  }
-
-  /* --- connectors --- */
-  .lines .ring path{ transition:stroke-width .45s ease, opacity .45s ease; }
-  .settled .ring path.is-active{ stroke-width:13; }
-  .ln-arrow{ transition:stroke-width .4s ease, opacity .4s ease; }
-  .settled .ln-arrow{ opacity:.72; }
-  .settled .ln-arrow.is-active{ opacity:1; stroke-width:4.2; }
-  .settled .ln-leader.is-active{ animation:march11 .7s linear infinite; stroke:#7FA22B; }
-  .settled .ln-stub.is-active  { animation:march6 .5s linear infinite; }
-  .ln-comet{ fill:none; opacity:0; stroke:#E8F6C6; stroke-linecap:round; }
-  .ln-comet.run{ animation:cometRun 850ms linear; }
-
-  /* --- respect the OS setting --- */
-  @media (prefers-reduced-motion: reduce){
-    .anim .headline, .anim .hub, .anim .chip, .anim .node,
-    .anim .pill, .anim .card, .anim .bar, .anim .foot{ opacity:1; }
-    .anim.go .headline, .anim.go .hub, .anim.go .chip, .anim.go .node,
-    .anim.go .pill, .anim.go .card, .anim.go .bar, .anim.go .foot,
-    .anim.go.settled .hub, .anim.go.settled .chip{ animation:none; }
-    .node, .card, .pill, .badge, .ln-arrow, .lines .ring path{ transition:none; }
-    .ln-comet{ display:none; }
-  }
 </style>
 </head>
 <body>
 <div id="viewport">
-<div class="stage anim" id="stage">
+<div class="stage" id="stage">
 
   <!-- ============ HEADER ============ -->
   <div class="headline">
@@ -305,7 +200,7 @@
     </defs>
 
     <!-- segmented progress ring around the hub: 10 arcs, one per step -->
-    <g class="ring" fill="none" stroke-width="9" stroke-linecap="round">
+    <g fill="none" stroke-width="9" stroke-linecap="round">
       <path d="M686.0 510.8 A170 170 0 0 1 774.0 510.8" stroke="#9BBB3D"/>
       <path d="M790.9 516.3 A170 170 0 0 1 862.1 568.0" stroke="#63841F"/>
       <path d="M872.6 582.4 A170 170 0 0 1 899.8 666.1" stroke="#9BBB3D"/>
@@ -678,7 +573,7 @@
       var a = edge(c, n.cx, n.cy, 5);
       var vx = n.cx - a.x, vy = n.cy - a.y, L = Math.hypot(vx, vy) || 1;
       var b = { x: n.cx - vx / L * NODE_R, y: n.cy - vy / L * NODE_R };
-      line(seg([a, b]), { 'class': 'ln-leader', stroke: 'rgba(110,144,52,.62)', 'stroke-width': 1.5,
+      line(seg([a, b]), { stroke: 'rgba(110,144,52,.62)', 'stroke-width': 1.5,
                           'stroke-dasharray': '6 5', fill: 'none' });
       dot(a.x, a.y, 3, tone);
     });
@@ -689,8 +584,8 @@
       var vx = p.cx - n.cx, vy = p.cy - n.cy, L = Math.hypot(vx, vy) || 1;
       var a = { x: n.cx + vx / L * (NODE_R - 4), y: n.cy + vy / L * (NODE_R - 4) };
       var b = edge(p, n.cx, n.cy, 3);
-      line(seg([a, b]), { 'class': 'ln-stub', stroke: tone, 'stroke-width': 1.5,
-                          'stroke-dasharray': '2.5 3.5', fill: 'none', opacity: .8 });
+      line(seg([a, b]), { stroke: tone, 'stroke-width': 1.5, 'stroke-dasharray': '2.5 3.5',
+                          fill: 'none', opacity: .8 });
       dot((a.x + b.x) / 2, (a.y + b.y) / 2, 3, tone);
     });
 
@@ -710,8 +605,7 @@
       line('M' + s.x.toFixed(1) + ' ' + s.y.toFixed(1) +
            'Q' + ctrl.x.toFixed(1) + ' ' + ctrl.y.toFixed(1) +
            ' ' + e.x.toFixed(1) + ' ' + e.y.toFixed(1),
-           { 'class': 'ln-arrow', stroke: TONE[i % 2], 'stroke-width': 3.4,
-             'stroke-linecap': 'round', fill: 'none',
+           { stroke: TONE[i % 2], 'stroke-width': 3.4, 'stroke-linecap': 'round', fill: 'none',
              'marker-end': 'url(#ah-' + (i % 2 ? 'b' : 'a') + ')' });
     });
   }
@@ -724,139 +618,18 @@
     stage.style.transform = 'scale(' + s + ')';
   }
 
-  /* =============================================================
-     MOTION CONTROLLER
-     entrance (once) → settled → an endless 01…10 walk of the ring
-     ============================================================= */
-
-  var REDUCED = window.matchMedia &&
-                window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var STEP_MS = 1250;      // dwell per step
-  var COMET_IN = 340;      // when the pulse leaves the active node
-  var cur = -1, booted = false, cometTimer = null;
-
-  function all(sel) { return [].slice.call(stage.querySelectorAll(sel)); }
-
-  /* stagger: write --d on each element the entrance keyframes read */
-  function assignDelays() {
-    all('.node').forEach(function (el, i) { el.style.setProperty('--d', (1.00 + i * 0.09) + 's'); });
-    all('.pill').forEach(function (el, i) { el.style.setProperty('--d', (1.16 + i * 0.09) + 's'); });
-    all('.card').forEach(function (el, i) { el.style.setProperty('--d', (1.26 + i * 0.09) + 's'); });
-    all('.chip').forEach(function (el, i) { el.style.setProperty('--d', (2.30 + i * 0.14) + 's'); });
-  }
-
-  /* a bright twin of each arrow — the pulse that rides along it */
-  function buildComets() {
-    all('.ln-comet').forEach(function (c) { c.parentNode.removeChild(c); });
-    all('.ln-arrow').forEach(function (a) {
-      var c = a.cloneNode(false);
-      c.setAttribute('class', 'ln-comet');
-      c.removeAttribute('marker-end');
-      c.setAttribute('stroke-width', '4.8');
-      var len = a.getTotalLength();
-      c.style.strokeDasharray = '26 ' + (len + 30);
-      c.style.setProperty('--len', (len + 30) + 'px');
-      gen.appendChild(c);
-    });
-  }
-
-  /* trace a solid path on, then hand its dash pattern back.
-     An arrowhead sits at the path's end vertex and renders no matter where the
-     dash is, so it gets pulled off and put back as the stroke arrives. */
-  function drawPath(p, delay, dur) {
-    var len  = p.getTotalLength(),
-        keep = p.getAttribute('stroke-dasharray'),
-        head = p.getAttribute('marker-end');
-    p.style.opacity = 0;
-    p.style.strokeDasharray = len + ' ' + len;
-    p.style.strokeDashoffset = len;
-    if (head) p.removeAttribute('marker-end');
-    setTimeout(function () {
-      p.style.transition = 'stroke-dashoffset ' + dur + 'ms ease-out, opacity 220ms linear';
-      p.style.opacity = 1;
-      p.style.strokeDashoffset = 0;
-      if (head) setTimeout(function () { p.setAttribute('marker-end', head); }, dur - 60);
-      setTimeout(function () {
-        p.style.transition = '';
-        p.style.strokeDashoffset = '';
-        p.style.strokeDasharray = keep || '';
-        p.style.opacity = '';          // hand opacity back to the stylesheet
-      }, dur + 80);
-    }, delay);
-  }
-
-  function fadeEl(el, delay) {
-    el.style.opacity = 0;
-    setTimeout(function () {
-      el.style.transition = 'opacity 480ms ease';
-      el.style.opacity = '';
-    }, delay);
-  }
-
-  function svgEntrance() {
-    all('.ring path').forEach(function (p, i) { drawPath(p, 380 + i * 55, 520); });
-    all('.ln-leader').forEach(function (p, i) { fadeEl(p, 1300 + i * 90); });
-    all('.ln-stub').forEach(function (p, i) { fadeEl(p, 1300 + i * 90); });
-    all('#gen circle').forEach(function (c, i) { fadeEl(c, 1340 + (i >> 1) * 90); });
-    all('.ln-arrow').forEach(function (p, i) { drawPath(p, 1460 + i * 90, 520); });
-  }
-
-  /* --- the walk --- */
-  function tick() {
-    all('.is-active').forEach(function (el) { el.classList.remove('is-active'); });
-    cur = (cur + 1) % 10;
-
-    [all('.node')[cur], all('.pill')[cur], all('.card')[cur],
-     all('.ring path')[cur], all('.ln-leader')[cur], all('.ln-stub')[cur],
-     all('.ln-arrow')[cur]]
-      .forEach(function (el) { if (el) el.classList.add('is-active'); });
-
-    clearTimeout(cometTimer);
-    cometTimer = setTimeout(function () {
-      var c = all('.ln-comet')[cur];
-      if (!c) return;
-      c.classList.remove('run');
-      void c.getBoundingClientRect();          // force a reflow so it replays
-      c.classList.add('run');
-    }, COMET_IN);
-  }
-
-  function ready() {
-    if (booted) return;
-    booted = true;
-
-    stage.style.transform = 'none';            // measure unscaled
-    draw();
-    fit();
-    buildComets();
-    assignDelays();
-
-    /* reduced motion: show the finished illustration, never run the walk */
-    if (REDUCED) { stage.classList.add('go', 'settled'); return; }
-
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        stage.classList.add('go');
-        svgEntrance();
-        setTimeout(function () {
-          stage.classList.add('settled');
-          tick();
-          setInterval(tick, STEP_MS);
-        }, 2950);
-      });
-    });
-  }
-
-  draw();                                      // first pass so layout is sane
+  /* geometry is measured unscaled, then the whole stage is scaled */
+  draw();
   fit();
   window.addEventListener('resize', fit);
 
-  /* wait for Inter — card heights (and every leader) depend on it */
+  /* card heights shift when Inter swaps in — re-measure once it is ready */
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(ready);
-    setTimeout(ready, 1500);                   // fallback if fonts never resolve
-  } else {
-    ready();
+    document.fonts.ready.then(function () {
+      stage.style.transform = 'none';
+      draw();
+      fit();
+    });
   }
 })();
 </script>
