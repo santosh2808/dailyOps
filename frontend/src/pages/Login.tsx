@@ -4,9 +4,9 @@ export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
       {/* Page header — SR logo + DailyOps wordmark, shared across both panels below */}
-      <header className="flex flex-shrink-0 items-center gap-2 px-6 py-3">
-        <img src="/sr-logo.png" alt="SR" className="h-9 w-9" />
-        <span className="text-lg font-bold tracking-tight text-[#2B3316]">DailyOps</span>
+      <header className="flex flex-shrink-0 items-center gap-3 px-8 py-4">
+        <img src="/sr-logo.png" alt="SR" className="h-16 w-16" />
+        <span className="text-3xl font-bold tracking-tight text-[#2B3316]">DailyOps</span>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
