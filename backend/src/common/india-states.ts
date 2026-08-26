@@ -1,8 +1,12 @@
 // Additive: Dashboard Redesign v2 — India Sales Map / Customer.state.
 // The 28 states + 8 union territories of India, used both to validate
-// Customer.state on create/update and to drive the map's tile layout on the
-// frontend (frontend/src/lib/indiaStates.ts mirrors this list exactly — if
-// you add/rename an entry here, update that file too).
+// Customer.state on create/update and to drive the frontend map's
+// coloring (frontend/src/lib/indiaStates.ts mirrors this list exactly —
+// if you add/rename an entry here, update that file too).
+//
+// "Jammu & Kashmir" and "Andaman & Nicobar" match the india-map-react
+// package's TopoJSON ST_NM spelling exactly — see
+// frontend/src/components/dashboard/IndiaSalesMap.tsx.
 export const INDIA_STATES = [
   'Andhra Pradesh',
   'Arunachal Pradesh',
@@ -32,11 +36,11 @@ export const INDIA_STATES = [
   'Uttar Pradesh',
   'Uttarakhand',
   'West Bengal',
-  'Andaman and Nicobar Islands',
+  'Andaman & Nicobar',
   'Chandigarh',
   'Dadra and Nagar Haveli and Daman and Diu',
   'Delhi',
-  'Jammu and Kashmir',
+  'Jammu & Kashmir',
   'Ladakh',
   'Lakshadweep',
   'Puducherry',

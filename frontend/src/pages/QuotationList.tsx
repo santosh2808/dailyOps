@@ -141,7 +141,7 @@ export default function QuotationList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Quotations" />
+        <Topbar title="Quotations" showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <QuotationFiltersBar filters={filters} onChange={setFilters} />

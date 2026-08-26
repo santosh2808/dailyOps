@@ -152,7 +152,7 @@ export default function SalesOrderList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Sales Orders" />
+        <Topbar title="Sales Orders" showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <SalesOrderFiltersBar filters={filters} onChange={setFilters} />
@@ -224,6 +224,7 @@ export default function SalesOrderList() {
                 </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Quotation</TableHead>
+                <TableHead>Sales Executive</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>
                   <button
@@ -251,13 +252,13 @@ export default function SalesOrderList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     Loading sales orders...
                   </TableCell>
                 </TableRow>
               ) : salesOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No sales orders found.
                   </TableCell>
                 </TableRow>
@@ -273,6 +274,7 @@ export default function SalesOrderList() {
                     </TableCell>
                     <TableCell>{salesOrder.customer?.companyName ?? "—"}</TableCell>
                     <TableCell>{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
+                    <TableCell>{salesOrder.createdBy ?? "—"}</TableCell>
                     <TableCell>
                       <SalesOrderStatusBadge status={salesOrder.status} />
                     </TableCell>

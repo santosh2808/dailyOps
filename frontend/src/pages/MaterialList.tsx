@@ -124,7 +124,7 @@ export default function MaterialList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Materials" />
+        <Topbar title="Materials" showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">

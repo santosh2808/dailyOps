@@ -47,7 +47,6 @@ import IndiaSalesMap from "@/components/dashboard/IndiaSalesMap";
 import {
   getDashboardCharts,
   getDashboardExecutives,
-  getDashboardRecentActivities,
   getDashboardRevenue,
   getDashboardSalesByState,
   getDashboardStats,
@@ -60,7 +59,6 @@ import type {
   DashboardStats,
   ExecutivePerformanceEntry,
   LeadSource,
-  RecentActivityEntry,
   RevenuePeriod,
   RevenuePoint,
   StateSalesEntry,
@@ -80,9 +78,10 @@ import type {
 // inline below rather than silently pretending it works.
 //
 // v2 notes:
-// - The Sales Funnel is replaced by the India Sales Map (see
-//   components/dashboard/IndiaSalesMap.tsx for why it's a tile cartogram,
-//   not a traced geographic SVG).
+// - The Sales Funnel is replaced by the India Sales Map, which renders
+//   India's real state boundaries via the india-map-react package (MIT,
+//   bundles its own boundary data) rather than a hand-built stand-in — see
+//   components/dashboard/IndiaSalesMap.tsx.
 // - The Donut Charts row now shows exactly the 4 v2 asked for — Lead
 //   Source, Quotation Status, Production Status, Inventory Status — which
 //   drops v1's Lead Status donut from view. That data is still fetched
@@ -92,24 +91,32 @@ import type {
 //   apply to the SalesOrder-derived widgets: India Map, Top Products,
 //   Executive Performance, and the non-date dimensions of Revenue Trend
 //   (state/executive/leadSource/product — its own Week/Month/Quarter/Year
-//   buttons remain the date control). The 4 donuts, Recent Activities and
-//   Today's Follow-ups are operational/pipeline snapshots, not sales
-//   figures, so they're intentionally left unfiltered — matching how the
-//   backend endpoints were built (see dashboard.service.ts).
+//   buttons remain the date control). The 4 donuts and Today's Follow-ups
+//   are operational/pipeline snapshots, not sales figures, so they're
+//   intentionally left unfiltered — matching how the backend endpoints
+//   were built (see dashboard.service.ts).
+// - Recent Activities (the audit-log timeline) was tried in an earlier
+//   pass and dropped at the user's request — it didn't carry enough
+//   signal to be worth the space.
 
 const SRM_GREEN = "#9BBB3D";
 const SRM_RED = "#ED3525";
 
-const DONUT_PALETTE = [
-  "#9BBB3D",
-  "#ED3525",
-  "#f59e0b",
+// Lead Source is a neutral category breakdown (Website/Referral/Cold
+// Call/...), not a good-vs-bad signal — so it deliberately does NOT reuse
+// SRM green/red (those are reserved for "on-brand accent" and "alert/
+// critical" respectively elsewhere on this dashboard). This is a plain
+// categorical palette instead.
+const LEAD_SOURCE_COLORS = [
   "#0ea5e9",
   "#8b5cf6",
-  "#64748b",
+  "#f59e0b",
   "#14b8a6",
+  "#6366f1",
   "#f472b6",
-  "#84cc16",
+  "#64748b",
+  "#fb923c",
+  "#a3e635",
   "#facc15",
 ];
 
@@ -137,16 +144,6 @@ const INVENTORY_STATUS_LINK: Record<string, string> = {
   // closest real filter rather than an unfiltered fallback.
   Critical: "/materials?stockStatus=low_stock",
   "Out of Stock": "/materials?stockStatus=out_of_stock",
-};
-
-// AuditLog.module values actually written by the backend today — see
-// dashboard.service.ts getRecentActivities()'s own comment. Leads log to
-// their own LeadHistory, not AuditLog, so "Lead" deliberately isn't here.
-const ACTIVITY_MODULE_LINK: Record<string, string> = {
-  SalesOrder: "/sales-orders",
-  ProformaInvoice: "/proforma-invoices",
-  JEO: "/job-execution-orders",
-  Quotation: "/quotations",
 };
 
 const REVENUE_PERIODS: RevenuePeriod[] = ["weekly", "monthly", "quarterly", "yearly"];
@@ -196,17 +193,6 @@ function revenueBucketRange(period: RevenuePeriod, index: number, month: number,
   const startDay = index * 7 + 1;
   const endDay = Math.min(startDay + 6, daysInMonth);
   return { dateFrom: isoDate(year, month, startDay), dateTo: isoDate(year, month, endDay) };
-}
-
-function timeAgo(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 interface KpiCardProps {
@@ -455,7 +441,6 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [charts, setCharts] = useState<DashboardChartsData | null>(null);
   const [monthRevenue, setMonthRevenue] = useState(0);
-  const [recentActivities, setRecentActivities] = useState<RecentActivityEntry[]>([]);
   const [todaysFollowUps, setTodaysFollowUps] = useState<TodaysFollowUpEntry[]>([]);
   const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -482,17 +467,15 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const [statsData, chartsData, thisMonthRevenue, activities, followUps] = await Promise.all([
+      const [statsData, chartsData, thisMonthRevenue, followUps] = await Promise.all([
         getDashboardStats(),
         getDashboardCharts(),
         getDashboardRevenue({ period: "monthly", year: currentYear }),
-        getDashboardRecentActivities(),
         getDashboardTodaysFollowUps(),
       ]);
       setStats(statsData);
       setCharts(chartsData);
       setMonthRevenue(thisMonthRevenue[now.getMonth()]?.value ?? 0);
-      setRecentActivities(activities);
       setTodaysFollowUps(followUps);
     } catch {
       setError("Failed to load dashboard data.");
@@ -693,10 +676,23 @@ export default function Dashboard() {
 
           {/* v2 requirements #1-4: India Sales Map replaces the Sales Funnel */}
           <Card className="border-none shadow-sm">
-            <CardHeader className="pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base">India Sales Map</CardTitle>
+              {filters.state && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, state: undefined })}
+                  className="flex items-center gap-1.5 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green hover:bg-srm-green/20"
+                >
+                  Showing: {filters.state}
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </CardHeader>
             <CardContent>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Colored by revenue. Click a state to see its sales orders (with the sales executive on each).
+              </p>
               {filteredLoading && salesByState.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
               ) : (
@@ -808,7 +804,7 @@ export default function Dashboard() {
             <DonutCard
               title="Lead Sources"
               data={leadSourceData}
-              colors={DONUT_PALETTE}
+              colors={LEAD_SOURCE_COLORS}
               emptyLabel="No leads yet."
               onSliceClick={(name) => {
                 const entry = leadSourceData.find((d) => d.name === name);
@@ -940,73 +936,37 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* v2 requirements #10-11: Recent Activities (Timeline) + Today's
-              Follow-ups (List) */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card className="border-none shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Recent Activities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {recentActivities.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No activity yet.</p>
-                ) : (
-                  <ol className="max-h-80 space-y-3 overflow-y-auto">
-                    {recentActivities.map((activity) => (
-                      <li
-                        key={activity.id}
-                        className="flex cursor-pointer gap-3 rounded-md p-1.5 text-sm transition-colors hover:bg-slate-50"
-                        // No recordId on this feed (see RecentActivityEntry) —
-                        // opens the owning module's list, not the specific record.
-                        onClick={() => navigate(ACTIVITY_MODULE_LINK[activity.module] ?? "/sales-orders")}
+          {/* v2 requirement #11: Today's Follow-ups (List) */}
+          <Card className="border-none shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Today's Follow-ups</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {todaysFollowUps.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No follow-ups scheduled for today.</p>
+              ) : (
+                <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {todaysFollowUps.map((lead) => (
+                    <li key={lead.id}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/leads/${lead.id}`)}
+                        className="flex w-full items-center justify-between rounded-md p-2 text-left text-sm transition-colors hover:bg-slate-50"
                       >
-                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-srm-green" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-slate-800">
-                            <span className="font-medium">{activity.actorName ?? "System"}</span>{" "}
-                            {activity.action.toLowerCase()} a {activity.module}
-                            {activity.remarks ? ` — ${activity.remarks}` : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{timeAgo(activity.createdAt)}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Today's Follow-ups</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {todaysFollowUps.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No follow-ups scheduled for today.</p>
-                ) : (
-                  <ul className="max-h-80 space-y-1 overflow-y-auto">
-                    {todaysFollowUps.map((lead) => (
-                      <li key={lead.id}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/leads/${lead.id}`)}
-                          className="flex w-full items-center justify-between rounded-md p-2 text-left text-sm transition-colors hover:bg-slate-50"
-                        >
-                          <span>
-                            <span className="font-medium text-slate-900">{lead.companyName}</span>
-                            <span className="text-muted-foreground"> — {lead.contactPerson}</span>
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {lead.assignedToName ?? "Unassigned"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                        <span>
+                          <span className="font-medium text-slate-900">{lead.companyName}</span>
+                          <span className="text-muted-foreground"> — {lead.contactPerson}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {lead.assignedToName ?? "Unassigned"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
           {/* 8. Notifications + 9. Quick Actions */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -117,7 +117,7 @@ export default function JobExecutionOrderList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Job Execution Orders" />
+        <Topbar title="Job Execution Orders" showBackButton />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4">
             <JeoFiltersBar filters={filters} onChange={setFilters} />
