@@ -16,10 +16,6 @@ export default function Login() {
 
       {/* Right side — Volt, the login robot, with the app's real fields */}
       <div className="relative h-full flex-1 overflow-hidden">
-        <div className="absolute left-5 top-5 z-10 flex flex-col leading-tight">
-          <span className="text-sm font-bold tracking-tight text-slate-900">DailyOps</span>
-          <span className="text-[11px] font-medium text-srm-green">by Smart Rotamach</span>
-        </div>
         <LoginRobot />
       </div>
     </div>
