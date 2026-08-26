@@ -16,6 +16,7 @@ export default function Login() {
           src="/business-flow-animated.html"
           title="DailyOps — all your business operations in one place"
           className="h-full w-full border-0"
+          scrolling="no"
         />
       </div>
 

@@ -22,20 +22,27 @@
   .tone-b{ --g1:#82A831; --g2:#4E6B15; --sol:#63841F; --dk:#33470E; --glow:rgba(78,107,21,.34); }
 
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:transparent;}
+  html,body{margin:0;padding:0;background:transparent;height:100%;overflow:hidden;}
   body{
     font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased;
     color:var(--charcoal);
   }
 
-  /* transparent stage — drops onto any background */
-  #viewport{width:100%;overflow:hidden;}
+  /* transparent stage — drops onto any background. Centered via flex and
+     scaled to the smaller of width/height ratio (see fit() in the script
+     below) so the whole 1460x1450 artwork always fits inside its container
+     with no scrollbars, whatever the container's aspect ratio. */
+  #viewport{
+    width:100%;height:100%;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+  }
   .stage{
     position:relative;
     width:1460px;
     height:1450px;
-    transform-origin:top left;
+    flex:none;
+    transform-origin:center center;
     background:transparent;
   }
 
@@ -709,11 +716,12 @@
     });
   }
 
-  /* --- scale the fixed artwork to the available width --- */
+  /* --- scale the fixed artwork to fit inside the available box on both
+         axes (whichever ratio is tighter), centered, so it never needs to
+         scroll regardless of the container's aspect ratio --- */
   function fit() {
-    var s = Math.min(1, vp.clientWidth / 1460);
+    var s = Math.min(vp.clientWidth / 1460, vp.clientHeight / 1450);
     stage.style.transform = 'scale(' + s + ')';
-    vp.style.height = (1450 * s) + 'px';
   }
 
   /* =============================================================
