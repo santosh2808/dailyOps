@@ -41,22 +41,21 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8">
-      <ParticlesBackground />
+    <div className="flex min-h-screen w-full bg-slate-50">
+      {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar */}
+      <div className="hidden flex-shrink-0 items-center justify-center border-r border-slate-200 bg-white px-8 py-10 lg:flex lg:w-[440px] xl:w-[520px] 2xl:w-[600px]">
+        <img
+          src="/dailyops-overview.jpg"
+          alt="DailyOps — all your business operations in one place"
+          className="w-full rounded-2xl shadow-xl"
+        />
+      </div>
 
-      <div className="relative z-10 flex w-full max-w-7xl flex-col items-center gap-10 lg:flex-row lg:items-center">
-        {/* Business overview infographic — pinned to the left edge, its own section */}
-        <div className="hidden w-full max-w-2xl flex-shrink-0 lg:block">
-          <img
-            src="/dailyops-overview.jpg"
-            alt="DailyOps — all your business operations in one place"
-            className="w-full rounded-2xl shadow-2xl"
-          />
-        </div>
+      {/* Right side — particle background with the login card centered in the remaining whitespace */}
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-8">
+        <ParticlesBackground />
 
-        {/* Login — its own section, centered in the remaining space */}
-        <div className="flex w-full flex-1 justify-center">
-          <Card className="w-full max-w-sm flex-shrink-0 border-none shadow-lg">
+        <Card className="relative z-10 w-full max-w-sm border-none shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <img
               src="/logo-smart-rotamach.jpg"
@@ -95,8 +94,7 @@ export default function Login() {
               </Button>
             </form>
           </CardContent>
-          </Card>
-        </div>
+        </Card>
       </div>
     </div>
   );
