@@ -1,19 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { getDotGreeting } from "@/lib/dotMessages";
 import "./LoginRobot.css";
 
-// Volt — ported from the user's own reference HTML/CSS/JS (a neubrutalist
-// login card guarded by a robot that watches you type, turns around and
-// shows a password-strength meter on the back of its head while you type
-// your password, and throws confetti on success). The interaction logic
-// below is a close port of that vanilla JS into a single mount-time effect
-// operating on refs, rather than being rebuilt as declarative React state —
-// that mirrors the original's structure and keeps the animation timing
-// identical. Colors remapped to SRM green/red (see LoginRobot.css); the
-// three demo fields (name/email/password) are collapsed into the app's
-// real two fields (username-or-email/password), and the fake "log in" on
-// submit is replaced with a real call to AuthContext.login().
+// D.O.T. (DailyOps Operations Assistant) — ported from the user's own
+// reference HTML/CSS/JS (a neubrutalist login card guarded by a robot
+// that watches you type, turns around and shows a password-strength
+// meter on the back of its head while you type your password, and throws
+// confetti on success). The interaction logic below is a close port of
+// that vanilla JS into a single mount-time effect operating on refs,
+// rather than being rebuilt as declarative React state — that mirrors
+// the original's structure and keeps the animation timing identical.
+// Colors remapped to SRM green/red (see LoginRobot.css); the three demo
+// fields (name/email/password) are collapsed into the app's real two
+// fields (username-or-email/password), and the fake "log in" on submit
+// is replaced with a real call to AuthContext.login().
+//
+// The one-time greeting shown in the speech bubble on load is sourced
+// from getDotGreeting() (see lib/dotMessages.ts) rather than being a
+// literal string here — that's the seam where a future AI-generated
+// response can be swapped in without touching this component's
+// interaction logic. Everything else the robot says (the reactive quips
+// below, keyed to focus/typing/submit events) stays as scripted
+// personality, same as before.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function pick<T>(arr: T[]): T {
@@ -41,6 +51,10 @@ export default function LoginRobot() {
   const btnLabelRef = useRef<HTMLSpanElement>(null);
 
   const [notice, setNotice] = useState("");
+  // Picked once per mount (i.e. once per page load/refresh) — see the
+  // import comment above and lib/dotMessages.ts for why this is a
+  // function call rather than a literal string.
+  const [greeting] = useState(() => getDotGreeting());
 
   useEffect(() => {
     if (
@@ -337,7 +351,7 @@ export default function LoginRobot() {
     }
     document.addEventListener("mousemove", onMouseMove);
 
-    say("Hi. I'm SRM Bot. I guard this form.");
+    say(greeting);
 
     return () => {
       clearTimeout(blinkTimer);
@@ -369,7 +383,7 @@ export default function LoginRobot() {
       <main className="volt-stage">
         <div className="volt-robot" ref={robotRef} data-mood="idle">
           <div className="volt-bubble" ref={bubbleRef} role="status" aria-live="polite">
-            <span ref={bubbleTextRef}>Hi. I'm SRM Bot. I guard this form.</span>
+            <span ref={bubbleTextRef}>{greeting}</span>
           </div>
           <div className="volt-antenna" aria-hidden="true">
             <span className="volt-antenna-rod" />
@@ -415,7 +429,9 @@ export default function LoginRobot() {
         <form className="volt-card" ref={formRef} noValidate>
           <span className="volt-hand volt-hand--l" aria-hidden="true" />
           <span className="volt-hand volt-hand--r" aria-hidden="true" />
-          <h1 className="volt-title">Beep boop. Who goes there?</h1>
+          <h1 className="volt-title">Welcome to DailyOps</h1>
+          <p className="volt-subtitle">Smart Rotamac Operations Platform</p>
+          <p className="volt-description">Manage your complete business from Lead to Dispatch.</p>
 
           <label className="volt-field">
             <svg className="volt-field-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -479,6 +495,12 @@ export default function LoginRobot() {
               LOG ME IN
             </span>
           </button>
+
+          <p className="volt-footer">
+            Powered by Smart Rotamac
+            <span className="volt-footer-version">Version 1.0</span>
+          </p>
+
           <span className="volt-foot volt-foot--l" aria-hidden="true" />
           <span className="volt-foot volt-foot--r" aria-hidden="true" />
         </form>

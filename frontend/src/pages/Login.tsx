@@ -14,7 +14,7 @@ export default function Login() {
         />
       </div>
 
-      {/* Right side — Volt, the login robot, with the app's real fields */}
+      {/* Right side — D.O.T., the login robot, with the app's real fields */}
       <div className="relative h-full flex-1 overflow-hidden">
         <LoginRobot />
       </div>
