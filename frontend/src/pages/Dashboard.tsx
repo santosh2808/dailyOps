@@ -754,48 +754,67 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 {revenueLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading...</p>
-                ) : revenueSeries.every((p) => p.value === 0) ? (
-                  <p className="text-sm text-muted-foreground">No revenue in this range yet.</p>
+                  <div className="flex h-[300px] items-center justify-center">
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                  </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart
-                      data={revenueSeries}
-                      onClick={(state) => {
-                        const index = state?.activeTooltipIndex;
-                        if (index == null) return;
-                        const parsedIndex = Number(index);
-                        if (Number.isNaN(parsedIndex)) return;
-                        const { dateFrom, dateTo } = revenueBucketRange(
-                          revenuePeriod,
-                          parsedIndex,
-                          revenueMonth,
-                          revenueYear,
-                        );
-                        navigate(`/sales-orders?dateFrom=${dateFrom}&dateTo=${dateTo}`);
-                      }}
-                    >
-                      <defs>
-                        <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={SRM_GREEN} stopOpacity={0.35} />
-                          <stop offset="100%" stopColor={SRM_GREEN} stopOpacity={0.03} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`} />
-                      <Tooltip formatter={(value) => formatINR(Number(value))} />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        name="Revenue"
-                        stroke={SRM_GREEN}
-                        strokeWidth={2}
-                        fill="url(#revenueFill)"
-                        activeDot={{ r: 5, cursor: "pointer" }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  // The chart itself always renders — the backend always
+                  // returns a full set of labeled buckets (12 months, 4
+                  // quarters, etc.) even when every bucket is 0 — so the
+                  // axes/gridlines are always visible. A "no revenue yet"
+                  // note overlays the (flat, empty) chart instead of
+                  // replacing it, so this card never looks broken/blank.
+                  <div className="relative">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart
+                        data={revenueSeries}
+                        onClick={(state) => {
+                          const index = state?.activeTooltipIndex;
+                          if (index == null) return;
+                          const parsedIndex = Number(index);
+                          if (Number.isNaN(parsedIndex)) return;
+                          const { dateFrom, dateTo } = revenueBucketRange(
+                            revenuePeriod,
+                            parsedIndex,
+                            revenueMonth,
+                            revenueYear,
+                          );
+                          navigate(`/sales-orders?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+                        }}
+                      >
+                        <defs>
+                          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={SRM_GREEN} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={SRM_GREEN} stopOpacity={0.03} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                        <YAxis
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={(v) => `₹${Math.round(Number(v) / 1000)}k`}
+                          domain={[0, (max: number) => (max > 0 ? max : 100)]}
+                        />
+                        <Tooltip formatter={(value) => formatINR(Number(value))} />
+                        <Area
+                          type="monotone"
+                          dataKey="value"
+                          name="Revenue"
+                          stroke={SRM_GREEN}
+                          strokeWidth={2}
+                          fill="url(#revenueFill)"
+                          activeDot={{ r: 5, cursor: "pointer" }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    {revenueSeries.every((p) => p.value === 0) && (
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <p className="rounded-md bg-white/90 px-3 py-1.5 text-sm text-muted-foreground shadow-sm">
+                          No revenue in this range yet.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
