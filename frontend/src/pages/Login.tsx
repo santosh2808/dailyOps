@@ -13,6 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import LoginMascot from "@/components/LoginMascot";
+
+// Loose enough to just drive the mascot's smile/antenna — not used for
+// actual form validation (the identifier field also accepts a username).
+const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   // Enterprise RBAC: login accepts either Username or Email in this one
@@ -23,6 +28,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [focusField, setFocusField] = useState<"identifier" | "password" | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -78,6 +84,12 @@ export default function Login() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-10 pb-10">
+              <div className="mb-4">
+                <LoginMascot
+                  focusField={focusField}
+                  isValidEmail={EMAIL_LIKE.test(identifier.trim())}
+                />
+              </div>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="identifier" className="text-base">
@@ -89,6 +101,8 @@ export default function Login() {
                       id="identifier"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
+                      onFocus={() => setFocusField("identifier")}
+                      onBlur={() => setFocusField(null)}
                       placeholder="admin"
                       required
                       className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
@@ -106,6 +120,8 @@ export default function Login() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onFocus={() => setFocusField("password")}
+                      onBlur={() => setFocusField(null)}
                       required
                       className="h-12 pl-10 text-base border-slate-200 focus-visible:border-srm-green focus-visible:ring-srm-green/30"
                     />
