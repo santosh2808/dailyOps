@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DailyOps — Business Operations Flow (animated)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* =========================================================
+     PALETTE — every colour is a shade of the brand green #9BBB3D
+       tone-a  bright / leaf     tone-b  deep / forest
+     ========================================================= */
+  :root{
+    --brand:#9BBB3D;
+    --ink:#2B3316;
+    --charcoal:#333335;
+    --body:#3D4735;
+  }
+  .tone-a{ --g1:#BCD86A; --g2:#8CB233; --sol:#9BBB3D; --dk:#4E6B15; --glow:rgba(140,178,51,.38); }
+  .tone-b{ --g1:#82A831; --g2:#4E6B15; --sol:#63841F; --dk:#33470E; --glow:rgba(78,107,21,.34); }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:transparent;}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    color:var(--charcoal);
+  }
+
+  /* transparent stage — drops onto any background */
+  #viewport{width:100%;overflow:hidden;}
+  .stage{
+    position:relative;
+    width:1460px;
+    height:1450px;
+    transform-origin:top left;
+    background:transparent;
+  }
+
+  /* ---------------- header ---------------- */
+  .headline{position:absolute;left:0;right:0;top:26px;text-align:center;}
+  .headline h1{
+    margin:0;font-size:35px;font-weight:800;letter-spacing:-.5px;color:var(--ink);
+    text-shadow:0 1px 3px rgba(255,255,255,.75);
+  }
+  .headline p{
+    margin:16px 0 0;font-size:17px;font-weight:500;color:#4F5A45;
+    text-shadow:0 1px 3px rgba(255,255,255,.75);
+  }
+  .headline p b{color:#6E9022;font-weight:700;}
+
+  /* ---------------- connector layer ---------------- */
+  .lines{position:absolute;inset:0;width:1460px;height:1450px;pointer-events:none;z-index:1;}
+
+  /* ---------------- process nodes ---------------- */
+  .node{
+    position:absolute;width:84px;height:84px;margin:-42px 0 0 -42px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    color:#fff;z-index:4;
+    background:linear-gradient(145deg,var(--g1),var(--g2));
+    box-shadow:
+      0 0 0 5px rgba(255,255,255,.96),
+      0 0 0 6.5px var(--sol),
+      0 14px 28px var(--glow);
+  }
+  .node svg{width:40px;height:40px;display:block;}
+
+  /* ---------------- status pills ---------------- */
+  .pill{
+    position:absolute;transform:translate(-50%,-50%);
+    padding:8px 17px;border-radius:999px;
+    background:rgba(255,255,255,.96);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    border:1px solid rgba(155,187,61,.34);
+    box-shadow:0 6px 16px rgba(60,80,20,.12);
+    font-size:13px;font-weight:700;white-space:nowrap;color:var(--dk);
+    z-index:4;
+  }
+
+  /* ---------------- step cards ---------------- */
+  .card{
+    position:absolute;z-index:4;
+    padding:17px 20px 18px 32px;border-radius:16px;
+    background:rgba(255,255,255,.95);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    border:1px solid rgba(155,187,61,.28);
+    box-shadow:0 12px 30px rgba(60,80,20,.11), 0 2px 6px rgba(60,80,20,.05);
+  }
+  .card.mid{transform:translateY(-50%);}
+  .card h3{
+    margin:0 0 9px;font-size:14.5px;font-weight:700;letter-spacing:.4px;
+    text-transform:uppercase;color:var(--dk);line-height:1.3;
+  }
+  .card p{margin:0;font-size:15px;font-weight:500;line-height:1.56;color:var(--body);}
+
+  /* number badge is centred on the card's left edge, clear of the text
+     (the card carries 30px of left padding to keep it off the copy) */
+  .badge{
+    position:absolute;left:-30px;top:50%;transform:translateY(-50%);
+    width:46px;height:46px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:15.5px;font-weight:800;color:#fff;letter-spacing:.2px;
+    background:linear-gradient(145deg,var(--g1),var(--g2));
+    box-shadow:0 0 0 4px rgba(255,255,255,.96), 0 8px 18px var(--glow);
+  }
+
+  /* ---------------- centre hub ---------------- */
+  .hub{
+    position:absolute;left:730px;top:675px;transform:translate(-50%,-50%);
+    width:310px;height:310px;border-radius:50%;
+    background:rgba(255,255,255,.97);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    box-shadow:0 20px 50px rgba(60,80,20,.16), inset 0 -10px 26px rgba(155,187,61,.10);
+    display:flex;align-items:center;justify-content:center;
+    z-index:2;
+  }
+  .srm-logo{width:240px;display:block;}
+  .srm-logo svg{width:100%;height:auto;display:block;}
+
+  /* Brand logo keeps its original colours.
+     To fold it into the green scheme, uncomment: */
+  /* .srm-logo svg path[fill="#ED3525"]{fill:#4E6B15;} */
+
+  /* ---------------- hub feature chips ---------------- */
+  .chip{
+    position:absolute;transform:translate(-50%,-50%);
+    width:88px;height:88px;border-radius:50%;
+    background:rgba(255,255,255,.97);
+    box-shadow:0 10px 26px rgba(60,80,20,.15);
+    border:1px solid rgba(155,187,61,.28);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    text-align:center;z-index:3;
+  }
+  .chip svg{width:24px;height:24px;color:#7A9A2B;display:block;}
+  .chip span{font-size:11px;font-weight:700;line-height:1.28;color:#4E6B15;}
+
+  /* ---------------- benefits bar ---------------- */
+  .bar{
+    position:absolute;left:40px;top:1248px;width:1380px;height:100px;
+    border-radius:18px;
+    background:rgba(255,255,255,.95);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    border:1px solid rgba(155,187,61,.26);
+    box-shadow:0 14px 34px rgba(60,80,20,.12);
+    display:flex;align-items:center;z-index:4;
+  }
+  .bar .cell{
+    flex:1;display:flex;align-items:center;gap:14px;padding:0 20px;height:64px;
+    border-right:1px solid rgba(155,187,61,.22);
+  }
+  .bar .cell:last-child{border-right:none;}
+  .bar .cell svg{width:36px;height:36px;flex:none;color:var(--sol);}
+  .bar .bt{font-size:15px;font-weight:700;margin-bottom:4px;white-space:nowrap;color:var(--dk);}
+  .bar .bd{font-size:13px;font-weight:500;line-height:1.45;color:var(--body);white-space:nowrap;}
+
+  /* ---------------- footer strip ---------------- */
+  .foot{
+    position:absolute;left:50%;top:1368px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:26px;
+    padding:12px 32px;border-radius:999px;
+    background:rgba(255,255,255,.95);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border:1px solid rgba(155,187,61,.26);
+    box-shadow:0 12px 28px rgba(60,80,20,.12);
+    z-index:4;
+  }
+  .foot .f{display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:700;color:var(--dk);}
+  .foot .f svg{width:23px;height:23px;color:var(--sol);}
+  .foot .sep{width:5px;height:5px;border-radius:50%;background:#B7D563;}
+
+  /* =========================================================
+     MOTION
+     ---------------------------------------------------------
+     .anim            everything hidden, waiting
+     .anim.go         entrance runs (staggered via --d)
+     .anim.go.settled entrance stripped; ambient + step loop own the stage
+     ========================================================= */
+  @keyframes fadeDown  { from{opacity:0; transform:translateY(-14px)} to{opacity:1; transform:translateY(0)} }
+  @keyframes fadeUp    { from{opacity:0; transform:translateY(18px)}  to{opacity:1; transform:translateY(0)} }
+  @keyframes hubIn     { from{opacity:0; transform:translate(-50%,-50%) scale(.82)}
+                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
+  @keyframes hubBreathe{ 0%,100%{transform:translate(-50%,-50%) scale(1)}
+                         50%    {transform:translate(-50%,-50%) scale(1.018)} }
+  @keyframes chipIn    { from{opacity:0; transform:translate(-50%,-50%) scale(.7)}
+                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
+  @keyframes chipFloat { 0%,100%{transform:translate(-50%,-50%) translateY(0)}
+                         50%    {transform:translate(-50%,-50%) translateY(-5px)} }
+  @keyframes nodeIn    { 0%{opacity:0; transform:scale(.3)} 62%{opacity:1; transform:scale(1.12)}
+                         100%{opacity:1; transform:scale(1)} }
+  @keyframes pillIn    { from{opacity:0; transform:translate(-50%,-50%) scale(.72)}
+                         to  {opacity:1; transform:translate(-50%,-50%) scale(1)} }
+  @keyframes cardIn    { from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
+  @keyframes cardInMid { from{opacity:0; transform:translateY(calc(-50% + 20px))}
+                         to  {opacity:1; transform:translateY(-50%)} }
+  @keyframes march11   { to{ stroke-dashoffset:-11px; } }
+  @keyframes march6    { to{ stroke-dashoffset:-6px;  } }
+  @keyframes cometRun  { 0%  { opacity:0; stroke-dashoffset:var(--len); }
+                         14% { opacity:1; }
+                         86% { opacity:1; }
+                         100%{ opacity:0; stroke-dashoffset:0; } }
+
+  /* --- waiting state --- */
+  .anim .headline, .anim .hub, .anim .chip, .anim .node,
+  .anim .pill, .anim .card, .anim .bar, .anim .foot{ opacity:0; }
+  /* connectors are drawn by script on first paint, long before the entrance
+     starts — keep the whole layer dark until .go hands it over to svgEntrance */
+  .anim:not(.go) .lines path,
+  .anim:not(.go) .lines circle{ opacity:0; }
+
+  /* --- entrance --- */
+  .anim.go .headline { animation:fadeDown .85s cubic-bezier(.22,1,.36,1) both; }
+  .anim.go .hub      { animation:hubIn .95s cubic-bezier(.22,1,.36,1) .18s both; }
+  .anim.go .chip     { animation:chipIn .65s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
+  .anim.go .node     { animation:nodeIn .70s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
+  .anim.go .pill     { animation:pillIn .55s cubic-bezier(.34,1.56,.64,1) var(--d,0s) both; }
+  .anim.go .card     { animation:cardIn .70s cubic-bezier(.22,1,.36,1)   var(--d,0s) both; }
+  .anim.go .card.mid { animation-name:cardInMid; }
+  .anim.go .bar      { animation:fadeUp .8s cubic-bezier(.22,1,.36,1) 2.45s both; }
+  .anim.go .foot     { animation:fadeUp .8s cubic-bezier(.22,1,.36,1) 2.60s both; }
+
+  /* --- settled: drop the entrance, keep the ambient drift --- */
+  .anim.go.settled .headline,
+  .anim.go.settled .node,
+  .anim.go.settled .pill,
+  .anim.go.settled .card,
+  .anim.go.settled .bar,
+  .anim.go.settled .foot { animation:none; opacity:1; }
+  .anim.go.settled .hub  { opacity:1; animation:hubBreathe 7s ease-in-out infinite; }
+  .anim.go.settled .chip { opacity:1; animation:chipFloat 6.5s ease-in-out var(--d,0s) infinite; }
+
+  /* --- the travelling highlight --- */
+  .node{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease; }
+  .settled .node.is-active{
+    transform:scale(1.1);
+    box-shadow:0 0 0 6px rgba(255,255,255,.98), 0 0 0 10px var(--sol), 0 22px 44px var(--glow);
+  }
+  .card{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease, border-color .5s ease; }
+  .settled .card.is-active{
+    transform:translateY(-5px); border-color:var(--sol);
+    box-shadow:0 20px 42px rgba(60,80,20,.20), 0 3px 8px rgba(60,80,20,.08);
+  }
+  .settled .card.mid.is-active{ transform:translateY(calc(-50% - 5px)); }
+  .badge{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease; }
+  .settled .card.is-active .badge{
+    transform:translateY(-50%) scale(1.12);
+    box-shadow:0 0 0 5px rgba(255,255,255,.98), 0 10px 22px var(--glow);
+  }
+  .pill{ transition:transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease, border-color .5s ease; }
+  .settled .pill.is-active{
+    transform:translate(-50%,-50%) scale(1.07);
+    border-color:var(--sol); box-shadow:0 10px 24px rgba(60,80,20,.20);
+  }
+
+  /* --- connectors --- */
+  .lines .ring path{ transition:stroke-width .45s ease, opacity .45s ease; }
+  .settled .ring path.is-active{ stroke-width:13; }
+  .ln-arrow{ transition:stroke-width .4s ease, opacity .4s ease; }
+  .settled .ln-arrow{ opacity:.72; }
+  .settled .ln-arrow.is-active{ opacity:1; stroke-width:4.2; }
+  .settled .ln-leader.is-active{ animation:march11 .7s linear infinite; stroke:#7FA22B; }
+  .settled .ln-stub.is-active  { animation:march6 .5s linear infinite; }
+  .ln-comet{ fill:none; opacity:0; stroke:#E8F6C6; stroke-linecap:round; }
+  .ln-comet.run{ animation:cometRun 850ms linear; }
+
+  /* --- respect the OS setting --- */
+  @media (prefers-reduced-motion: reduce){
+    .anim .headline, .anim .hub, .anim .chip, .anim .node,
+    .anim .pill, .anim .card, .anim .bar, .anim .foot{ opacity:1; }
+    .anim.go .headline, .anim.go .hub, .anim.go .chip, .anim.go .node,
+    .anim.go .pill, .anim.go .card, .anim.go .bar, .anim.go .foot,
+    .anim.go.settled .hub, .anim.go.settled .chip{ animation:none; }
+    .node, .card, .pill, .badge, .ln-arrow, .lines .ring path{ transition:none; }
+    .ln-comet{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="viewport">
+<div class="stage anim" id="stage">
+
+  <!-- ============ HEADER ============ -->
+  <div class="headline">
+    <h1>All Your Business Operations in One Place</h1>
+    <p><b>DailyOps</b> helps you manage leads, sales, orders, production and deliveries seamlessly.</p>
+  </div>
+
+  <!-- ============ ARROWS / LEADER LINES (generated by script) ============ -->
+  <svg class="lines" viewBox="0 0 1460 1450" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ah-a" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="5.2" markerHeight="5.2" orient="auto-start-reverse">
+        <path d="M0 .6 L10 5 L0 9.4 Z" fill="#9BBB3D"/>
+      </marker>
+      <marker id="ah-b" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="5.2" markerHeight="5.2" orient="auto-start-reverse">
+        <path d="M0 .6 L10 5 L0 9.4 Z" fill="#63841F"/>
+      </marker>
+    </defs>
+
+    <!-- segmented progress ring around the hub: 10 arcs, one per step -->
+    <g class="ring" fill="none" stroke-width="9" stroke-linecap="round">
+      <path d="M686.0 510.8 A170 170 0 0 1 774.0 510.8" stroke="#9BBB3D"/>
+      <path d="M790.9 516.3 A170 170 0 0 1 862.1 568.0" stroke="#63841F"/>
+      <path d="M872.6 582.4 A170 170 0 0 1 899.8 666.1" stroke="#9BBB3D"/>
+      <path d="M899.8 683.9 A170 170 0 0 1 872.6 767.6" stroke="#63841F"/>
+      <path d="M862.1 782.0 A170 170 0 0 1 790.9 833.7" stroke="#9BBB3D"/>
+      <path d="M774.0 839.2 A170 170 0 0 1 686.0 839.2" stroke="#63841F"/>
+      <path d="M669.1 833.7 A170 170 0 0 1 597.9 782.0" stroke="#9BBB3D"/>
+      <path d="M587.4 767.6 A170 170 0 0 1 560.2 683.9" stroke="#63841F"/>
+      <path d="M560.2 666.1 A170 170 0 0 1 587.4 582.4" stroke="#9BBB3D"/>
+      <path d="M597.9 568.0 A170 170 0 0 1 669.1 516.3" stroke="#63841F"/>
+    </g>
+
+    <g id="gen"></g>
+  </svg>
+
+  <!-- ============ CENTRE HUB — SRM logo only ============ -->
+  <div class="hub">
+    <div class="srm-logo">
+      <svg viewBox="0 0 382 156" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M79.1332 21.3819C79.1352 20.0715 79.0242 14.56 79.8643 13.7898C81.636 13.2313 87.5838 12.9431 89.3831 13.4324C90.212 14.1901 90.7613 19.4453 90.8943 20.7906C92.8815 20.8048 97.2166 21.256 99.0737 21.7196C99.913 19.7885 101.37 16.3844 102.547 14.6711C106.307 15.826 108.406 16.4385 112.102 17.9218C111.533 19.9775 111.052 23.8695 110.366 25.5248C113.203 26.8538 115.033 27.919 117.532 29.7655C118.805 28.137 121.616 25.7897 123.273 24.3853C124.698 25.5829 126.416 26.8231 127.864 28.032C130.457 30.1974 131.439 30.8433 129.177 33.9788C128.316 35.1722 127.492 36.4074 126.53 37.5718C131.513 42.2419 129.223 45.5885 137.555 41.8715C137.956 41.6924 138.438 41.4919 138.849 41.3005C140.58 44.0573 142.419 47.5083 143.47 50.5855C141.075 51.9677 139.11 53.3537 136.924 55.0289C137.496 56.082 138.926 61.3128 139.041 62.575C141.593 62.5763 144.267 62.726 146.853 62.7638C147.281 66.0461 147.363 69.9578 147.489 73.3031C144.879 73.8721 142.541 74.1974 139.904 74.5658C139.764 77.0485 139.305 80.2482 138.909 82.7269C141.338 83.7603 143.762 84.9777 146.141 86.1358C145.566 87.309 144.996 89.5667 144.522 90.8808C143.952 92.4598 143.227 94.1618 142.867 95.7747C140.19 95.2415 137.517 94.6888 134.849 94.1168C133.862 96.847 132.542 98.7541 131.006 101.192C132.28 102.309 135.009 105.531 136.254 106.938C134.29 109.532 131.982 112.401 129.545 114.566C128.412 114.075 124.263 111.111 123.001 110.233C122.112 110.901 121.143 111.87 120.199 112.597C118.809 113.669 117.186 114.748 115.956 115.965C115.884 115.866 115.812 115.766 115.742 115.665C114.225 113.466 109.628 106.845 108.661 104.021C108.59 103.814 112.473 100.765 113.068 100.214C113.973 99.3754 115.373 98.1884 116.316 97.1396C127.629 84.5537 129.118 65.1674 119.443 51.1838C113.738 42.8382 104.962 37.087 95.0291 35.186C84.1454 34.0923 80.5071 34.7824 70.5565 39.1608C67.6425 41.0027 65.5085 42.4517 62.9494 44.7636C57.1997 49.9585 51.8095 59.6263 51.5577 67.4568C46.6988 67.0266 42.2032 65.9956 37.3599 65.4785L38.2288 61.7719C36.6439 60.9375 32.542 58.8394 30.9748 58.3407C31.512 56.2397 33.1099 50.5198 34.2938 48.9512C35.3758 48.3982 40.4676 49.8171 41.9122 50.2026C42.9223 48.1219 44.6371 44.8988 45.9961 43.1232C45.0577 42.1489 41.4263 38.3786 40.9701 37.4108C41.2676 35.9906 46.122 30.4924 47.5016 29.9228C48.7258 30.1067 52.3026 32.9856 54.0015 33.9291C56.5068 32.0662 57.407 30.917 60.4138 29.0646C59.3486 26.4649 58.5799 23.9845 57.5884 21.5984C60.6047 19.9902 63.6649 18.4657 66.7658 17.0271C68.4235 19.1744 69.6184 21.4753 71.3501 23.7263C73.3074 22.7747 76.8071 22.0729 79.1332 21.3819ZM80.4398 22.7669C77.1217 23.4212 73.4924 24.1806 70.4888 25.7188C69.0451 23.158 67.804 21.2826 66.2893 18.8267C64.1246 20.0629 61.4629 21.0613 59.5032 22.3707C60.1227 23.9687 61.7052 28.0703 62.1159 29.5767C59.7526 31.3567 57.051 33.2528 54.816 35.1469C53.5885 36.1873 49.091 32.6356 47.7335 31.579C46.1752 33.034 44.757 34.4875 43.4984 36.2177C43.2338 36.5814 42.9698 36.8797 42.6399 37.1872C44.3335 39.1705 46.1253 41.0105 47.8477 42.9614C46.1266 45.5068 44.624 47.9534 43.4262 50.7925C43.2857 51.1252 43.111 51.4936 42.9275 51.803C40.4281 51.3119 37.7239 50.7294 35.2207 50.369C34.3752 52.2963 33.3338 55.1525 32.7998 57.2027C34.0528 58.2148 38.1378 59.8737 39.8577 60.7806C39.4781 61.9897 39.2511 62.9443 38.9778 64.1849C41.9202 64.331 46.9143 65.407 50.2215 65.8255C51.8427 55.6367 56.9108 47.2388 65.182 40.9187C66.1405 40.1862 67.8214 39.0867 68.8978 38.6171C76.2386 33.7107 88.0671 32.165 96.5872 34.0532C101.754 35.0308 107.768 37.962 111.98 41.1038C132.813 56.6429 132.526 89.2588 110.708 104.064C110.511 104.197 110.311 104.323 110.106 104.443C111.052 105.384 115.564 112.372 116.065 113.735C118.547 112.055 120.701 110.423 122.837 108.318C124.972 109.871 127.285 111.24 129.304 112.743C130.895 110.96 133.115 108.84 134.231 106.887C132.524 104.921 130.763 103.133 128.974 101.246C131.219 98.0181 132.564 96.0262 134.144 92.3706C135.227 92.736 140.165 93.6998 141.584 93.9464C142.939 91.3724 143.214 89.3154 144.351 86.9797C142.003 85.8287 139.422 84.671 137.135 83.476C137.728 80.9958 138.412 75.9543 138.435 73.4001C141.093 72.7249 143.675 72.6709 146.236 71.9408C146.111 69.3895 145.937 66.8406 145.715 64.2958C143.22 64.1996 140.254 64.0317 137.768 64.1761C137.183 61.103 136.51 58.4099 135.471 55.4656C134.772 53.4842 140.267 50.8186 141.718 50.0382C141.067 48.6798 139.066 44.2647 138.33 43.1441C135.922 43.9816 133.232 44.7389 130.986 45.8688C129.218 43.253 127.624 40.9103 125.46 38.5806C124.257 37.2849 128.209 32.6973 129.029 31.3709C122.653 24.6124 123.784 25.9314 117.57 31.5839C115.544 30.1032 110.96 27.1991 108.619 26.3327C109.471 23.949 109.934 21.3659 110.404 18.8807C108.003 17.9282 105.48 17.2575 103.274 16.3769C102.043 18.7846 100.972 21.214 99.756 23.6012C97.5422 22.572 92.2426 22.3566 89.5742 22.15C89.2326 19.5821 88.9329 17.1443 88.3739 14.6073C86.0702 14.6707 82.7027 14.9393 80.5488 14.9129C80.4704 17.5301 80.434 20.1484 80.4398 22.7669Z" fill="#333335"/>
+        <path d="M46.2173 74.2441C46.7068 74.7314 46.5617 83.836 46.5817 85.2469C39.4518 84.8258 31.4611 85.216 24.2324 85.0772C24.4695 88.1242 24.4032 93.1061 24.347 96.2436C29.6056 96.1671 34.8649 96.1433 40.1241 96.1721C42.2113 96.1746 47.087 95.9059 48.9927 96.4486C59.2132 99.3588 57.1734 106.574 57.5908 114.191C59.0943 133.277 43.1334 128.114 30.6997 128.948C26.7574 129.212 24.6005 129.161 21.3332 126.626C19.8565 125.48 17.8126 124.014 16.2681 122.828C14.0936 121.412 11.7424 119.716 9.63263 118.186C17.2058 117.952 25.2948 118.109 32.9071 118.07C36.4593 118.053 43.8408 117.862 47.1477 118.188C46.8363 115.712 46.9249 109.551 47.0864 106.994C40.9963 107.217 34.7541 106.892 28.6448 107.055C24.1489 107.175 19.9774 107.143 16.5609 103.708C14.3032 101.439 13.5487 98.054 13.4891 94.9228C13.6632 89.1715 12.3471 82.0651 16.5942 77.4452C20.3084 73.5605 26.6054 74.3604 31.4775 74.304C36.4126 74.2469 41.3003 74.3703 46.2173 74.2441Z" fill="#9BBB3D"/>
+        <path d="M93.1536 132.17C93.3032 132.152 93.4533 132.137 93.6034 132.124C94.8982 132.016 97.8801 132.106 99.2755 132.109L110.365 132.131L146.317 132.123L260.798 132.118L329.883 132.125L347.567 132.105C350.411 132.097 353.74 131.74 356.509 132.252C358.977 132.708 371.768 142.891 374.372 145.086C370.93 144.866 366.163 144.936 362.639 144.92L340.934 144.912L279.504 144.913L89.3136 144.919C86.9443 144.914 85.3026 144.882 82.9434 145.133C83.675 144.189 84.6693 142.696 85.8789 142.619C88.0388 142.483 90.4146 142.552 92.5803 142.561L106.173 142.59L155.415 142.585L320.322 142.587C325.196 142.587 365.212 142.963 366.836 142.369L366.687 141.969C363.591 139.842 360.231 137.078 357.111 135.13C355.861 134.351 349.806 134.59 347.965 134.591L332.122 134.605L273.925 134.606L153.626 134.604L113.682 134.603C106.453 134.603 98.7706 134.475 91.5918 134.659C92.0038 133.414 92.2782 133.065 93.1536 132.17Z" fill="#9BBB3D"/>
+        <path d="M48.9346 74.3305C58.7376 74.202 68.5709 74.4027 78.3768 74.267C79.7843 74.2474 81.0632 74.2683 82.4392 74.4617C89.8968 75.5102 92.579 82.137 92.007 88.9442C91.7051 94.1004 93.067 97.607 89.5735 102.209L89.7169 102.376C90.4269 103.207 91.6322 105.016 91.7155 106.15C92.303 114.155 91.8973 122.366 91.9293 130.404C91.9325 131.195 91.6592 131.999 91.0861 132.553C87.6289 135.893 84.4123 140.681 80.7917 143.78C81.0487 140.181 80.9334 136.699 80.9301 133.093L80.9206 116.674C80.9336 114.643 80.7142 108.632 81.0325 107.047C74.72 106.972 67.4598 106.903 61.1829 107.09C61.1429 103.426 61.249 99.8368 61.1613 96.1411C67.6414 96.3343 74.4585 96.1303 81.0137 96.2306C80.8198 95.1576 80.8056 86.2159 81.0256 85.1014C73.7604 85.0703 66.495 85.0813 59.2297 85.1341C59.4305 86.0478 59.4752 89.7222 59.394 90.6018C59.2238 92.449 59.7699 102.041 59.0491 102.711C57.2105 97.8926 53.8029 95.1261 48.6259 94.6559C48.7604 89.3031 48.6507 80.3728 48.5879 74.716C48.7217 74.5674 48.8371 74.4388 48.9346 74.3305Z" fill="#9BBB3D"/>
+        <path d="M189.647 98.1769C192.807 98.1043 195.32 97.9719 198.049 99.8512C207.316 106.237 206.282 125.904 193.767 128.219C190.237 128.526 187.167 128.227 184.202 125.958C177.347 120.714 177.4 107.557 182.935 101.422C184.813 99.3396 186.864 98.5308 189.647 98.1769ZM192.822 123.113C194.935 122.277 196.471 121.229 197.347 119.047C198.626 115.852 198.857 110.85 197.632 107.63C196.259 104.024 193.597 103.02 190.008 103.34C184.794 104.663 184.183 111.137 184.633 115.556C185.104 120.19 187.823 123.674 192.822 123.113Z" fill="#ED3525"/>
+        <path d="M255.564 98.5039L263.39 98.4155C264.51 102.6 265.391 107.015 266.311 111.255C266.9 113.963 267.624 116.491 267.857 119.248C268.991 113.208 270.457 107.277 271.666 101.255C271.81 100.545 272.1 98.8783 272.704 98.6987C273.94 98.3299 279.148 98.3513 280.124 98.5646C280.597 99.2167 280.221 124.898 280.465 128.047C278.817 128.061 277.071 128.005 275.416 127.977C275.274 126.577 275.427 122.714 275.445 121.114C275.494 116.947 275.369 112.491 275.589 108.36C275.648 107.488 275.784 106.563 275.524 105.741L275.347 105.723C274.916 106.707 274.68 108.617 274.445 109.75L272.683 118.072C272.044 121.109 270.921 125.17 270.513 128.115L265.432 128.063C265.125 127.236 264.964 126.306 264.763 125.448C263.245 118.936 262.075 112.21 260.544 105.716C260.287 108.509 260.501 113.746 260.49 116.782C260.479 119.629 260.375 125.412 260.665 128.067L255.547 127.997C255.286 125.998 255.288 99.3225 255.564 98.5039Z" fill="#ED3525"/>
+        <path d="M154.357 98.3595C159.619 98.9243 167.544 97.3818 171.962 99.8968C173.486 100.862 174.88 102.606 175.166 104.413C176.074 110.145 174.231 113.684 168.571 114.885C172.625 117.929 173.347 120.377 175.724 124.699C176.462 126.039 176.678 126.731 177.626 127.983C175.413 128.048 173.512 128.095 171.305 127.997C170.774 127.546 170.232 126.406 169.83 125.765C168.077 122.967 165.839 117.72 163.206 115.869C161.999 115.814 160.793 115.748 159.587 115.671C159.795 119.651 159.527 124.003 159.707 128.121C157.835 128.042 156.079 128.086 154.209 128.125C154.227 124.685 153.861 99.6896 154.357 98.3595ZM169.212 110.042C169.978 108.473 170.352 104.782 168.262 104.047C165.563 103.097 162.312 103.793 159.437 103.478C159.736 105.665 159.64 108.756 159.592 111.002C162.409 110.96 166.841 111.241 169.212 110.042Z" fill="#ED3525"/>
+        <path d="M74.2501 40.676C76.7011 40.6899 79.3718 40.64 81.8085 40.9599C97.9637 43.0795 112.913 52.5173 121.179 66.6386C121.765 67.6403 122.202 68.7705 122.768 69.8102C121.104 70.2815 115.33 71.8291 113.917 71.4953C112.7 70.6254 110.983 67.1133 109.928 65.7469C107.837 63.0391 105.328 60.9569 102.847 58.627C100.883 57.3912 99.0401 55.9359 96.9422 54.8111C94.9693 53.7534 92.7766 52.951 90.8574 51.881C86.0558 50.8061 81.7986 49.5026 76.7792 49.6503C76.3705 48.0385 74.8651 41.8933 74.2501 40.676ZM78.0824 48.1569C80.89 48.1398 86.5494 49.0309 89.153 50.0481C93.4826 51.4035 101.358 54.8893 104.486 58.1992C108.649 61.3521 111.838 65.6652 114.548 70.0643C116.47 69.6994 118.762 69.3394 120.581 68.6932C117.757 63.7632 115.403 60.6542 111.355 56.6824C102.645 48.1357 88.7494 41.8352 76.404 42.1559C76.6577 43.7681 77.5644 46.501 78.0824 48.1569Z" fill="#333335"/>
+        <path d="M89.153 50.0481C93.4826 51.4035 101.358 54.8893 104.486 58.1992C102.747 57.9168 100.975 55.6801 99.5849 55.8826C99.8237 56.3393 102.65 57.2621 102.847 58.627C100.883 57.3912 99.0401 55.9359 96.9422 54.8111C94.9693 53.7534 92.7766 52.951 90.8574 51.881C92.6926 51.8093 95.8507 53.9883 97.7299 54.7385L97.7896 54.6194C95.0703 51.5891 91.0038 52.2077 89.153 50.0481Z" fill="#333335"/>
+        <path d="M237.062 98.4619C238.852 98.4371 240.642 98.4405 242.43 98.4723C243.708 100.753 245.839 107.354 246.718 109.973C248.124 114.075 249.57 118.164 251.054 122.239C251.663 123.933 252.397 126.54 253.207 128.014C251.3 128.073 249.219 128.046 247.297 128.059C246.64 125.829 245.736 123.442 244.947 121.237L243.24 121.267C240.482 121.231 237.433 121.412 234.711 121.188C234.436 123.251 233.555 125.892 233.035 128.033C231.07 128.085 229.161 128.021 227.16 128.103C227.46 126.639 228.399 124.007 228.902 122.477C230.207 118.525 231.55 114.586 232.934 110.66C234.115 107.242 235.732 101.583 237.062 98.4619ZM240.091 116.17C241.216 116.187 242.341 116.187 243.464 116.287C242.162 113.908 240.698 106.957 239.699 105.83C239.122 108.093 238.451 110.331 237.69 112.538C237.436 113.286 236.634 115.474 236.499 116.136C237.233 116.374 239.217 116.208 240.091 116.17Z" fill="#ED3525"/>
+        <path d="M292.761 98.4222C293.679 98.447 297.913 98.1421 298.283 99.014C301.323 106.178 303.476 113.867 306.274 121.169C307.041 123.169 307.561 126.29 308.884 127.864C306.695 128.11 304.916 128.114 302.718 127.957C302.109 126.309 301.398 122.728 300.561 121.37C300.062 121.127 299.183 121.245 298.592 121.275C295.838 121.286 293.081 121.26 290.326 121.197C289.851 122.51 288.774 126.761 288.571 128.056C286.564 128.047 284.608 128.023 282.604 128.129L289.451 107.927C289.974 106.357 292.157 99.3856 292.761 98.4222ZM291.988 116.286C293.366 116.238 294.836 116.161 296.206 116.154C297.011 116.197 298.395 116.237 299.144 116.362C297.575 113.26 296.743 109.352 295.597 106.044C295.536 105.864 295.353 105.71 295.193 105.611C294.441 109.256 293.368 112.828 291.988 116.286Z" fill="#ED3525"/>
+        <path d="M337.082 98.3444C338.779 98.5099 340.776 98.4313 342.5 98.4092C342.124 101.644 342.648 106.563 342.264 110.12C344.942 109.916 349.562 110.045 352.391 110.046C352.123 108.688 352.181 100.463 352.128 98.4995C353.965 98.4474 355.803 98.4278 357.64 98.4406L357.619 119.05C357.621 120.547 357.774 126.837 357.579 127.839C357.068 128.181 356.923 128.054 356.183 128.055C354.844 128.068 353.505 128.04 352.168 127.97C352.026 126.63 352.173 124.233 352.177 122.766C352.184 120.313 352.067 117.661 352.249 115.242C349.873 115.213 344.251 115.353 342.225 115.027C342.718 119.077 342.15 123.967 342.549 128.124C340.658 128.039 338.894 128.081 337.006 128.117C336.898 121.178 337.021 114.143 336.967 107.194C336.955 105.922 336.872 99.2612 337.082 98.3444Z" fill="#ED3525"/>
+        <path d="M320.404 98.298C326.696 97.6522 331.319 100.357 332.551 106.802C330.787 107.033 329.112 107.618 327.449 108.216C327.29 107.714 327.13 107.195 326.94 106.716C324.916 101.396 318.093 102.446 316.48 107.423C315.517 110.39 315.384 116.118 316.532 118.992C318.843 124.792 325.093 124.869 327.108 118.627L327.708 116.968C328.695 117.459 331.401 118.403 332.597 118.893C332.182 120.936 331.327 122.864 330.092 124.543C326.34 129.561 318.54 129.484 314.33 125.147C307.537 118.148 308.979 99.7443 320.404 98.298Z" fill="#ED3525"/>
+        <path d="M184.12 84.7115C184.394 82.526 186.45 71.1874 187.445 69.8396C188.704 69.1737 191.703 69.4181 193.234 69.4436C192.929 75.8998 193.174 84.3785 193.195 90.9908C191.906 91.0331 190.615 91.0589 189.324 91.0686C189.714 85.9115 189.321 80.254 189.693 74.9349L189.617 74.6704L189.386 74.7735C189.017 75.6004 187.801 82.5895 187.542 83.9656C187.076 86.3324 186.56 88.689 185.994 91.0338C185.012 91.0979 183.147 91.4061 182.298 90.9249C181.359 90.3923 179.184 76.7163 178.539 74.791L178.408 74.778C178.347 75.4604 178.388 76.1546 178.413 76.8384C178.587 81.5716 178.383 86.3125 178.664 91.0427C177.467 91.0329 176.126 91.109 174.918 91.1522C174.718 84.0968 174.919 76.5766 174.851 69.4475C176.372 69.4176 179.258 69.2404 180.607 69.6778C180.84 69.9129 183.74 83.2643 184.12 84.7115Z" fill="#ED3525"/>
+        <path d="M221.867 69.4496C225.56 69.5291 229.306 69.1895 233.035 69.6175C237.543 70.135 238.396 75.2136 236.883 78.7059C236.205 80.2711 234.199 80.9737 232.672 81.4437C232.925 81.6461 233.951 82.4555 234.097 82.6556C235.102 84.0306 239.085 89.4223 238.712 90.8209C237.863 91.271 235.203 91.1288 234.315 90.7976C232.968 88.2187 230.647 84.5472 229.004 82.212C227.982 82.1305 226.961 82.0342 225.94 81.9235C226.132 84.6656 226.056 88.2081 226.069 91.0104L222.016 91.1433C221.755 84.1804 222.064 76.6152 221.867 69.4496ZM232.988 77.9786C233.363 76.8132 233.471 76.3119 233.651 75.0997C233.057 74.113 232.716 73.4135 231.491 73.1943C229.544 72.8466 227.942 73.1919 225.866 72.9616C225.979 74.885 226.08 76.6781 225.923 78.6113C227.503 78.524 231.847 78.4503 232.988 77.9786Z" fill="#ED3525"/>
+        <path d="M80.3496 53.6942C91.2403 54.3479 99.9262 58.4557 106.512 67.3376C107.708 68.9507 109.5 72 110.449 73.4449L106.375 74.5149C103.544 75.4303 102.986 76.0092 101.487 73.1623C97.4641 65.5232 87.3185 60.0036 78.6735 61.2611C78.0696 58.9831 78.1244 56.6905 77.3042 53.7936C78.2939 53.7977 79.355 53.7357 80.3496 53.6942ZM80 59.5C87.4614 59.5869 93.5838 61.9703 99 67.3376C100.564 68.8874 102.805 71.8845 103.5 74C104.563 73.6768 104.954 73.3753 106 73C106.571 72.7917 106.962 72.7303 107.5 72.5C102.439 63.9509 98.1108 59.1565 88 56.5C85.2552 55.7788 82.3608 55.3526 79.5 55.5H79C78.9486 56.8092 79.8875 57.9009 80 59.5Z" fill="#333335"/>
+        <path d="M207.627 98.531L226.421 98.5439C226.37 100.236 226.363 101.982 226.335 103.679C223.85 103.646 221.364 103.629 218.877 103.628L218.886 121.984L218.877 127.961L213.563 127.943L213.542 103.647L206.19 103.654C206.172 102.032 205.896 100.484 206.297 98.9542C206.777 98.4208 206.68 98.5874 207.627 98.531Z" fill="#ED3525"/>
+        <path d="M205.596 69.4597C206.99 69.4001 208.096 69.4405 209.486 69.5021C209.646 70.1998 210.629 72.6439 210.95 73.5765C212.071 76.8641 213.216 80.1432 214.384 83.4138C215.209 85.6742 216.476 88.7562 217.007 91.02C215.642 91.1144 214.122 91.0895 212.741 91.0953C212.196 89.6652 211.836 87.5927 211.043 86.4372C210.829 86.1271 210.046 86.2259 209.612 86.227C207.599 86.238 205.585 86.2209 203.574 86.1755C203.235 87.8023 202.735 89.4323 202.272 91.0316C200.785 91.0733 199.563 91.0606 198.077 91.0007C198.541 88.7175 204.419 71.3769 205.596 69.4597ZM204.902 82.3566L207.386 82.2939C208.13 82.311 209.132 82.3069 209.853 82.3607C209.424 80.9943 207.986 76.7019 207.591 74.9911C207.591 74.9911 207.308 74.7594 207.269 74.7272C206.515 76.636 205.788 80.8814 204.902 82.3566Z" fill="#ED3525"/>
+        <path d="M159.701 69.1097C164.895 68.6854 167.497 70.636 168.319 75.695C166.909 75.7279 165.881 75.7793 164.482 75.9396C163.768 73.6569 162.843 72.7224 160.327 72.6683C159.239 72.6448 157.226 73.648 157.578 74.7825C158.606 78.0888 164.444 77.3874 166.788 79.7877C168.088 81.1194 168.43 81.8786 168.583 83.6834C168.996 88.6562 166.075 91.2684 161.282 91.4514C157.847 91.2859 155.139 90.2447 153.807 86.7833C153.513 86.0215 152.779 84.4733 153.378 83.8137C154.263 83.5562 156.048 83.5864 157.04 83.5661C157.794 87.8695 159.37 87.6893 163.126 87.441C163.314 87.2773 163.497 87.1089 163.675 86.9356C165.345 85.3035 165.125 84.1518 163.611 82.6485C159.92 81.628 154.446 80.5232 153.806 76.0342C153.592 74.4425 154.027 72.8317 155.014 71.5647C156.306 69.8755 157.721 69.3947 159.701 69.1097Z" fill="#ED3525"/>
+        <path d="M242.691 69.4585C247.577 69.4485 253.513 69.2813 258.317 69.5183L258.03 73.2535C256.122 73.142 254.388 73.1772 252.436 72.9866C252.727 75.7991 252.568 82.2539 252.568 85.3532L252.593 91.0292L248.301 91.1558C248.318 85.1987 248.214 79.0295 248.344 73.0949C246.442 73.2301 244.848 73.0951 242.773 73.3228C242.626 72.0657 242.674 70.7296 242.691 69.4585Z" fill="#ED3525"/>
+        <path d="M79.437 65.2875C85.0802 65.4163 89.7843 66.688 94.011 70.6205C95.3735 71.8883 98.5437 75.0118 98.6311 76.935C98.3817 77.3404 97.6904 77.4749 97.2116 77.6223C92.082 79.5276 93.6055 78.5227 90.4122 75.3322C87.8334 72.7558 84.1895 71.2447 80.4893 71.2972C80.0505 69.2443 79.7547 67.3643 79.437 65.2875ZM81.6159 69.6049C86.491 70.4072 91.1772 72.6688 93.7722 77.0491C94.5053 76.8328 95.5747 76.4815 96.3005 76.3568C96.731 75.4092 95.633 74.6088 95.0476 73.8679C91.7781 69.7309 86.4427 66.9233 81.12 67.0083C81.4421 68.0903 81.5021 68.4801 81.6159 69.6049Z" fill="#333335"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ============ HUB FEATURE CHIPS ============ -->
+  <div class="chip" style="left:559px;top:592px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="7.6" r="3.9"/><path d="M4.6 20.4c0-4 3.3-6.4 7.4-6.4s7.4 2.4 7.4 6.4"/>
+    </svg>
+    <span>Role Based<br/>Access</span>
+  </div>
+
+  <div class="chip" style="left:901px;top:592px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3.2a6.2 6.2 0 0 0-6.2 6.2c0 4.2-1.6 5.6-2.2 6.3-.3.3-.1.9.4.9h16c.5 0 .7-.6.4-.9-.6-.7-2.2-2.1-2.2-6.3A6.2 6.2 0 0 0 12 3.2z"/>
+      <path d="M10 20.2a2.2 2.2 0 0 0 4 0"/>
+    </svg>
+    <span>Smart<br/>Notifications</span>
+  </div>
+
+  <div class="chip" style="left:576px;top:787px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2.6l7.6 3v6c0 5-3.2 8.3-7.6 9.8-4.4-1.5-7.6-4.8-7.6-9.8v-6z" fill="rgba(155,187,61,.16)"/>
+      <rect x="9.1" y="11.2" width="5.8" height="5" rx="1.2"/>
+      <path d="M10.4 11.2V9.9a1.6 1.6 0 0 1 3.2 0v1.3"/>
+    </svg>
+    <span>Secure &amp;<br/>Reliable</span>
+  </div>
+
+  <div class="chip" style="left:884px;top:787px">
+    <svg viewBox="0 0 24 24" fill="rgba(155,187,61,.16)" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M6.8 19.4A4.8 4.8 0 0 1 6.3 9.9a5.9 5.9 0 0 1 11.2-1.3 4.6 4.6 0 0 1-.6 10.8z"/>
+    </svg>
+    <span>Cloud<br/>Based</span>
+  </div>
+
+  <!-- ============ STEP 01 — LEAD MANAGEMENT ============ -->
+  <div class="node tone-a" style="left:730px;top:350px">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="10" cy="8" r="3.4"/><circle cx="17.4" cy="9.1" r="2.5"/>
+      <path d="M3.4 19.4c0-3.5 2.9-5.5 6.6-5.5s6.6 2 6.6 5.5v.6H3.4z"/>
+      <path d="M17.4 13.2c2.6 0 4.4 1.5 4.4 3.9V20h-3.9v-.6c0-2-.6-3.7-1.7-5 .4-.1.8-.2 1.2-.2z"/>
+    </svg>
+  </div>
+  <div class="pill tone-a" style="left:730px;top:428px">Lead Qualified</div>
+  <div class="card tone-a" style="left:565px;top:152px;width:360px">
+    <span class="badge">01</span>
+    <h3>Lead Management</h3>
+    <p>Capture leads, assign to sales team, track follow-ups and qualify leads.</p>
+  </div>
+
+  <!-- ============ STEP 02 — QUOTATION MANAGEMENT ============ -->
+  <div class="node tone-b" style="left:911px;top:412px">
+    <svg viewBox="0 0 24 24">
+      <path d="M6.2 2.6h7.3l5 5v13.3a1.5 1.5 0 0 1-1.5 1.5H6.2a1.5 1.5 0 0 1-1.5-1.5V4.1a1.5 1.5 0 0 1 1.5-1.5z" fill="#fff"/>
+      <path d="M13.5 2.6l5 5h-5z" fill="rgba(0,0,0,.14)"/>
+      <path d="M7.4 10.2h5.2M7.4 13h4.2" stroke="var(--dk)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="16.4" cy="16.4" r="4.4" fill="var(--dk)"/>
+      <text x="16.4" y="19.1" text-anchor="middle" font-family="Inter,Arial" font-size="6.4" font-weight="700" fill="#fff">&#8377;</text>
+    </svg>
+  </div>
+  <div class="pill tone-b" style="left:911px;top:490px">Quotation Sent</div>
+  <div class="card mid tone-b" style="left:1050px;top:328px;width:340px">
+    <span class="badge">02</span>
+    <h3>Quotation Management</h3>
+    <p>Create quotations, set pricing, review and send quotations to customers.</p>
+  </div>
+
+  <!-- ============ STEP 03 — CUSTOMER MANAGEMENT ============ -->
+  <div class="node tone-a" style="left:1039px;top:575px">
+    <!-- verified customer: lead converted into a customer record -->
+    <svg viewBox="0 0 24 24">
+      <circle cx="9.8" cy="7.4" r="4.1" fill="#fff"/>
+      <path d="M1.9 20.9c0-4.2 3.5-6.8 7.9-6.8 1.1 0 2.2.17 3.1.5A6.4 6.4 0 0 0 13.3 21H2.1z" fill="#fff"/>
+      <circle cx="17.5" cy="16.5" r="5.3" fill="#fff"/>
+      <path d="M15 16.6l1.9 1.9 3.3-3.7" fill="none" stroke="var(--dk)"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="pill tone-a" style="left:1039px;top:653px">Lead Won</div>
+  <div class="card mid tone-a" style="left:1140px;top:575px;width:270px">
+    <span class="badge">03</span>
+    <h3>Customer Management</h3>
+    <p>When customer accepts quotation, convert lead to customer.</p>
+  </div>
+
+  <!-- ============ STEP 04 — SALES ORDER MANAGEMENT ============ -->
+  <div class="node tone-b" style="left:1039px;top:775px">
+    <svg viewBox="0 0 24 24">
+      <rect x="4.4" y="4" width="15.2" height="17.6" rx="2.4" fill="#fff"/>
+      <rect x="8.6" y="1.9" width="6.8" height="4" rx="1.7" fill="#fff" stroke="var(--dk)" stroke-width="1.2"/>
+      <path d="M7.8 10.6h6M7.8 13.3h4.4" stroke="var(--dk)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="16.2" cy="16.6" r="4.4" fill="#fff" stroke="var(--dk)" stroke-width="1.4"/>
+      <text x="16.2" y="19.2" text-anchor="middle" font-family="Inter,Arial" font-size="6.4" font-weight="700" fill="var(--dk)">&#8377;</text>
+    </svg>
+  </div>
+  <div class="pill tone-b" style="left:1039px;top:853px">Sales Order Created</div>
+  <div class="card mid tone-b" style="left:1140px;top:775px;width:270px">
+    <span class="badge">04</span>
+    <h3>Sales Order Management</h3>
+    <p>Create sales orders, manage items, quantities, pricing and delivery details.</p>
+  </div>
+
+  <!-- ============ STEP 05 — PROFORMA INVOICE ============ -->
+  <div class="node tone-a" style="left:911px;top:938px">
+    <svg viewBox="0 0 24 24">
+      <path d="M5.4 3.4h13.2v17.2l-2.2-1.4-2.2 1.4-2.2-1.4-2.2 1.4-2.2-1.4-2.2 1.4z" fill="#fff"/>
+      <text x="9.5" y="10.6" text-anchor="middle" font-family="Inter,Arial" font-size="5.4" font-weight="700" fill="var(--dk)">PI</text>
+      <path d="M13.2 9.2h3.2" stroke="var(--dk)" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M7.6 13.4h8.8" stroke="var(--dk)" stroke-width="1.3" stroke-linecap="round" opacity=".45"/>
+      <circle cx="15.4" cy="16.1" r="3.5" fill="var(--dk)"/>
+      <text x="15.4" y="18.2" text-anchor="middle" font-family="Inter,Arial" font-size="5.2" font-weight="700" fill="#fff">&#8377;</text>
+    </svg>
+  </div>
+  <div class="pill tone-a" style="left:911px;top:1016px">Sent to Finance</div>
+  <div class="card mid tone-a" style="left:1050px;top:1032px;width:340px">
+    <span class="badge">05</span>
+    <h3>Proforma Invoice</h3>
+    <p>Generate proforma invoice for sales order and send to finance department.</p>
+  </div>
+
+  <!-- ============ STEP 06 — JOB EXECUTION ORDER ============ -->
+  <div class="node tone-b" style="left:730px;top:1000px">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <rect x="4.6" y="3.2" width="2.9" height="7" rx=".7"/>
+      <path d="M2.6 21.2V10.4l5.4 3.3v-3.3l5.4 3.3v-3.3l5.4 3.3v-3.3l2.6 1.6v9.2z"/>
+      <rect x="6" y="16" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+      <rect x="11" y="16" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+      <rect x="16" y="16" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+    </svg>
+  </div>
+  <div class="pill tone-b" style="left:730px;top:1078px">Sent to Factory</div>
+  <div class="card tone-b" style="left:565px;top:1120px;width:360px">
+    <span class="badge">06</span>
+    <h3>Job Execution Order (JEO)</h3>
+    <p>Generate JEO for production and send to factory/production team.</p>
+  </div>
+
+  <!-- ============ STEP 07 — PRODUCTION MANAGEMENT ============ -->
+  <div class="node tone-a" style="left:539px;top:938px">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M5.6 9.4c.6-1.9-.8-2.6-.2-4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M9.2 9.4c.6-1.9-.8-2.6-.2-4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M2.6 21.2V11l5.4 3.3V11l5.4 3.3V11l5.4 3.3V11l2.6 1.6v8.6z"/>
+      <rect x="6" y="16.4" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+      <rect x="11" y="16.4" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+      <rect x="16" y="16.4" width="2.4" height="2.6" rx=".5" fill="var(--dk)"/>
+    </svg>
+  </div>
+  <div class="pill tone-a" style="left:539px;top:1016px">In Production</div>
+  <div class="card mid tone-a" style="left:70px;top:1032px;width:340px">
+    <span class="badge">07</span>
+    <h3>Production Management</h3>
+    <p>Track production against JEO, monitor progress and update production status.</p>
+  </div>
+
+  <!-- ============ STEP 08 — DISPATCH MANAGEMENT ============ -->
+  <div class="node tone-b" style="left:421px;top:775px">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M1.8 6.9a1.7 1.7 0 0 1 1.7-1.7h8.6a1.7 1.7 0 0 1 1.7 1.7v2.4h3.4c.5 0 1 .25 1.32.66l2.5 3.2c.2.27.32.6.32.95v2.6a1 1 0 0 1-1 1h-1.1a2.7 2.7 0 0 0-5.4 0h-3.5a2.7 2.7 0 0 0-5.4 0H3.3a1.5 1.5 0 0 1-1.5-1.5z"/>
+      <circle cx="7.1" cy="18.3" r="2.1"/><circle cx="17.6" cy="18.3" r="2.1"/>
+      <path d="M15 11.2h2.7l1.9 2.5H15z" fill="var(--dk)"/>
+    </svg>
+  </div>
+  <div class="pill tone-b" style="left:421px;top:853px">Dispatched</div>
+  <div class="card mid tone-b" style="left:80px;top:775px;width:240px">
+    <span class="badge">08</span>
+    <h3>Dispatch Management</h3>
+    <p>Plan dispatch, generate challan, manage logistics and track shipments.</p>
+  </div>
+
+  <!-- ============ STEP 09 — INVOICE &amp; PAYMENT ============ -->
+  <div class="node tone-a" style="left:421px;top:575px">
+    <svg viewBox="0 0 24 24">
+      <path d="M4.9 3.6h14.2v14.2a2.6 2.6 0 0 1-2.6 2.6H4.9z" fill="#fff"/>
+      <path d="M7.6 7.8h8.4M7.6 10.8h8.4M7.6 13.8h4.6" stroke="var(--dk)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="16.4" cy="16.4" r="4.4" fill="var(--dk)"/>
+      <text x="16.4" y="19.1" text-anchor="middle" font-family="Inter,Arial" font-size="6.4" font-weight="700" fill="#fff">&#8377;</text>
+    </svg>
+  </div>
+  <div class="pill tone-a" style="left:421px;top:653px">Payment Received</div>
+  <div class="card mid tone-a" style="left:80px;top:575px;width:240px">
+    <span class="badge">09</span>
+    <h3>Invoice &amp; Payment</h3>
+    <p>Generate invoices, track payments, receipts and outstanding balances.</p>
+  </div>
+
+  <!-- ============ STEP 10 — REPORTS &amp; ANALYTICS ============ -->
+  <div class="node tone-b" style="left:539px;top:412px">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <rect x="3.4" y="15.4" width="3.8" height="5.8" rx="1.1"/>
+      <rect x="9.8" y="12.6" width="3.8" height="8.6" rx="1.1"/>
+      <rect x="16.2" y="9.4" width="3.8" height="11.8" rx="1.1"/>
+      <path d="M4.4 10.2L9.4 6.2l3.2 2.2 6-5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M15.2 3h3.8v3.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="pill tone-b" style="left:539px;top:490px">Data Driven</div>
+  <div class="card mid tone-b" style="left:70px;top:328px;width:340px">
+    <span class="badge">10</span>
+    <h3>Reports &amp; Analytics</h3>
+    <p>Get real-time reports and insights on sales, orders, production, dispatch and collections.</p>
+  </div>
+
+  <!-- ============ BENEFITS BAR ============ -->
+  <div class="bar">
+    <div class="cell tone-a">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+        <circle cx="15" cy="17" r="10.5"/><circle cx="15" cy="17" r="6"/>
+        <circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/>
+        <path d="M15 17L25.5 6.5" stroke-linecap="round"/>
+        <path d="M22 5.2l3.6-.6-.6 3.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><div class="bt">Centralized</div><div class="bd">All your business data<br/>in one place</div></div>
+    </div>
+    <div class="cell tone-b">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+        <circle cx="16" cy="16" r="11.5"/><path d="M16 9v7.4l4.6 2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><div class="bt">Save Time</div><div class="bd">Automate processes<br/>and reduce manual work</div></div>
+    </div>
+    <div class="cell tone-a">
+      <svg viewBox="0 0 32 32">
+        <rect x="4" y="20" width="4.4" height="7.6" rx="1.2" fill="#B7D563"/>
+        <rect x="11.2" y="16.4" width="4.4" height="11.2" rx="1.2" fill="#9BBB3D"/>
+        <rect x="18.4" y="12.4" width="4.4" height="15.2" rx="1.2" fill="#7A9A2B"/>
+        <path d="M5.6 14.6l6.4-4.8 4.2 2.8 7.4-6.4" fill="none" stroke="#4E6B15" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M20.2 5.6h4.2v4.2" fill="none" stroke="#4E6B15" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><div class="bt">Increase Productivity</div><div class="bd">Empower your team<br/>to achieve more</div></div>
+    </div>
+    <div class="cell tone-b">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+        <path d="M16 4l10 3.8v7.6c0 6.6-4.2 10.9-10 12.6-5.8-1.7-10-6-10-12.6V7.8z"/>
+        <path d="M11.6 15.8l3 3 5.8-6.2" stroke-linecap="round"/>
+      </svg>
+      <div><div class="bt">Better Decisions</div><div class="bd">Real-time insights for<br/>smarter decisions</div></div>
+    </div>
+    <div class="cell tone-a">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+        <circle cx="13" cy="12.4" r="4.2"/><circle cx="22.4" cy="13.6" r="3.1"/>
+        <path d="M5.4 24.6c0-4.4 3.4-6.8 7.6-6.8s7.6 2.4 7.6 6.8" stroke-linecap="round"/>
+        <path d="M22.4 18.2c3 0 5.2 1.8 5.2 4.8" stroke-linecap="round"/>
+      </svg>
+      <div><div class="bt">Grow Business</div><div class="bd">Streamline operations<br/>and drive growth</div></div>
+    </div>
+  </div>
+
+  <!-- ============ FOOTER STRIP ============ -->
+  <div class="foot">
+    <div class="f tone-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+        <path d="M12 2.6l8 3v5.9c0 5.2-3.4 8.6-8 9.9-4.6-1.3-8-4.7-8-9.9V5.6z"/>
+        <path d="M8.6 11.8l2.4 2.4 4.4-4.8" stroke-linecap="round"/>
+      </svg>Secure
+    </div>
+    <span class="sep"></span>
+    <div class="f tone-b">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+        <circle cx="12" cy="12" r="9.2"/><path d="M8.2 12.2l2.6 2.6 5-5.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>Reliable
+    </div>
+    <span class="sep"></span>
+    <div class="f tone-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+        <path d="M12 2.8l9 4.6-9 4.6-9-4.6z"/><path d="M3 12.4l9 4.6 9-4.6"/><path d="M3 16.9l9 4.6 9-4.6"/>
+      </svg>Scalable
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+/* ---------------------------------------------------------------
+   Connectors are measured from the real DOM geometry, so nudging
+   any card / node / pill in the markup keeps every line attached.
+   --------------------------------------------------------------- */
+(function () {
+  var stage = document.getElementById('stage');
+  var vp    = document.getElementById('viewport');
+  var gen   = document.getElementById('gen');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  var HUB    = { x: 730, y: 675 };
+  var NODE_R = 56;                       // node radius + rings + breathing room
+  var TONE   = ['#9BBB3D', '#63841F'];   // step colours alternate a / b
+
+  function box(el) {
+    var a = el.getBoundingClientRect(), b = stage.getBoundingClientRect();
+    return { el: el, x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height,
+             cx: a.left - b.left + a.width / 2, cy: a.top - b.top + a.height / 2 };
+  }
+  function line(d, attrs) {
+    var p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d);
+    for (var k in attrs) p.setAttribute(k, attrs[k]);
+    gen.appendChild(p);
+  }
+  function dot(x, y, r, fill) {
+    var c = document.createElementNS(SVGNS, 'circle');
+    c.setAttribute('cx', x.toFixed(1)); c.setAttribute('cy', y.toFixed(1));
+    c.setAttribute('r', r); c.setAttribute('fill', fill);
+    gen.appendChild(c);
+  }
+  /* walk from a rect's centre toward a target, return the edge crossing */
+  function edge(r, tx, ty, pad) {
+    var dx = tx - r.cx, dy = ty - r.cy;
+    var sx = dx ? (r.w / 2 + pad) / Math.abs(dx) : Infinity;
+    var sy = dy ? (r.h / 2 + pad) / Math.abs(dy) : Infinity;
+    var s = Math.min(sx, sy);
+    return { x: r.cx + dx * s, y: r.cy + dy * s };
+  }
+  function seg(d) { return 'M' + d[0].x.toFixed(1) + ' ' + d[0].y.toFixed(1) +
+                           'L' + d[1].x.toFixed(1) + ' ' + d[1].y.toFixed(1); }
+
+  function draw() {
+    gen.textContent = '';
+
+    var nodes = [].map.call(document.querySelectorAll('.node'), box);
+    var cards = [].map.call(document.querySelectorAll('.card'), box);
+    var pills = [].map.call(document.querySelectorAll('.pill'), box);
+
+    /* --- dashed leader: card -> its node, with a dot at the card end.
+           Where a status pill sits between the two (step 06) the line simply
+           runs behind it — the pill is opaque and on a higher z-index. --- */
+    cards.forEach(function (c, i) {
+      if (c.el.getAttribute('data-leader') === 'off') return;
+      var n = nodes[i], tone = TONE[i % 2];
+      var a = edge(c, n.cx, n.cy, 5);
+      var vx = n.cx - a.x, vy = n.cy - a.y, L = Math.hypot(vx, vy) || 1;
+      var b = { x: n.cx - vx / L * NODE_R, y: n.cy - vy / L * NODE_R };
+      line(seg([a, b]), { 'class': 'ln-leader', stroke: 'rgba(110,144,52,.62)', 'stroke-width': 1.5,
+                          'stroke-dasharray': '6 5', fill: 'none' });
+      dot(a.x, a.y, 3, tone);
+    });
+
+    /* --- dotted stub + dot: node -> its status pill --- */
+    pills.forEach(function (p, i) {
+      var n = nodes[i], tone = TONE[i % 2];
+      var vx = p.cx - n.cx, vy = p.cy - n.cy, L = Math.hypot(vx, vy) || 1;
+      var a = { x: n.cx + vx / L * (NODE_R - 4), y: n.cy + vy / L * (NODE_R - 4) };
+      var b = edge(p, n.cx, n.cy, 3);
+      line(seg([a, b]), { 'class': 'ln-stub', stroke: tone, 'stroke-width': 1.5,
+                          'stroke-dasharray': '2.5 3.5', fill: 'none', opacity: .8 });
+      dot((a.x + b.x) / 2, (a.y + b.y) / 2, 3, tone);
+    });
+
+    /* --- flow arrows: node i -> node i+1, bowing away from the hub --- */
+    nodes.forEach(function (a, i) {
+      var b = nodes[(i + 1) % nodes.length];
+      var mx = (a.cx + b.cx) / 2, my = (a.cy + b.cy) / 2;
+      var ux = mx - HUB.x, uy = my - HUB.y, uL = Math.hypot(ux, uy) || 1;
+      var ctrl = { x: mx + ux / uL * 46, y: my + uy / uL * 46 };
+
+      function trim(from, r) {
+        var dx = ctrl.x - from.cx, dy = ctrl.y - from.cy, L = Math.hypot(dx, dy) || 1;
+        return { x: from.cx + dx / L * r, y: from.cy + dy / L * r };
+      }
+      var s = trim(a, NODE_R), e = trim(b, NODE_R + 8);
+
+      line('M' + s.x.toFixed(1) + ' ' + s.y.toFixed(1) +
+           'Q' + ctrl.x.toFixed(1) + ' ' + ctrl.y.toFixed(1) +
+           ' ' + e.x.toFixed(1) + ' ' + e.y.toFixed(1),
+           { 'class': 'ln-arrow', stroke: TONE[i % 2], 'stroke-width': 3.4,
+             'stroke-linecap': 'round', fill: 'none',
+             'marker-end': 'url(#ah-' + (i % 2 ? 'b' : 'a') + ')' });
+    });
+  }
+
+  /* --- scale the fixed artwork to the available width --- */
+  function fit() {
+    var s = Math.min(1, vp.clientWidth / 1460);
+    stage.style.transform = 'scale(' + s + ')';
+    vp.style.height = (1450 * s) + 'px';
+  }
+
+  /* =============================================================
+     MOTION CONTROLLER
+     entrance (once) → settled → an endless 01…10 walk of the ring
+     ============================================================= */
+
+  var REDUCED = window.matchMedia &&
+                window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var STEP_MS = 1250;      // dwell per step
+  var COMET_IN = 340;      // when the pulse leaves the active node
+  var cur = -1, booted = false, cometTimer = null;
+
+  function all(sel) { return [].slice.call(stage.querySelectorAll(sel)); }
+
+  /* stagger: write --d on each element the entrance keyframes read */
+  function assignDelays() {
+    all('.node').forEach(function (el, i) { el.style.setProperty('--d', (1.00 + i * 0.09) + 's'); });
+    all('.pill').forEach(function (el, i) { el.style.setProperty('--d', (1.16 + i * 0.09) + 's'); });
+    all('.card').forEach(function (el, i) { el.style.setProperty('--d', (1.26 + i * 0.09) + 's'); });
+    all('.chip').forEach(function (el, i) { el.style.setProperty('--d', (2.30 + i * 0.14) + 's'); });
+  }
+
+  /* a bright twin of each arrow — the pulse that rides along it */
+  function buildComets() {
+    all('.ln-comet').forEach(function (c) { c.parentNode.removeChild(c); });
+    all('.ln-arrow').forEach(function (a) {
+      var c = a.cloneNode(false);
+      c.setAttribute('class', 'ln-comet');
+      c.removeAttribute('marker-end');
+      c.setAttribute('stroke-width', '4.8');
+      var len = a.getTotalLength();
+      c.style.strokeDasharray = '26 ' + (len + 30);
+      c.style.setProperty('--len', (len + 30) + 'px');
+      gen.appendChild(c);
+    });
+  }
+
+  /* trace a solid path on, then hand its dash pattern back.
+     An arrowhead sits at the path's end vertex and renders no matter where the
+     dash is, so it gets pulled off and put back as the stroke arrives. */
+  function drawPath(p, delay, dur) {
+    var len  = p.getTotalLength(),
+        keep = p.getAttribute('stroke-dasharray'),
+        head = p.getAttribute('marker-end');
+    p.style.opacity = 0;
+    p.style.strokeDasharray = len + ' ' + len;
+    p.style.strokeDashoffset = len;
+    if (head) p.removeAttribute('marker-end');
+    setTimeout(function () {
+      p.style.transition = 'stroke-dashoffset ' + dur + 'ms ease-out, opacity 220ms linear';
+      p.style.opacity = 1;
+      p.style.strokeDashoffset = 0;
+      if (head) setTimeout(function () { p.setAttribute('marker-end', head); }, dur - 60);
+      setTimeout(function () {
+        p.style.transition = '';
+        p.style.strokeDashoffset = '';
+        p.style.strokeDasharray = keep || '';
+        p.style.opacity = '';          // hand opacity back to the stylesheet
+      }, dur + 80);
+    }, delay);
+  }
+
+  function fadeEl(el, delay) {
+    el.style.opacity = 0;
+    setTimeout(function () {
+      el.style.transition = 'opacity 480ms ease';
+      el.style.opacity = '';
+    }, delay);
+  }
+
+  function svgEntrance() {
+    all('.ring path').forEach(function (p, i) { drawPath(p, 380 + i * 55, 520); });
+    all('.ln-leader').forEach(function (p, i) { fadeEl(p, 1300 + i * 90); });
+    all('.ln-stub').forEach(function (p, i) { fadeEl(p, 1300 + i * 90); });
+    all('#gen circle').forEach(function (c, i) { fadeEl(c, 1340 + (i >> 1) * 90); });
+    all('.ln-arrow').forEach(function (p, i) { drawPath(p, 1460 + i * 90, 520); });
+  }
+
+  /* --- the walk --- */
+  function tick() {
+    all('.is-active').forEach(function (el) { el.classList.remove('is-active'); });
+    cur = (cur + 1) % 10;
+
+    [all('.node')[cur], all('.pill')[cur], all('.card')[cur],
+     all('.ring path')[cur], all('.ln-leader')[cur], all('.ln-stub')[cur],
+     all('.ln-arrow')[cur]]
+      .forEach(function (el) { if (el) el.classList.add('is-active'); });
+
+    clearTimeout(cometTimer);
+    cometTimer = setTimeout(function () {
+      var c = all('.ln-comet')[cur];
+      if (!c) return;
+      c.classList.remove('run');
+      void c.getBoundingClientRect();          // force a reflow so it replays
+      c.classList.add('run');
+    }, COMET_IN);
+  }
+
+  function ready() {
+    if (booted) return;
+    booted = true;
+
+    stage.style.transform = 'none';            // measure unscaled
+    draw();
+    fit();
+    buildComets();
+    assignDelays();
+
+    /* reduced motion: show the finished illustration, never run the walk */
+    if (REDUCED) { stage.classList.add('go', 'settled'); return; }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        stage.classList.add('go');
+        svgEntrance();
+        setTimeout(function () {
+          stage.classList.add('settled');
+          tick();
+          setInterval(tick, STEP_MS);
+        }, 2950);
+      });
+    });
+  }
+
+  draw();                                      // first pass so layout is sane
+  fit();
+  window.addEventListener('resize', fit);
+
+  /* wait for Inter — card heights (and every leader) depend on it */
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(ready);
+    setTimeout(ready, 1500);                   // fallback if fonts never resolve
+  } else {
+    ready();
+  }
+})();
+</script>
+</body>
+</html>
