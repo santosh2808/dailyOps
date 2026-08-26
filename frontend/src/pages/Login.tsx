@@ -43,11 +43,14 @@ export default function Login() {
   return (
     <div className="flex min-h-screen w-full bg-slate-50">
       {/* Left panel — business overview, flush against the viewport edge like a fixed sidebar */}
-      <div className="hidden flex-shrink-0 lg:block lg:w-[440px] xl:w-[520px] 2xl:w-[600px]">
+      <div
+        className="hidden flex-shrink-0 items-center justify-center lg:flex lg:w-[480px] xl:w-[600px] 2xl:w-[720px]"
+        style={{ backgroundColor: "#f8f9fd" }}
+      >
         <img
           src="/dailyops-overview.jpg"
           alt="DailyOps — all your business operations in one place"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       </div>
 
