@@ -12,6 +12,7 @@
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
     "seed:hvls-products": "ts-node prisma/seed-hvls-products.ts",
+    "seed:sales-resources": "ts-node prisma/seed-sales-resources.ts",
     "db:ensure": "ts-node prisma/ensure-database.ts"
   },
   "prisma": {
