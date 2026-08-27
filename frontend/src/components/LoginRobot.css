@@ -33,7 +33,7 @@
   overflow: clip;
   position: relative;
   background:
-    radial-gradient(rgba(35, 37, 45, .07) 1.2px, transparent 1.3px) 0 0 / 24px 24px,
+    radial-gradient(rgba(155, 187, 61, .35) 1.2px, transparent 1.3px) 0 0 / 24px 24px,
     var(--paper);
 }
 .volt-scene, .volt-scene * { box-sizing: border-box; margin: 0; padding: 0; }
