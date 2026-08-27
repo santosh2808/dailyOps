@@ -368,6 +368,17 @@ export class LeadsService {
   async updateStatus(id: string, dto: UpdateLeadStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
 
+    // Catch this at the status-change step, not just later at Generate
+    // Quotation (see getLeadForQuotationGeneration() below, which enforces
+    // the same rule) — Qualified is supposed to mean "ready to quote", so a
+    // lead with no products linked shouldn't be allowed into that stage at
+    // all.
+    if (dto.status === 'QUALIFIED' && (!existing.products || existing.products.length === 0)) {
+      throw new BadRequestException(
+        'Add at least one product to this lead before marking it Qualified.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       // This endpoint only ever updates the status field. Setting status to
       // WON does not create a Customer — that only happens when the user

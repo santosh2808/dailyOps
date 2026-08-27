@@ -46,14 +46,27 @@ export default function ChangeStatusDialog({
   }, [open, lead]);
 
   async function handleConfirm() {
-    setSubmitting(true);
     setError("");
+
+    // Qualified is meant to signal "ready to quote" — catch the missing-
+    // products case right here instead of letting the user find out only
+    // after they later try Generate Quotation on Lead Details (the backend
+    // enforces the same rule, but this way they see it immediately without
+    // a round trip).
+    if (status === "QUALIFIED" && (!lead?.products || lead.products.length === 0)) {
+      setError("This lead has no products linked yet. Add products to the lead before marking it Qualified.");
+      return;
+    }
+
+    setSubmitting(true);
     try {
       await onConfirm(status, remarks.trim() || undefined);
       onOpenChange(false);
-    } catch {
-      setError("Could not update the lead status. Please try again.");
-      toast.error("Could not update the lead status.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message || "Could not update the lead status. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
