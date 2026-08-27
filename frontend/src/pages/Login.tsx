@@ -7,7 +7,7 @@ export default function Login() {
           "By Smart Rotamach" caption all baked in), shared across both
           panels below. No separate caption element needed anymore. */}
       <header className="flex flex-shrink-0 items-center border-b border-slate-200 bg-gradient-to-r from-[#eef6da] via-white to-[#fdeceb] px-6 py-3">
-        <img src="/sr-dailyops-logo-full.png" alt="SR DailyOps — by Smart Rotamach" className="h-20 w-auto" />
+        <img src="/sr-dailyops-logo-full.svg" alt="SR DailyOps — by Smart Rotamach" className="h-20 w-auto" />
       </header>
 
       <div className="flex flex-1 overflow-hidden">
