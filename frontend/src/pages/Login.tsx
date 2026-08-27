@@ -3,16 +3,11 @@ import LoginRobot from "@/components/LoginRobot";
 export default function Login() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
-      {/* Page header — full SR DailyOps lockup image, shared across both panels below */}
-      <header className="flex flex-shrink-0 flex-col border-b border-slate-200 bg-gradient-to-r from-[#eef6da] via-white to-[#fdeceb] px-6 pb-3">
-        <div className="flex h-16 items-center">
-          <img src="/sr-dailyops-logo.png" alt="SR DailyOps" className="h-20 w-auto" />
-        </div>
-        {/* Same offset/tightening as the Sidebar's caption, so it sits under
-            the "DailyOps" wordmark rather than under the gear/SR icon. */}
-        <span className="ml-[71px] -mt-3 text-[11px] font-medium text-muted-foreground">
-          by Smart Rotamach
-        </span>
+      {/* Page header — full SR DailyOps lockup image (icon + wordmark +
+          "By Smart Rotamach" caption all baked in), shared across both
+          panels below. No separate caption element needed anymore. */}
+      <header className="flex flex-shrink-0 items-center border-b border-slate-200 bg-gradient-to-r from-[#eef6da] via-white to-[#fdeceb] px-6 py-3">
+        <img src="/sr-dailyops-logo-full.png" alt="SR DailyOps — by Smart Rotamach" className="h-14 w-auto" />
       </header>
 
       <div className="flex flex-1 overflow-hidden">
