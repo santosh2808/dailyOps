@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import AddressAutoFill from "@/components/AddressAutoFill";
 import SalesOrderItemsEditor, {
   computeItemDiscountTotal,
   computeSubtotal,
@@ -70,6 +72,11 @@ export default function SalesOrderForm() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  // "Same as Billing Address" — free, no-API convenience: while checked,
+  // Shipping Address mirrors Billing Address on every change and its own
+  // field is locked; unchecking leaves whatever was last copied there,
+  // editable again.
+  const [sameAsBilling, setSameAsBilling] = useState(false);
   const [items, setItems] = useState<SalesOrderItemRow[]>([]);
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [customerLabel, setCustomerLabel] = useState("");
@@ -131,6 +138,9 @@ export default function SalesOrderForm() {
           specialInstructions: so.specialInstructions ?? "",
           remarks: so.remarks ?? "",
         });
+        setSameAsBilling(
+          !!so.billingAddress && so.billingAddress === so.shippingAddress,
+        );
         setItems(
           (so.items ?? []).map((item) => ({
             productId: item.productId,
@@ -168,6 +178,12 @@ export default function SalesOrderForm() {
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  useEffect(() => {
+    if (sameAsBilling) {
+      setForm((f) => (f.shippingAddress === f.billingAddress ? f : { ...f, shippingAddress: f.billingAddress }));
+    }
+  }, [sameAsBilling, form.billingAddress]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -371,20 +387,28 @@ export default function SalesOrderForm() {
                       placeholder="e.g. 50% advance, balance before dispatch"
                     />
                   </div>
-                  <div className="space-y-2 sm:col-span-3">
-                    <Label htmlFor="billingAddress">Billing Address</Label>
-                    <Textarea
+                  <div className="sm:col-span-3">
+                    <AddressAutoFill
                       id="billingAddress"
+                      label="Billing Address"
                       value={form.billingAddress}
-                      onChange={(e) => update("billingAddress", e.target.value)}
+                      onChange={(value) => update("billingAddress", value)}
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-3">
-                    <Label htmlFor="shippingAddress">Shipping Address</Label>
-                    <Textarea
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <Checkbox
+                        checked={sameAsBilling}
+                        onChange={(e) => setSameAsBilling(e.target.checked)}
+                      />
+                      Shipping address same as billing address
+                    </label>
+                    <AddressAutoFill
                       id="shippingAddress"
+                      label="Shipping Address"
                       value={form.shippingAddress}
-                      onChange={(e) => update("shippingAddress", e.target.value)}
+                      onChange={(value) => update("shippingAddress", value)}
+                      disabled={sameAsBilling}
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-3">
