@@ -22,10 +22,12 @@ export interface TaxInvoiceListParams {
 export interface TaxInvoicePayload {
   salesOrderId: string;
   invoiceDate?: string;
-  buyersOrderNo?: string;
+  // Mandatory on the printed Tax Invoice — no longer fall back to defaults
+  // like "Verbal"/"By Road" server-side.
+  buyersOrderNo: string;
   dispatchedThrough?: string;
-  destination?: string;
-  termsOfDelivery?: string;
+  destination: string;
+  termsOfDelivery: string;
 }
 
 export async function listTaxInvoices(params: TaxInvoiceListParams) {

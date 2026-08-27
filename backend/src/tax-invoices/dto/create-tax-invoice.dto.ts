@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateTaxInvoiceDto {
   @ApiProperty({ description: 'Id (uuid) of the existing Sales Order to generate this Tax Invoice from' })
@@ -11,23 +11,29 @@ export class CreateTaxInvoiceDto {
   @IsDateString()
   invoiceDate?: string;
 
-  @ApiPropertyOptional({ example: 'Verbal', description: "Defaults to 'Verbal' if omitted" })
-  @IsOptional()
+  // Mandatory: required on the printed Tax Invoice, matches the reference
+  // template's "Buyer's Order No." field — no longer silently falls back to
+  // "Verbal".
+  @ApiProperty({ example: 'PO-12345' })
   @IsString()
-  buyersOrderNo?: string;
+  @IsNotEmpty({ message: "Buyer's Order No. is required" })
+  buyersOrderNo: string;
 
   @ApiPropertyOptional({ example: 'By Road', description: "Defaults to 'By Road' if omitted" })
   @IsOptional()
   @IsString()
   dispatchedThrough?: string;
 
-  @ApiPropertyOptional({ example: 'Hyderabad' })
-  @IsOptional()
+  // Mandatory: the actual delivery destination — no longer optional.
+  @ApiProperty({ example: 'Hyderabad' })
   @IsString()
-  destination?: string;
+  @IsNotEmpty({ message: 'Destination is required' })
+  destination: string;
 
-  @ApiPropertyOptional({ example: 'Packing: Inclusive\nInstallation: Inclusive\nFreight: Inclusive' })
-  @IsOptional()
+  // Mandatory: no longer silently falls back to the generic
+  // "Packing/Installation/Freight: Inclusive" default.
+  @ApiProperty({ example: 'Packing: Inclusive\nInstallation: Inclusive\nFreight: Inclusive' })
   @IsString()
-  termsOfDelivery?: string;
+  @IsNotEmpty({ message: 'Terms of Delivery is required' })
+  termsOfDelivery: string;
 }
