@@ -13,6 +13,7 @@ import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import { createLead, getLead, updateLead, type LeadPayload, type LeadProductPayload } from "@/api/leads";
 import type { LeadPriority, LeadSource } from "@/types";
 
@@ -163,6 +164,16 @@ export default function LeadForm() {
       if (Number.isNaN(parsed) || parsed < 0) {
         next.estimatedValue = "Estimated value must be a positive number";
       }
+    }
+    // Both are forward-looking planning dates — a past Expected Close Date
+    // or Next Follow-up doesn't make sense to set going forward. `min` on
+    // the inputs below stops the calendar picker from offering one; this
+    // catches a manually typed/pasted past date too.
+    if (isPastDateInputValue(form.expectedCloseDate)) {
+      next.expectedCloseDate = "Expected Close Date cannot be before today";
+    }
+    if (isPastDateInputValue(form.nextFollowUp)) {
+      next.nextFollowUp = "Next Follow-up cannot be before today";
     }
 
     setErrors(next);
@@ -415,9 +426,13 @@ export default function LeadForm() {
                       <Input
                         id="expectedCloseDate"
                         type="date"
+                        min={todayDateInputValue()}
                         value={form.expectedCloseDate}
                         onChange={(e) => update("expectedCloseDate", e.target.value)}
                       />
+                      {errors.expectedCloseDate && (
+                        <p className="text-xs text-destructive">{errors.expectedCloseDate}</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -425,9 +440,13 @@ export default function LeadForm() {
                       <Input
                         id="nextFollowUp"
                         type="date"
+                        min={todayDateInputValue()}
                         value={form.nextFollowUp}
                         onChange={(e) => update("nextFollowUp", e.target.value)}
                       />
+                      {errors.nextFollowUp && (
+                        <p className="text-xs text-destructive">{errors.nextFollowUp}</p>
+                      )}
                     </div>
                   </div>
 

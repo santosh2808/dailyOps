@@ -15,6 +15,7 @@ import SalesOrderItemsEditor, {
 import { getQuotation } from "@/api/quotations";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import {
   createSalesOrder,
   getSalesOrder,
@@ -171,6 +172,14 @@ export default function SalesOrderForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitError("");
+
+    // You can't promise delivery on a date that's already passed. Order
+    // Date is left unrestricted — backdating the order itself (catching up
+    // on data entry) is legitimate.
+    if (isPastDateInputValue(form.deliveryDate)) {
+      setSubmitError("Delivery Date cannot be before today.");
+      return;
+    }
 
     const payload: SalesOrderPayload = {
       quotationId: quotationIdParam ?? "",
@@ -339,6 +348,7 @@ export default function SalesOrderForm() {
                     <Input
                       id="deliveryDate"
                       type="date"
+                      min={todayDateInputValue()}
                       value={form.deliveryDate}
                       onChange={(e) => update("deliveryDate", e.target.value)}
                     />

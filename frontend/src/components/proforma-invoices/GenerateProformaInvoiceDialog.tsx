@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import type { ProformaInvoicePayload } from "@/api/proforma-invoices";
 import type { SalesOrder } from "@/types";
 
@@ -71,8 +72,14 @@ export default function GenerateProformaInvoiceDialog({
   }
 
   async function handleConfirm() {
-    setSubmitting(true);
     setError("");
+
+    if (isPastDateInputValue(form.validUntil)) {
+      setError("Valid Until cannot be before today.");
+      return;
+    }
+
+    setSubmitting(true);
     try {
       await onConfirm({
         validUntil: form.validUntil || undefined,
@@ -112,6 +119,7 @@ export default function GenerateProformaInvoiceDialog({
             <Input
               id="validUntil"
               type="date"
+              min={todayDateInputValue()}
               value={form.validUntil}
               onChange={(e) => update("validUntil", e.target.value)}
             />

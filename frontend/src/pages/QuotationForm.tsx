@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
@@ -234,6 +235,10 @@ export default function QuotationForm() {
         next.transportationCharge = "Transportation charge must be a positive number";
       }
     }
+    // A quotation can't be valid until a date that's already passed.
+    if (isPastDateInputValue(form.validUntil)) {
+      next.validUntil = "Valid Until cannot be before today";
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -359,9 +364,13 @@ export default function QuotationForm() {
                       <Input
                         id="validUntil"
                         type="date"
+                        min={todayDateInputValue()}
                         value={form.validUntil}
                         onChange={(e) => update("validUntil", e.target.value)}
                       />
+                      {errors.validUntil && (
+                        <p className="text-xs text-destructive">{errors.validUntil}</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
