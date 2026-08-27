@@ -682,6 +682,10 @@ export interface ProformaInvoice {
   discount: number;
   tax: number;
   grandTotal: number;
+  // Amount already received against this invoice — "Receivable" on the
+  // printed PDF is always grandTotal - advanceReceived, computed at render
+  // time rather than stored.
+  advanceReceived: number;
   paymentTerms?: string | null;
   bankName?: string | null;
   accountNumber?: string | null;

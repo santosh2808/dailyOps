@@ -13,6 +13,7 @@ import { toast } from "@/lib/toast";
 import {
   getProformaInvoice,
   getProformaInvoiceEmailHistory,
+  openProformaInvoicePdf,
   updateProformaInvoiceStatus,
 } from "@/api/proforma-invoices";
 import type { EmailHistoryEntry, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
@@ -48,7 +49,7 @@ export default function ProformaInvoiceDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
-  const [pdfNotice, setPdfNotice] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
@@ -135,18 +136,24 @@ export default function ProformaInvoiceDetails() {
                     <ExternalLink className="mr-2 h-4 w-4" />
                     View Sales Order
                   </Button>
-                  <Button variant="outline" onClick={() => setPdfNotice(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      openProformaInvoicePdf(invoice.id).catch(() => {
+                        setPdfError("Could not load the PDF. Please try again.");
+                        toast.error("Could not load the PDF. Please try again.");
+                      })
+                    }
+                  >
                     <Download className="mr-2 h-4 w-4" />
-                    Download PDF
+                    View PDF
                   </Button>
                 </div>
               </div>
 
-              {pdfNotice && (
-                <div className="rounded-md border border-orange/30 bg-orange/5 px-4 py-3 text-sm text-slate-700">
-                  PDF generation isn't implemented yet — it's planned for a future release using Smart
-                  Rotamac's existing Proforma Invoice layout. This invoice's data (customer, items,
-                  amounts, bank details) is already structured to feed that layout once it's built.
+              {pdfError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {pdfError}
                 </div>
               )}
 
@@ -218,6 +225,20 @@ export default function ProformaInvoiceDetails() {
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">{formatCurrency(invoice.grandTotal)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Advance Received
+                      </p>
+                      <p className="font-medium text-slate-900">
+                        {formatCurrency(invoice.advanceReceived)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Receivable</p>
+                      <p className="font-semibold text-slate-900">
+                        {formatCurrency(invoice.grandTotal - invoice.advanceReceived)}
+                      </p>
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">

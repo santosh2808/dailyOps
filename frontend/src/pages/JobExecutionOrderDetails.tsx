@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, PlayCircle, RefreshCw, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, PlayCircle, RefreshCw, ShieldCheck, Truck } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   getJeoEmailHistory,
   getJeoTimeline,
   getJobExecutionOrder,
+  openJeoPdf,
   updateJeoStatus,
   updateProductionChecklist,
 } from "@/api/job-execution-orders";
@@ -66,6 +67,7 @@ export default function JobExecutionOrderDetails() {
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
+  const [pdfError, setPdfError] = useState("");
 
   const fetchJeo = useCallback(async () => {
     if (!id) return;
@@ -258,8 +260,26 @@ export default function JobExecutionOrderDetails() {
                     <ExternalLink className="mr-2 h-4 w-4" />
                     View Sales Order
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      openJeoPdf(jeo.id).catch(() => {
+                        setPdfError("Could not load the PDF. Please try again.");
+                        toast.error("Could not load the PDF. Please try again.");
+                      })
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    View PDF
+                  </Button>
                 </div>
               </div>
+
+              {pdfError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {pdfError}
+                </div>
+              )}
 
               <Card>
                 <CardHeader>

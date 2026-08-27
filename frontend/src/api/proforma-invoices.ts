@@ -29,6 +29,7 @@ export interface ProformaInvoicePayload {
   ifscCode?: string;
   branch?: string;
   notes?: string;
+  advanceReceived?: number;
 }
 
 export async function listProformaInvoices(params: ProformaInvoiceListParams) {
@@ -56,4 +57,13 @@ export async function updateProformaInvoiceStatus(id: string, status: ProformaIn
 export async function getProformaInvoiceEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/proforma-invoices/${id}/email-history`);
   return res.data;
+}
+
+export async function openProformaInvoicePdf(id: string) {
+  const res = await api.get(`/api/v1/proforma-invoices/${id}/pdf`, { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+  window.open(url, "_blank");
+  // Revoke after a delay rather than immediately — the new tab needs time
+  // to actually load the blob URL before it's invalidated.
+  setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }

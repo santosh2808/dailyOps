@@ -671,6 +671,14 @@ model ProformaInvoice {
   discount      Float                 @default(0)
   tax           Float                 @default(0)
   grandTotal    Float                 @default(0)
+  // Additive: PDF generation (Proforma Invoice layout) — the "Advance
+  // received" / "Receivable" rows on the printed invoice. Actual amount
+  // received against this invoice, entered by whoever generates it (there
+  // is no payment-gateway/ledger integration to derive this automatically
+  // from); "Receivable" itself is never stored — it's always computed as
+  // grandTotal - advanceReceived at render/read time, same convention as
+  // every other derived total in this schema.
+  advanceReceived Float               @default(0)
   paymentTerms  String?
   bankName      String?
   accountNumber String?

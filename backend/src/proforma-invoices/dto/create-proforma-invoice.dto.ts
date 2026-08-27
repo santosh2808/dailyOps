@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateProformaInvoiceDto {
   @ApiProperty({ description: 'Id (uuid) of the existing Sales Order to generate this invoice from' })
@@ -48,4 +48,14 @@ export class CreateProformaInvoiceDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // PDF "Advance received" / "Receivable" rows (see schema.prisma comment
+  // on ProformaInvoice.advanceReceived) — the actual amount already
+  // received against this invoice. Optional; defaults to 0 (nothing
+  // received yet) when omitted.
+  @ApiPropertyOptional({ example: 120000, description: 'Amount already received against this invoice' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  advanceReceived?: number;
 }

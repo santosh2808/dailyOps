@@ -32,6 +32,7 @@ interface FormState {
   ifscCode: string;
   branch: string;
   notes: string;
+  advanceReceived: string;
 }
 
 const emptyForm: FormState = {
@@ -42,6 +43,7 @@ const emptyForm: FormState = {
   ifscCode: "",
   branch: "",
   notes: "",
+  advanceReceived: "",
 };
 
 // Generates a Proforma Invoice from an existing Sales Order. Customer and
@@ -79,6 +81,12 @@ export default function GenerateProformaInvoiceDialog({
       return;
     }
 
+    const advanceReceivedValue = form.advanceReceived.trim() ? Number(form.advanceReceived) : undefined;
+    if (advanceReceivedValue !== undefined && (Number.isNaN(advanceReceivedValue) || advanceReceivedValue < 0)) {
+      setError("Advance Received must be a non-negative number.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       await onConfirm({
@@ -89,6 +97,7 @@ export default function GenerateProformaInvoiceDialog({
         ifscCode: form.ifscCode.trim() || undefined,
         branch: form.branch.trim() || undefined,
         notes: form.notes.trim() || undefined,
+        advanceReceived: advanceReceivedValue,
       });
       onOpenChange(false);
     } catch {
@@ -159,6 +168,18 @@ export default function GenerateProformaInvoiceDialog({
           <div className="space-y-2">
             <Label htmlFor="branch">Branch</Label>
             <Input id="branch" value={form.branch} onChange={(e) => update("branch", e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="advanceReceived">Advance Received</Label>
+            <Input
+              id="advanceReceived"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={form.advanceReceived}
+              onChange={(e) => update("advanceReceived", e.target.value)}
+            />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>

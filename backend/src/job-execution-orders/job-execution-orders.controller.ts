@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
@@ -71,9 +72,17 @@ export class JobExecutionOrdersController {
     return this.jobExecutionOrdersService.updateChecklist(id, dto);
   }
 
+  @Get(':id/pdf')
+  @RequirePermission('JEO', 'View')
+  async getPdf(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
+    const pdf = await this.jobExecutionOrdersService.getPdf(id, req.user?.name);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
+    res.send(pdf);
+  }
+
   // No edit/delete endpoint — JobExecutionOrder has no deletedAt column
   // (per the given field list), so there is no delete capability for this
-  // module at all. No PDF/Material Planning/BOM/Dispatch endpoints yet — see
+  // module at all. No Material Planning/BOM/Dispatch endpoints yet — see
   // the "Future Ready" comment on the JobExecutionOrder model in
   // schema.prisma for the intended extension points. Left out deliberately,
   // per scope.

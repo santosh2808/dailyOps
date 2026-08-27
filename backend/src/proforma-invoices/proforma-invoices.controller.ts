@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
@@ -45,8 +46,11 @@ export class ProformaInvoicesController {
     return this.proformaInvoicesService.updateStatus(id, dto, req.user?.name);
   }
 
-  // No standalone PDF-download endpoint — the PDF is generated internally
-  // by create() purely to attach to the automatic email (see
-  // sendInvoiceEmail()); nothing in scope calls for a separate download
-  // button on this module the way Quotation's GET :id/pdf does.
+  @Get(':id/pdf')
+  @RequirePermission('ProformaInvoice', 'View')
+  async getPdf(@Param('id') id: string, @Res() res: Response) {
+    const pdf = await this.proformaInvoicesService.getPdf(id);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
+    res.send(pdf);
+  }
 }

@@ -2,7 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
-import { PdfService } from '../pdf/pdf.service';
+import { JeoPdfService } from '../pdf/jeo-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
@@ -104,7 +104,7 @@ export class JobExecutionOrdersService {
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
-    private pdfService: PdfService,
+    private jeoPdfService: JeoPdfService,
     private auditLogService: AuditLogService,
   ) {}
 
@@ -291,33 +291,41 @@ export class JobExecutionOrdersService {
     });
   }
 
+  // Branded PDF (replicates "JEO 5478.doc") — used both for the standalone
+  // GET :id/pdf download and internally by sendFactoryNotificationEmail()'s
+  // attachment, so the emailed copy and the on-demand download always match.
+  async getPdf(id: string, actorName?: string): Promise<Buffer> {
+    const jeo = await this.findOne(id);
+    return this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+  }
+
+  private toPdfInput(
+    jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
+    generatedBy?: string,
+  ) {
+    return {
+      jeoNumber: jeo.jeoNumber,
+      createdAt: jeo.createdAt,
+      deliveryDate: jeo.deliveryDate,
+      priority: jeo.priority,
+      customer: { companyName: jeo.customer.companyName, state: jeo.customer.state },
+      billingAddress: jeo.salesOrder.billingAddress,
+      shippingAddress: jeo.salesOrder.shippingAddress,
+      remarks: jeo.remarks,
+      items: jeo.salesOrder.items.map((item) => ({
+        quantity: item.quantity,
+        product: { name: item.product.name, technicalSpec: item.product.technicalSpec },
+      })),
+      generatedBy,
+    };
+  }
+
   private async sendFactoryNotificationEmail(
     jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
     actorName?: string,
   ) {
     try {
-      const pdf = await this.pdfService.render({
-        documentTitle: 'JOB EXECUTION ORDER',
-        documentNumber: jeo.jeoNumber,
-        documentDate: jeo.createdAt,
-        customerName: jeo.customer.companyName,
-        items: jeo.salesOrder.items.map((item) => ({
-          name: item.product.name,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal,
-        })),
-        subtotal: jeo.salesOrder.subtotal,
-        tax: jeo.salesOrder.tax,
-        grandTotal: jeo.salesOrder.grandTotal,
-        fields: [
-          { label: 'Sales Order', value: jeo.salesOrder.salesOrderNumber },
-          { label: 'Priority', value: jeo.priority },
-          ...(jeo.deliveryDate ? [{ label: 'Delivery Date', value: jeo.deliveryDate.toLocaleDateString() }] : []),
-        ],
-        notes: jeo.remarks,
-      });
+      const pdf = await this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
 
       // "Notify Factory" — env-configurable Production Team recipient
       // (there's no per-user Production distribution list modeled yet), so

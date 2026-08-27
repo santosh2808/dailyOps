@@ -2,7 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
-import { PdfService } from '../pdf/pdf.service';
+import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
@@ -45,7 +45,7 @@ export class ProformaInvoicesService {
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
-    private pdfService: PdfService,
+    private proformaInvoicePdfService: ProformaInvoicePdfService,
     private auditLogService: AuditLogService,
   ) {}
 
@@ -155,6 +155,7 @@ export class ProformaInvoicesService {
             ifscCode: dto.ifscCode,
             branch: dto.branch,
             notes: dto.notes,
+            advanceReceived: dto.advanceReceived ?? 0,
           },
           include: PROFORMA_INVOICE_DETAIL_INCLUDE,
         });
@@ -232,30 +233,64 @@ export class ProformaInvoicesService {
     });
   }
 
+  // Branded PDF (replicates "Proforma Invoice 001.doc") — used both for the
+  // standalone GET :id/pdf download and internally by sendInvoiceEmail()'s
+  // attachment, so the emailed copy and the on-demand download are always
+  // byte-for-byte the same document.
+  async getPdf(id: string): Promise<Buffer> {
+    const invoice = await this.findOne(id);
+    return this.proformaInvoicePdfService.render(this.toPdfInput(invoice));
+  }
+
+  private toPdfInput(
+    invoice: Prisma.ProformaInvoiceGetPayload<{ include: typeof PROFORMA_INVOICE_DETAIL_INCLUDE }>,
+  ) {
+    // taxPercent isn't a stored column anywhere (SalesOrder/ProformaInvoice
+    // only snapshot the tax *amount*) — derived here from the snapshotted
+    // subtotal/discount/tax the same way the printed template's "GST %"
+    // column is meant to read, rather than adding a new schema field for a
+    // value that's always mechanically recomputable from what's already
+    // stored.
+    const taxableAmount = invoice.subtotal - invoice.discount;
+    const taxPercent = taxableAmount > 0 ? Math.round((invoice.tax / taxableAmount) * 10000) / 100 : 0;
+
+    return {
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      customer: {
+        companyName: invoice.customer.companyName,
+        contactPerson: invoice.customer.contactPerson,
+        phone: invoice.customer.phone,
+        gstNumber: invoice.customer.gstNumber,
+      },
+      billingAddress: invoice.salesOrder.billingAddress,
+      items: invoice.salesOrder.items.map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+        description: item.description,
+        product: { name: item.product.name },
+      })),
+      subtotal: invoice.subtotal,
+      taxPercent,
+      tax: invoice.tax,
+      grandTotal: invoice.grandTotal,
+      advanceReceived: invoice.advanceReceived,
+      paymentTerms: invoice.paymentTerms,
+      bankName: invoice.bankName,
+      accountNumber: invoice.accountNumber,
+      ifscCode: invoice.ifscCode,
+      branch: invoice.branch,
+      notes: invoice.notes,
+    };
+  }
+
   private async sendInvoiceEmail(
     invoice: Prisma.ProformaInvoiceGetPayload<{ include: typeof PROFORMA_INVOICE_DETAIL_INCLUDE }>,
     actorName?: string,
   ) {
     try {
-      const pdf = await this.pdfService.render({
-        documentTitle: 'PROFORMA INVOICE',
-        documentNumber: invoice.invoiceNumber,
-        documentDate: invoice.invoiceDate,
-        customerName: invoice.customer.companyName,
-        customerContact: `${invoice.customer.contactPerson} · ${invoice.customer.phone}`,
-        items: invoice.salesOrder.items.map((item) => ({
-          name: item.product.name,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal,
-        })),
-        subtotal: invoice.subtotal,
-        discount: invoice.discount,
-        tax: invoice.tax,
-        grandTotal: invoice.grandTotal,
-        notes: invoice.notes,
-      });
+      const pdf = await this.proformaInvoicePdfService.render(this.toPdfInput(invoice));
 
       await this.mailerService.send({
         templateKey: 'PROFORMA_INVOICE',

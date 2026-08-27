@@ -1,0 +1,1 @@
+ALTER TABLE "ProformaInvoice" ADD COLUMN "advanceReceived" DOUBLE PRECISION NOT NULL DEFAULT 0;
