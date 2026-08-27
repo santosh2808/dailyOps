@@ -61,6 +61,12 @@ export interface TaxInvoicePdfInput {
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const LOGO_SR = path.join(ASSETS_DIR, 'logo-smart-rotamach.jpg');
+// Reserved top-left space for LOGO_SR inside the company info box, sized to
+// the asset's own aspect ratio (413x158) so it isn't stretched — matches
+// the uploaded reference invoice's logo size relative to the company name/
+// address lines beside it (see drawTwoColLines's `leftLogoReserve` param).
+const LOGO_WIDTH = 84;
+const LOGO_HEIGHT = 32;
 
 const PAGE_MARGIN = 40;
 const BORDER = '#334155';
@@ -245,7 +251,10 @@ export class TaxInvoicePdfService {
         : [{ text: 'Packing: Inclusive, Installation: Inclusive, Freight: Inclusive', bold: false }]),
     ];
 
-    doc.y = this.drawTwoColLines(doc, contentLeft, col1, col2, leftLines, rightLines);
+    doc.y = this.drawTwoColLines(doc, contentLeft, col1, col2, leftLines, rightLines, {
+      width: LOGO_WIDTH,
+      height: LOGO_HEIGHT,
+    });
 
     // Items table — Sl No / Description / HSN-SAC / Quantity / Rate / per / Amount.
     const widths = [
@@ -453,12 +462,42 @@ export class TaxInvoicePdfService {
     col2: number,
     leftLines: { text: string; bold: boolean }[],
     rightLines: { text: string; bold: boolean }[],
+    // LOGO_SR — matches the uploaded reference invoice, which prints the
+    // company logo beside the company name/address (the first few left
+    // lines), not above the whole block. Lines whose cumulative vertical
+    // offset falls before the reserved height are indented/narrowed to make
+    // room for the logo; once the cursor passes it, lines resume full width
+    // — computed dynamically from each line's own measured height, so this
+    // can never overlap the logo regardless of how many lines actually fit
+    // beside it.
+    leftLogoReserve?: { width: number; height: number },
   ): number {
     const y = doc.y;
     const linePad = 3;
     const fontSize = 9;
+    const reserveW = leftLogoReserve?.width ?? 0;
+    const reserveH = leftLogoReserve?.height ?? 0;
+    const reserveGap = reserveW > 0 ? 8 : 0;
 
-    const measure = (lines: { text: string; bold: boolean }[], width: number) => {
+    const leftLineBox = (offsetY: number) =>
+      offsetY < reserveH
+        ? { x: contentLeft + 6 + reserveW + reserveGap, width: col1 - 12 - reserveW - reserveGap }
+        : { x: contentLeft + 6, width: col1 - 12 };
+
+    const measureLeft = () => {
+      const heights: number[] = [];
+      let offset = 0;
+      for (const line of leftLines) {
+        doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+        const { width } = leftLineBox(offset);
+        const h = Math.max(doc.heightOfString(line.text || ' ', { width }), fontSize + 2);
+        heights.push(h);
+        offset += h + linePad;
+      }
+      return { heights, total: heights.reduce((sum, h) => sum + h + linePad, 0) };
+    };
+
+    const measureRight = (lines: { text: string; bold: boolean }[], width: number) => {
       const heights = lines.map((line) => {
         doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
         return Math.max(doc.heightOfString(line.text || ' ', { width: width - 12 }), fontSize + 2);
@@ -467,20 +506,27 @@ export class TaxInvoicePdfService {
       return { heights, total };
     };
 
-    const left = measure(leftLines, col1);
-    const right = measure(rightLines, col2);
+    const left = measureLeft();
+    const right = measureRight(rightLines, col2);
     const height = Math.max(left.total, right.total, 1) + 7;
 
     doc.lineWidth(0.75).strokeColor(BORDER);
     doc.rect(contentLeft, y, col1, height).stroke();
     doc.rect(contentLeft + col1, y, col2, height).stroke();
 
+    if (reserveW > 0) {
+      this.safeImage(doc, LOGO_SR, contentLeft + 6, y + 5, { width: reserveW, height: reserveH });
+    }
+
     doc.fillColor('black');
     let cursorY = y + 5;
+    let offset = 0;
     leftLines.forEach((line, i) => {
       doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
-      doc.text(line.text, contentLeft + 6, cursorY, { width: col1 - 12 });
+      const { x, width } = leftLineBox(offset);
+      doc.text(line.text, x, cursorY, { width });
       cursorY += left.heights[i] + linePad;
+      offset += left.heights[i] + linePad;
     });
     cursorY = y + 5;
     rightLines.forEach((line, i) => {
