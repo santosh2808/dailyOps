@@ -143,6 +143,7 @@ export default function JobExecutionOrderList() {
                   </button>
                 </TableHead>
                 <TableHead>Customer</TableHead>
+                <TableHead>State</TableHead>
                 <TableHead>Sales Order</TableHead>
                 <TableHead>
                   <button type="button" className="flex items-center" onClick={() => toggleSort("priority")}>
@@ -167,7 +168,7 @@ export default function JobExecutionOrderList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading job execution orders...
                     </span>
@@ -175,7 +176,7 @@ export default function JobExecutionOrderList() {
                 </TableRow>
               ) : jeos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No job execution orders found.
                   </TableCell>
                 </TableRow>
@@ -188,6 +189,7 @@ export default function JobExecutionOrderList() {
                   >
                     <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
                     <TableCell>{jeo.customer?.companyName ?? "—"}</TableCell>
+                    <TableCell>{jeo.customer?.state ?? "—"}</TableCell>
                     <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                     <TableCell>
                       <JeoPriorityBadge priority={jeo.priority} />

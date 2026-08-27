@@ -824,6 +824,35 @@ model ProductionChecklist {
   completedAt        DateTime?
 }
 
+// Additive: State-wise JEO numbering. Each Indian state can have its own
+// numbering series (e.g. Telangana JEOs numbered 4000, 4001, 4002...,
+// Andhra Pradesh JEOs numbered 5000, 5001...) instead of the original
+// global JEO-YYYY-NNNNNN scheme. Configured by an Administrator via
+// Administration -> State Series Codes (StateSeriesCodesModule) — states
+// with no row here simply keep using the original JEO-YYYY-NNNNNN scheme
+// (see JobExecutionOrdersService.generateJeoNumber()), so nothing breaks
+// for a state nobody's configured a series for yet, and more states can be
+// added later without a code change.
+model StateSeriesCode {
+  id          String   @id @default(uuid())
+  // One of INDIA_STATES (see common/india-states.ts) — validated at the DTO
+  // level (CreateStateSeriesCodeDto), not by a DB enum, reusing the same
+  // single source of truth as Customer.state/Lead.state.
+  state       String   @unique
+  seriesStart Int
+  // The next number that will be assigned to this state's next JEO —
+  // starts equal to seriesStart and is atomically incremented (via a
+  // single `UPDATE ... SET "nextNumber" = "nextNumber" + 1` from
+  // StateSeriesCodesService.claimNextNumber()) every time a JEO is
+  // generated for a customer in this state. Tracking this as a running
+  // counter avoids re-parsing every existing JobExecutionOrder.jeoNumber
+  // string back into an integer on every single JEO creation (old rows use
+  // the JEO-YYYY-NNNNNN format, new ones are plain numbers).
+  nextNumber  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Simple lookup table for Material.categoryId — deliberately its own model
 // (rather than a free-text field like Product.category) because the
 // Material Master spec calls for a "Required Category" validation against

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
+import { StateSeriesCodesService } from '../state-series-codes/state-series-codes.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
@@ -105,6 +106,7 @@ export class JobExecutionOrdersService {
     private prisma: PrismaService,
     private mailerService: MailerService,
     private jeoPdfService: JeoPdfService,
+    private stateSeriesCodesService: StateSeriesCodesService,
     private auditLogService: AuditLogService,
   ) {}
 
@@ -175,7 +177,13 @@ export class JobExecutionOrdersService {
   }
 
   async create(dto: CreateJeoDto, actorName?: string) {
-    const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
+    // `customer` is included here specifically so generateJeoNumber() can
+    // pick the right state-wise series (see StateSeriesCodesService) —
+    // nothing else in create() needed it before.
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: dto.salesOrderId },
+      include: { customer: true },
+    });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
     }
@@ -198,7 +206,7 @@ export class JobExecutionOrdersService {
     // salesOrder.items (see schema.prisma comment). Only priority,
     // assignedTo, and remarks come from the request body.
     for (let attempt = 1; attempt <= MAX_JEO_NUMBER_ATTEMPTS; attempt++) {
-      const jeoNumber = await this.generateJeoNumber();
+      const jeoNumber = await this.generateJeoNumber(salesOrder.customer.state);
       try {
         const created = await this.prisma.jobExecutionOrder.create({
           data: {
@@ -495,7 +503,22 @@ export class JobExecutionOrdersService {
     return this.findOne(id);
   }
 
-  private async generateJeoNumber(): Promise<string> {
+  // State-wise JEO numbering: if the customer's state has a configured
+  // series (Administration -> State Series Codes — e.g. Telangana 4000,
+  // Andhra Pradesh 5000...), the JEO number is just that series' next
+  // plain number ("4001", "5002", ...). States with no configured series
+  // (or a customer with no state set at all) fall back to the original
+  // global JEO-YYYY-NNNNNN scheme unchanged — so nothing breaks for a
+  // state nobody's added a code for yet, and existing historical
+  // JEO-YYYY-NNNNNN numbers are never touched.
+  private async generateJeoNumber(state?: string | null): Promise<string> {
+    if (state) {
+      const claimed = await this.stateSeriesCodesService.claimNextNumber(state);
+      if (claimed !== null) {
+        return String(claimed);
+      }
+    }
+
     const year = new Date().getFullYear();
     const yearPrefix = `${JEO_NUMBER_PREFIX}${year}-`;
     const last = await this.prisma.jobExecutionOrder.findFirst({

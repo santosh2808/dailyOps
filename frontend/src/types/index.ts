@@ -34,6 +34,19 @@ export interface Department {
   _count?: { users: number };
 }
 
+// Additive: State-wise JEO numbering (Administration -> State Series
+// Codes). See JobExecutionOrdersService.generateJeoNumber() on the
+// backend — states with no row here just keep using the original
+// JEO-YYYY-NNNNNN scheme.
+export interface StateSeriesCode {
+  id: string;
+  state: string;
+  seriesStart: number;
+  nextNumber: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Permission {
   id: string;
   module: string;

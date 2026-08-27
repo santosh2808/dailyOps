@@ -25,6 +25,7 @@ import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { MailerModule } from './mailer/mailer.module';
 import { PdfModule } from './pdf/pdf.module';
 import { ComplaintsModule } from './complaints/complaints.module';
+import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { ComplaintsModule } from './complaints/complaints.module';
     SalesOrdersModule,
     ProformaInvoicesModule,
     JobExecutionOrdersModule,
+    StateSeriesCodesModule,
     MaterialCategoriesModule,
     MaterialUnitsModule,
     MaterialsModule,

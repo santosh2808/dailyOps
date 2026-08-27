@@ -21,6 +21,7 @@ import {
   CheckSquare,
   Mail,
   AlertCircle,
+  Hash,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -149,6 +150,12 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/email-templates",
         icon: Mail,
         permission: { module: "EmailTemplate", action: "View" },
+      },
+      {
+        label: "State Series Codes",
+        to: "/admin/state-series-codes",
+        icon: Hash,
+        permission: { module: "StateSeriesCode", action: "View" },
       },
     ],
   },

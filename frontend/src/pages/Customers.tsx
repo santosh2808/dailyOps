@@ -136,6 +136,7 @@ export default function Customers() {
                 <TableHead>Contact Person</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>State</TableHead>
                 <TableHead>GST Number</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -143,7 +144,7 @@ export default function Customers() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading customers...
                     </span>
@@ -151,7 +152,7 @@ export default function Customers() {
                 </TableRow>
               ) : customers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     No customers found.
                   </TableCell>
                 </TableRow>
@@ -168,6 +169,7 @@ export default function Customers() {
                     <TableCell>{customer.contactPerson}</TableCell>
                     <TableCell>{customer.phone}</TableCell>
                     <TableCell>{customer.email || "—"}</TableCell>
+                    <TableCell>{customer.state || "—"}</TableCell>
                     <TableCell>
                       {customer.gstNumber || <Badge variant="muted">Not provided</Badge>}
                     </TableCell>

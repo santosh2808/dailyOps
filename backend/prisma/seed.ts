@@ -93,6 +93,12 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'Complaint', action: 'Create', description: 'Log a new customer complaint against a sales order' },
   { module: 'Complaint', action: 'Edit', description: 'Edit complaint details and change status' },
   { module: 'Complaint', action: 'Delete', description: 'Delete (soft-delete) complaints' },
+
+  // Additive: State-wise JEO numbering series (Administration -> State
+  // Series Codes).
+  { module: 'StateSeriesCode', action: 'View', description: 'View state-wise JEO numbering series' },
+  { module: 'StateSeriesCode', action: 'Create', description: 'Add a state-wise JEO numbering series' },
+  { module: 'StateSeriesCode', action: 'Delete', description: 'Remove a state-wise JEO numbering series' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -132,7 +138,15 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'complaint.edit',
     'product.view',
   ],
-  Production: ['jeo.view', 'jeo.create', 'jeo.update', 'salesorder.view', 'material.view', 'proformainvoice.view'],
+  Production: [
+    'jeo.view',
+    'jeo.create',
+    'jeo.update',
+    'salesorder.view',
+    'material.view',
+    'proformainvoice.view',
+    'stateseriescode.view',
+  ],
   Finance: [
     'quotation.view',
     'salesorder.view',
@@ -370,6 +384,27 @@ async function main() {
       where: { key: template.key },
       update: {},
       create: template,
+    });
+  }
+
+  // 7. State-wise JEO numbering series — the statewise codes given by the
+  // customer. Upserted by `state` with `update: {}` (create-only, same
+  // convention as the Email Templates seed above) so re-running this seed
+  // never resets an already-advancing `nextNumber` counter back down to
+  // `seriesStart` once JEOs have actually been generated for a state.
+  const stateSeriesSeed: { state: string; seriesStart: number }[] = [
+    { state: 'Telangana', seriesStart: 4000 },
+    { state: 'Andhra Pradesh', seriesStart: 5000 },
+    { state: 'Tamil Nadu', seriesStart: 6000 },
+    { state: 'Karnataka', seriesStart: 7000 },
+    { state: 'Kerala', seriesStart: 8000 },
+    { state: 'Maharashtra', seriesStart: 9000 },
+  ];
+  for (const s of stateSeriesSeed) {
+    await prisma.stateSeriesCode.upsert({
+      where: { state: s.state },
+      update: {},
+      create: { state: s.state, seriesStart: s.seriesStart, nextNumber: s.seriesStart },
     });
   }
 

@@ -37,6 +37,7 @@ import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
 import Permissions from "@/pages/Permissions";
 import Departments from "@/pages/Departments";
+import StateSeriesCodes from "@/pages/StateSeriesCodes";
 import PublicQuotation from "@/pages/PublicQuotation";
 
 export default function App() {
@@ -367,6 +368,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Departments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/state-series-codes"
+            element={
+              <ProtectedRoute>
+                <StateSeriesCodes />
               </ProtectedRoute>
             }
           />

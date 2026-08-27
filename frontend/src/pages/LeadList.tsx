@@ -215,6 +215,7 @@ export default function LeadList() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Source</TableHead>
+                <TableHead>State</TableHead>
                 <TableHead>Assigned To</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>
@@ -234,7 +235,7 @@ export default function LeadList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading leads...
                     </span>
@@ -242,7 +243,7 @@ export default function LeadList() {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">
                     No leads found. Click "Create Lead" to add one.
                   </TableCell>
                 </TableRow>
@@ -255,6 +256,7 @@ export default function LeadList() {
                     <TableCell>{lead.phone || "-"}</TableCell>
                     <TableCell>{lead.email || "-"}</TableCell>
                     <TableCell>{sourceLabel(lead.source)}</TableCell>
+                    <TableCell>{lead.state || "—"}</TableCell>
                     {/* Full name only — never the role — with an explicit
                         "Unassigned" label (not a bare dash) when no user is
                         assigned. */}
