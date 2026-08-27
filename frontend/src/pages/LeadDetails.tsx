@@ -147,7 +147,11 @@ export default function LeadDetails() {
       if (latestQuotation) navigate(`/quotations/${latestQuotation.id}`);
     } else if (nextAction.label === "Convert to Customer") {
       setConvertOpen(true);
-    } else if (nextAction.label === "Assign Sales Person" || nextAction.label === "Contact Customer") {
+    } else if (
+      nextAction.label === "Assign Sales Person" ||
+      nextAction.label === "Change Sales Person" ||
+      nextAction.label === "Contact Customer"
+    ) {
       navigate(`/leads/${id}/edit`);
     } else {
       setStatusOpen(true);
@@ -156,7 +160,7 @@ export default function LeadDetails() {
 
   const nextActionIsClickable =
     !!nextAction &&
-    ["Assign Sales Person", "Contact Customer", "Schedule Follow-up", "Complete Site Visit", "Generate Quotation", "Send Quotation", "View Quotation", "Convert to Customer"].includes(
+    ["Assign Sales Person", "Change Sales Person", "Contact Customer", "Schedule Follow-up", "Complete Site Visit", "Generate Quotation", "Send Quotation", "View Quotation", "Convert to Customer"].includes(
       nextAction.label,
     );
 

@@ -72,7 +72,14 @@ export interface NextAction {
 export function nextActionFor(lead: Lead): NextAction {
   switch (lead.status) {
     case "NEW":
-      return { label: "Assign Sales Person", hint: "Pick who owns this lead to move it forward." };
+      // A lead can already have an assignee while still sitting at status
+      // NEW — assigning someone doesn't auto-advance the status, that's a
+      // separate manual step. So don't keep telling the user to "assign"
+      // a lead that already has an owner; offer to change the owner
+      // instead (still routes to the same Edit page either way).
+      return lead.assignedToUserId
+        ? { label: "Change Sales Person", hint: "Reassign this lead, or update the status to Contacted." }
+        : { label: "Assign Sales Person", hint: "Pick who owns this lead to move it forward." };
     case "ASSIGNED":
       return { label: "Contact Customer", hint: "Reach out, then update the status to Contacted." };
     case "CONTACTED":
