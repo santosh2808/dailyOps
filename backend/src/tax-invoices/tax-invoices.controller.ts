@@ -9,6 +9,7 @@ import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
 import { UpdateTaxInvoiceStatusDto } from './dto/update-tax-invoice-status.dto';
 import { QueryTaxInvoiceDto } from './dto/query-tax-invoice.dto';
 import { SendTaxInvoiceDto } from './dto/send-tax-invoice.dto';
+import { UpdateTaxInvoiceEInvoiceDto } from './dto/update-tax-invoice-einvoice.dto';
 
 @ApiTags('tax-invoices')
 @ApiBearerAuth()
@@ -51,6 +52,16 @@ export class TaxInvoicesController {
   @RequirePermission('TaxInvoice', 'Edit')
   sendInvoice(@Param('id') id: string, @Body() dto: SendTaxInvoiceDto, @Req() req: any) {
     return this.taxInvoicesService.sendInvoice(id, dto, req.user?.name);
+  }
+
+  @Patch(':id/e-invoice')
+  @RequirePermission('TaxInvoice', 'Edit')
+  updateEInvoiceDetails(
+    @Param('id') id: string,
+    @Body() dto: UpdateTaxInvoiceEInvoiceDto,
+    @Req() req: any,
+  ) {
+    return this.taxInvoicesService.updateEInvoiceDetails(id, dto, req.user?.name);
   }
 
   @Get(':id/pdf')

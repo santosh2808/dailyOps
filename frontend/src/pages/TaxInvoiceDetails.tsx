@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ExternalLink, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ExternalLink, QrCode, RefreshCw, Send } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
+import EInvoiceDetailsDialog from "@/components/tax-invoices/EInvoiceDetailsDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -51,6 +52,7 @@ export default function TaxInvoiceDetails() {
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [einvoiceOpen, setEinvoiceOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
@@ -165,6 +167,17 @@ export default function TaxInvoiceDetails() {
                 </div>
               )}
 
+              {!!invoice.customer?.gstNumber?.trim() && !invoice.qrCodeImage && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    This customer is GST-registered ({invoice.customer?.gstNumber}) — the printed invoice
+                    needs the e-invoice QR code. Add the IRN/QR below once you've generated the e-invoice
+                    on the government portal or your GSP.
+                  </span>
+                </div>
+              )}
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Overview</CardTitle>
@@ -180,6 +193,32 @@ export default function TaxInvoiceDetails() {
                   <Field label="Destination" value={invoice.destination} />
                 </CardContent>
               </Card>
+
+              {!!invoice.customer?.gstNumber?.trim() && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <CardTitle className="text-base">GST e-Invoice (IRN &amp; QR Code)</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => setEinvoiceOpen(true)}>
+                      <QrCode className="mr-2 h-4 w-4" />
+                      {invoice.irn || invoice.qrCodeImage ? "Edit Details" : "Add Details"}
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                    <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-3">
+                      <Field label="IRN" value={invoice.irn} />
+                      <Field label="Acknowledgement No." value={invoice.ackNumber} />
+                      <Field label="Acknowledgement Date" value={formatDate(invoice.ackDate)} />
+                    </div>
+                    {invoice.qrCodeImage && (
+                      <img
+                        src={invoice.qrCodeImage}
+                        alt="e-Invoice QR code"
+                        className="h-20 w-20 shrink-0 rounded border object-contain"
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
@@ -279,6 +318,13 @@ export default function TaxInvoiceDetails() {
               .finally(() => setEmailHistoryLoading(false));
           }
         }}
+      />
+
+      <EInvoiceDetailsDialog
+        open={einvoiceOpen}
+        onOpenChange={setEinvoiceOpen}
+        invoice={invoice}
+        onSaved={setInvoice}
       />
     </div>
   );

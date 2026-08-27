@@ -47,6 +47,16 @@ export interface TaxInvoicePdfInput {
   subtotal: number;
   tax: number;
   grandTotal: number;
+  // GST e-invoicing (IRN + QR) — only rendered when customer.gstNumber is
+  // set (B2B). Entered manually via TaxInvoicesService.updateEInvoiceDetails()
+  // after being obtained from the government e-invoice portal/GSP; there is
+  // no live API integration generating these within this app. When a GST
+  // customer's invoice has none of these yet, a "QR Code Pending"
+  // placeholder is rendered instead of silently omitting the block.
+  irn?: string | null;
+  ackNumber?: string | null;
+  ackDate?: Date | null;
+  qrCodeImage?: string | null;
 }
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
@@ -383,6 +393,14 @@ export class TaxInvoicePdfService {
     });
     doc.moveDown(0.6);
 
+    // GST e-invoicing (IRN + QR) — GST-registered (B2B) customers only.
+    // See TaxInvoicePdfInput comment: entered manually, not generated here.
+    const isGstCustomer = !!(invoice.customer.gstNumber && invoice.customer.gstNumber.trim());
+    if (isGstCustomer) {
+      doc.y = this.drawEInvoiceBlock(doc, contentLeft, contentWidth, invoice);
+      doc.moveDown(0.4);
+    }
+
     // Bottom section: PAN + Declaration (left) | Bank details + Signatory (right).
     const bottomY = doc.y;
     doc.font('Helvetica-Bold').fontSize(9).text(`Company's PAN : ${COMPANY_PAN}`, contentLeft, bottomY);
@@ -528,6 +546,78 @@ export class TaxInvoicePdfService {
     doc.text(label, contentLeft + 6, y + 4, { width: labelWidth - 12, align: 'right' });
     doc.text(value, contentLeft + labelWidth, y + 4, { width: valueWidth - 6, align: 'center' });
     return y + height;
+  }
+
+  // GST e-invoicing block: IRN/Ack No./Ack Date as wrapped text on the left,
+  // the government-issued QR image (or a "Pending" placeholder box if it
+  // hasn't been entered yet) on the right — same explicit-height-measurement
+  // approach as drawTwoColLines/drawItemsHeaderRow above, so a long IRN
+  // string never collides with the row below it.
+  private drawEInvoiceBlock(doc: PDFKit.PDFDocument, contentLeft: number, contentWidth: number, invoice: TaxInvoicePdfInput): number {
+    const y = doc.y;
+    const qrSize = 85;
+    const textWidth = contentWidth - qrSize - 20;
+
+    const lines: { text: string; bold: boolean }[] = [
+      { text: 'e-Invoice Details', bold: true },
+      { text: invoice.irn ? `IRN: ${invoice.irn}` : 'IRN: Pending', bold: false },
+      ...(invoice.ackNumber ? [{ text: `Ack No.: ${invoice.ackNumber}`, bold: false }] : []),
+      ...(invoice.ackDate ? [{ text: `Ack Date: ${this.formatDate(invoice.ackDate)}`, bold: false }] : []),
+    ];
+
+    let textHeight = 0;
+    lines.forEach((line) => {
+      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(line.bold ? 9 : 8.5);
+      textHeight += doc.heightOfString(line.text, { width: textWidth }) + 3;
+    });
+    const height = Math.max(textHeight + 10, qrSize + 10);
+
+    doc.lineWidth(0.75).strokeColor(BORDER).rect(contentLeft, y, contentWidth, height).stroke();
+
+    let cursorY = y + 6;
+    lines.forEach((line) => {
+      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(line.bold ? 9 : 8.5).fillColor('black');
+      doc.text(line.text, contentLeft + 6, cursorY, { width: textWidth });
+      cursorY = doc.y + 3;
+    });
+
+    const qrX = contentLeft + contentWidth - qrSize - 8;
+    const qrY = y + (height - qrSize) / 2;
+    const qrBuffer = invoice.qrCodeImage ? this.decodeBase64Image(invoice.qrCodeImage) : null;
+    if (qrBuffer) {
+      try {
+        doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+      } catch (error) {
+        this.logger.warn(`Could not embed Tax Invoice QR code: ${error instanceof Error ? error.message : error}`);
+        this.drawQrPlaceholder(doc, qrX, qrY, qrSize);
+      }
+    } else {
+      this.drawQrPlaceholder(doc, qrX, qrY, qrSize);
+    }
+
+    return y + height;
+  }
+
+  private drawQrPlaceholder(doc: PDFKit.PDFDocument, x: number, y: number, size: number): void {
+    doc.lineWidth(0.75).strokeColor(BORDER).rect(x, y, size, size).stroke();
+    doc.font('Helvetica-Oblique').fontSize(7.5).fillColor('#94a3b8');
+    doc.text('QR Code\nPending', x, y + size / 2 - 10, { width: size, align: 'center' });
+    doc.fillColor('black');
+  }
+
+  // Accepts either a raw base64 string or a `data:image/...;base64,` URL —
+  // the frontend upload widget may hand either form back.
+  private decodeBase64Image(data: string): Buffer | null {
+    const trimmed = data.trim();
+    if (!trimmed) return null;
+    const match = /^data:image\/\w+;base64,(.+)$/i.exec(trimmed);
+    const base64 = match ? match[1] : trimmed;
+    try {
+      const buffer = Buffer.from(base64, 'base64');
+      return buffer.length > 0 ? buffer : null;
+    } catch {
+      return null;
+    }
   }
 
   private safeImage(doc: PDFKit.PDFDocument, filePath: string, x: number, y: number, options: PDFKit.Mixins.ImageOption): void {

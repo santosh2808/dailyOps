@@ -89,6 +89,14 @@ export default function SendTaxInvoiceDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {!!invoice.customer?.gstNumber?.trim() && !invoice.qrCodeImage && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            This customer is GST-registered and the e-invoice QR code hasn't been added yet — the PDF
+            will go out without it. Close this and use "Add Details" on the invoice page first if it's
+            ready.
+          </p>
+        )}
+
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="tax-invoice-recipient-email">Recipient Email</Label>

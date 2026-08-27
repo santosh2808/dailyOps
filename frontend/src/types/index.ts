@@ -750,6 +750,12 @@ export interface TaxInvoice {
   sentAt?: string | null;
   sentBy?: string | null;
   sentToEmail?: string | null;
+  irn?: string | null;
+  ackNumber?: string | null;
+  ackDate?: string | null;
+  qrCodeImage?: string | null;
+  eInvoiceUpdatedBy?: string | null;
+  eInvoiceUpdatedAt?: string | null;
 }
 
 export const JEO_STATUSES = [

@@ -8,6 +8,7 @@ import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
 import { UpdateTaxInvoiceStatusDto } from './dto/update-tax-invoice-status.dto';
 import { QueryTaxInvoiceDto } from './dto/query-tax-invoice.dto';
 import { SendTaxInvoiceDto } from './dto/send-tax-invoice.dto';
+import { UpdateTaxInvoiceEInvoiceDto } from './dto/update-tax-invoice-einvoice.dto';
 
 // First fiscal-year sequence floor: FY2026-27 already had Tax Invoice
 // SRM/2026-27/134 issued by hand in Tally before this automated numbering
@@ -218,6 +219,38 @@ export class TaxInvoicesService {
     return updated;
   }
 
+  // GST e-invoicing (IRN + QR): entered manually after being obtained from
+  // the government e-invoice portal/GSP (see schema.prisma comment on
+  // TaxInvoice.irn — no confirmed live API integration exists yet).
+  // Independently updatable so partial data (e.g. QR pasted before the IRN
+  // is typed in) is never rejected.
+  async updateEInvoiceDetails(id: string, dto: UpdateTaxInvoiceEInvoiceDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.taxInvoice.update({
+      where: { id },
+      data: {
+        ...(dto.irn !== undefined ? { irn: dto.irn || null } : {}),
+        ...(dto.ackNumber !== undefined ? { ackNumber: dto.ackNumber || null } : {}),
+        ...(dto.ackDate !== undefined ? { ackDate: dto.ackDate ? new Date(dto.ackDate) : null } : {}),
+        ...(dto.qrCodeImage !== undefined ? { qrCodeImage: dto.qrCodeImage || null } : {}),
+        eInvoiceUpdatedBy: actorName,
+        eInvoiceUpdatedAt: new Date(),
+      },
+      include: TAX_INVOICE_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'TaxInvoice',
+        recordId: id,
+        action: 'e-Invoice Details Updated',
+        actorName,
+        oldValue: { irn: existing.irn, ackNumber: existing.ackNumber },
+        newValue: { irn: updated.irn, ackNumber: updated.ackNumber, hasQrCode: !!updated.qrCodeImage },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
   getEmailHistory(id: string) {
     return this.prisma.emailHistory.findMany({
       where: { taxInvoiceId: id },
@@ -263,6 +296,13 @@ export class TaxInvoicesService {
       subtotal: invoice.subtotal,
       tax: invoice.tax,
       grandTotal: invoice.grandTotal,
+      // GST e-invoicing: only meaningful for GST-registered customers
+      // (customer.gstNumber above) — TaxInvoicePdfService decides whether
+      // to render the QR block at all based on that.
+      irn: invoice.irn,
+      ackNumber: invoice.ackNumber,
+      ackDate: invoice.ackDate,
+      qrCodeImage: invoice.qrCodeImage,
     };
   }
 
