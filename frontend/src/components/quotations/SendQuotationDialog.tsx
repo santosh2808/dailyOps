@@ -20,12 +20,22 @@ import type { Quotation } from "@/types";
 // QuotationsService.sendQuotation()). The recipient defaults to the
 // customer's email on file but can be overridden here, and CC recipients
 // can be added freely (comma-separated).
+//
+// Customer Quotation Acceptance workflow — this same dialog also handles
+// "Resend Quotation" (status already SENT/VIEWED). The backend already
+// allows re-sending anything short of ACCEPTED/REJECTED/EXPIRED
+// (QuotationsService.sendQuotation() only blocks those three), and every
+// send — first or repeat — issues a brand-new secure token, which
+// invalidates any link already out in a customer's inbox. `isResend` only
+// changes the copy shown here so that behavior is obvious to whoever
+// clicks it.
 
 interface SendQuotationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   quotation: Quotation | null;
   onSent: (result: SendQuotationResult) => void;
+  isResend?: boolean;
 }
 
 export default function SendQuotationDialog({
@@ -33,6 +43,7 @@ export default function SendQuotationDialog({
   onOpenChange,
   quotation,
   onSent,
+  isResend = false,
 }: SendQuotationDialogProps) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [ccEmails, setCcEmails] = useState("");
@@ -62,7 +73,7 @@ export default function SendQuotationDialog({
         recipientEmail: recipientEmail.trim(),
         ccEmails: ccEmails.trim() || undefined,
       });
-      toast.success("Quotation sent.");
+      toast.success(isResend ? "Quotation resent." : "Quotation sent.");
       onSent(result);
       onOpenChange(false);
     } catch (err: any) {
@@ -81,11 +92,13 @@ export default function SendQuotationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onClose={() => onOpenChange(false)}>
         <DialogHeader>
-          <DialogTitle>Send Quotation</DialogTitle>
+          <DialogTitle>{isResend ? "Resend Quotation" : "Send Quotation"}</DialogTitle>
           <DialogDescription>
             Email{" "}
             <span className="font-medium text-slate-900">{quotation.quotationNumber}</span> to
             the customer as a PDF attachment.
+            {isResend &&
+              " This issues a new secure link and PDF — any link from a previous email will stop working."}
           </DialogDescription>
         </DialogHeader>
 
@@ -124,7 +137,7 @@ export default function SendQuotationDialog({
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
-            {submitting ? "Sending..." : "Send Quotation"}
+            {submitting ? "Sending..." : isResend ? "Resend Quotation" : "Send Quotation"}
           </Button>
         </DialogFooter>
       </DialogContent>

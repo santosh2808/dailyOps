@@ -245,6 +245,21 @@ export default function QuotationDetails() {
                       Send Quotation
                     </Button>
                   )}
+                  {/* Customer Quotation Acceptance workflow — "Resend
+                      Quotation" once already sent (SENT/VIEWED). Covers a
+                      customer who lost the email, and fixing/retrying after
+                      an Email Template edit (e.g. the QUOTATION template
+                      missing {{quotationLink}} on an older database). The
+                      backend already allows this for any non-terminal
+                      status — see QuotationsService.sendQuotation() — this
+                      just surfaces it once the quotation is no longer
+                      Draft/Ready. */}
+                  {(quotation.status === "SENT" || quotation.status === "VIEWED") && (
+                    <Button variant="outline" onClick={() => setSendOpen(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      Resend Quotation
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -569,6 +584,7 @@ export default function QuotationDetails() {
         open={sendOpen}
         onOpenChange={setSendOpen}
         quotation={quotation}
+        isResend={quotation?.status === "SENT" || quotation?.status === "VIEWED"}
         onSent={() => {
           fetchQuotation();
           fetchEmailHistory();
