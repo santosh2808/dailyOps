@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
+import { INDIA_STATES } from "@/lib/indiaStates";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
@@ -148,6 +149,12 @@ export default function LeadForm() {
     if (!form.companyName.trim()) next.companyName = "Company name is required";
     if (!form.contactPerson.trim()) next.contactPerson = "Contact person is required";
     if (!form.title.trim()) next.title = "Title is required";
+    // Required — see CreateLeadDto: every lead needs a state so it can be
+    // carried over to Customer.state on conversion and show up on the
+    // Dashboard's India Sales Map, and needs an owner so nothing sits
+    // unassigned.
+    if (!form.state.trim()) next.state = "State is required";
+    if (!form.assignedToUserId) next.assignedToUserId = "Assigning this lead to a user is required";
     if (!form.phone.trim()) {
       next.phone = "Phone is required";
     } else if (!PHONE_REGEX.test(form.phone.trim())) {
@@ -193,7 +200,7 @@ export default function LeadForm() {
       phone: form.phone.trim(),
       alternatePhone: form.alternatePhone.trim() || undefined,
       city: form.city.trim() || undefined,
-      state: form.state.trim() || undefined,
+      state: form.state,
       country: form.country.trim() || undefined,
       industry: form.industry.trim() || undefined,
       title: form.title.trim(),
@@ -323,8 +330,16 @@ export default function LeadForm() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
-                    <Input id="state" value={form.state} onChange={(e) => update("state", e.target.value)} />
+                    <Label htmlFor="state">State *</Label>
+                    <Select id="state" value={form.state} onChange={(e) => update("state", e.target.value)}>
+                      <option value="">Select state...</option>
+                      {INDIA_STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </Select>
+                    {errors.state && <p className="text-xs text-destructive">{errors.state}</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -461,11 +476,14 @@ export default function LeadForm() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Assigned To</Label>
+                    <Label>Assigned To *</Label>
                     <AssignedToPicker
                       value={form.assignedToUserId || null}
                       onChange={(userId) => update("assignedToUserId", userId ?? "")}
                     />
+                    {errors.assignedToUserId && (
+                      <p className="text-xs text-destructive">{errors.assignedToUserId}</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">

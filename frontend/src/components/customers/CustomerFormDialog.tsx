@@ -93,6 +93,11 @@ export default function CustomerFormDialog({
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
       next.email = "Enter a valid email address";
     }
+    // Required — see CreateCustomerDto: every customer needs a state so it
+    // always shows up on the Dashboard's India Sales Map.
+    if (!form.state) {
+      next.state = "State is required";
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -111,7 +116,7 @@ export default function CustomerFormDialog({
         phone: form.phone.trim(),
         email: form.email.trim() || undefined,
         gstNumber: form.gstNumber.trim() || undefined,
-        state: form.state || undefined,
+        state: form.state,
       });
       toast.success(isEdit ? "Customer updated successfully." : "Customer created successfully.");
       onOpenChange(false);
@@ -196,7 +201,7 @@ export default function CustomerFormDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="state">State</Label>
+              <Label htmlFor="state">State *</Label>
               <Select
                 id="state"
                 value={form.state}
@@ -209,6 +214,7 @@ export default function CustomerFormDialog({
                   </option>
                 ))}
               </Select>
+              {errors.state && <p className="text-xs text-destructive">{errors.state}</p>}
             </div>
           </div>
 

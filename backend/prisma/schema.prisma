@@ -129,12 +129,13 @@ model Customer {
   phone         String
   email         String?
   gstNumber     String?
-  // Additive: Dashboard Redesign v2 — India Sales Map. One of the 36
-  // Indian states/UTs (see frontend INDIA_STATES / backend indiaStates.ts
-  // for the exact list this is validated against); nullable since existing
-  // customers won't have one until someone fills it in. Sales Orders don't
-  // have their own state field — they're mapped to a state through this,
-  // via their Customer.
+  // Dashboard Redesign v2 — India Sales Map. One of the 36 Indian
+  // states/UTs (see frontend INDIA_STATES / backend indiaStates.ts for the
+  // exact list this is validated against). Required at the
+  // CreateCustomerDto layer so every customer always shows up on the map;
+  // column stays nullable for the handful of customers created before this
+  // was enforced. Sales Orders don't have their own state field — they're
+  // mapped to a state through this, via their Customer.
   state         String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
@@ -264,10 +265,17 @@ model Lead {
   // model didn't exist yet when Lead was first designed, hence this being
   // a relation now rather than the plain scalar convention used elsewhere).
   // SetNull on delete — if the assigned user is ever removed, the lead just
-  // becomes unassigned rather than blocking the delete.
+  // becomes unassigned rather than blocking the delete. Required at the
+  // CreateLeadDto layer (every new lead must be assigned to someone); the
+  // column stays String? because onDelete: SetNull requires a nullable FK.
   assignedToUserId  String?
   assignedToUser    User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
   city              String?
+  // Required at the CreateLeadDto layer — validated against INDIA_STATES so
+  // it always carries through to Customer.state on conversion (see
+  // LeadsService.convertToCustomer()) and shows up on the Dashboard's India
+  // Sales Map. Column stays nullable for leads created before this was
+  // enforced.
   state             String?
   country           String?
   // Additive column for the Lead Import feature — the import template's

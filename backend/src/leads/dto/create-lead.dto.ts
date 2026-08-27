@@ -7,6 +7,7 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -16,6 +17,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { INDIA_STATES } from '../../common/india-states';
 import { LeadProductInputDto } from './lead-product-input.dto';
 
 const PHONE_REGEX = /^\d{10,15}$/;
@@ -56,10 +58,13 @@ export class CreateLeadDto {
   @IsString()
   city?: string;
 
-  @ApiPropertyOptional({ example: 'Maharashtra' })
-  @IsOptional()
-  @IsString()
-  state?: string;
+  // Required (requirement: "make state mandatory so it always shows on the
+  // Dashboard's India Sales Map") — validated against the same INDIA_STATES
+  // list Customer.state uses so a value copied over on conversion (see
+  // LeadsService.convertToCustomer()) always matches the map's key list.
+  @ApiProperty({ example: 'Maharashtra', enum: INDIA_STATES })
+  @IsIn(INDIA_STATES, { message: 'State is required' })
+  state: string;
 
   @ApiPropertyOptional({ example: 'India' })
   @IsOptional()
@@ -130,8 +135,11 @@ export class CreateLeadDto {
 
   // Lead Assignment enhancement: a real FK to User, restricted client-side
   // to Sales Executive / Sales Manager users (see UsersService.findAssignable()).
-  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
-  @IsOptional()
-  @IsUUID(undefined, { message: 'A valid user is required' })
-  assignedToUserId?: string;
+  // Required — every lead must be owned by someone. The column itself stays
+  // nullable (Lead.assignedToUserId uses onDelete: SetNull, which Prisma
+  // requires to be nullable) so a lead never blocks the delete of the user
+  // it's assigned to; it just falls back to unassigned in that one case.
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @IsUUID(undefined, { message: 'Assigning this lead to a user is required' })
+  assignedToUserId: string;
 }

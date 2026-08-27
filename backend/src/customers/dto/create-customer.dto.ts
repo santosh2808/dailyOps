@@ -28,10 +28,11 @@ export class CreateCustomerDto {
   @IsString()
   gstNumber?: string;
 
-  // Additive: Dashboard Redesign v2 — India Sales Map. Optional so existing
-  // create/update flows that don't send it keep working unchanged.
-  @ApiPropertyOptional({ example: 'Maharashtra', enum: INDIA_STATES })
-  @IsOptional()
-  @IsIn(INDIA_STATES)
-  state?: string;
+  // Required — every customer needs a state so it always contributes to the
+  // Dashboard's India Sales Map (see IndiaSalesMap.tsx / dashboard.service.ts
+  // byState aggregation). The column itself stays nullable so the handful of
+  // customers created before this was enforced don't need a forced backfill.
+  @ApiProperty({ example: 'Maharashtra', enum: INDIA_STATES })
+  @IsIn(INDIA_STATES, { message: 'State is required' })
+  state: string;
 }

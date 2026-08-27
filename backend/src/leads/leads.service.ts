@@ -439,6 +439,14 @@ export class LeadsService {
           contactPerson: lead.contactPerson,
           phone: lead.phone,
           email: lead.email ?? undefined,
+          // BUG FIX: state was never carried over here, so every converted
+          // customer landed with state = null despite the lead itself
+          // requiring one — silently dropping data off the Dashboard's India
+          // Sales Map for the majority of customers (they all originate from
+          // a converted lead). Lead.state is required as of the same change
+          // that added this line, so this is always populated going forward;
+          // `?? undefined` only matters for leads created before that.
+          state: lead.state ?? undefined,
         },
       });
 
