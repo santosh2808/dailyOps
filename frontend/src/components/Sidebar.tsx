@@ -96,6 +96,12 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Receipt,
         permission: { module: "ProformaInvoice", action: "View" },
       },
+      {
+        label: "Tax Invoices",
+        to: "/tax-invoices",
+        icon: FileText,
+        permission: { module: "TaxInvoice", action: "View" },
+      },
     ],
   },
   {

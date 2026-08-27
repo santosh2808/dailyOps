@@ -21,6 +21,8 @@ import SalesOrderForm from "@/pages/SalesOrderForm";
 import SalesOrderDetails from "@/pages/SalesOrderDetails";
 import ProformaInvoiceList from "@/pages/ProformaInvoiceList";
 import ProformaInvoiceDetails from "@/pages/ProformaInvoiceDetails";
+import TaxInvoiceList from "@/pages/TaxInvoiceList";
+import TaxInvoiceDetails from "@/pages/TaxInvoiceDetails";
 import JobExecutionOrderList from "@/pages/JobExecutionOrderList";
 import JobExecutionOrderDetails from "@/pages/JobExecutionOrderDetails";
 import ProductionDashboard from "@/pages/ProductionDashboard";
@@ -216,6 +218,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ProformaInvoiceDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tax-invoices"
+            element={
+              <ProtectedRoute>
+                <TaxInvoiceList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tax-invoices/:id"
+            element={
+              <ProtectedRoute>
+                <TaxInvoiceDetails />
               </ProtectedRoute>
             }
           />

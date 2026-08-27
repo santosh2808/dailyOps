@@ -7,6 +7,7 @@ import { RequirePermission } from '../permissions/require-permission.decorator';
 import { ProformaInvoicesService } from './proforma-invoices.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
+import { UpdateProformaInvoiceAdvanceDto } from './dto/update-proforma-invoice-advance.dto';
 import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
 
 @ApiTags('proforma-invoices')
@@ -44,6 +45,12 @@ export class ProformaInvoicesController {
   @RequirePermission('ProformaInvoice', 'Edit')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceStatusDto, @Req() req: any) {
     return this.proformaInvoicesService.updateStatus(id, dto, req.user?.name);
+  }
+
+  @Patch(':id/advance')
+  @RequirePermission('ProformaInvoice', 'Edit')
+  updateAdvance(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceAdvanceDto, @Req() req: any) {
+    return this.proformaInvoicesService.updateAdvance(id, dto, req.user?.name);
   }
 
   @Get(':id/pdf')

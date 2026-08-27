@@ -674,6 +674,12 @@ export interface SalesOrder {
   deletedAt?: string | null;
   items?: SalesOrderItem[];
   _count?: { items: number };
+  // Dispatch gate (advance-payment check) — populated only when a user
+  // overrode the "advance not received" block on a READY_FOR_DISPATCH /
+  // DISPATCHED status change. Null on every normal transition.
+  dispatchOverrideNote?: string | null;
+  dispatchOverrideBy?: string | null;
+  dispatchOverrideAt?: string | null;
 }
 
 export const PROFORMA_INVOICE_STATUSES = ["DRAFT", "SENT", "EXPIRED", "CANCELLED"] as const;
@@ -706,6 +712,39 @@ export interface ProformaInvoice {
   branch?: string | null;
   notes?: string | null;
   status: ProformaInvoiceStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const TAX_INVOICE_STATUSES = ["DRAFT", "SENT", "CANCELLED"] as const;
+export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
+
+// Automated GST "Tax Invoice" — the final, legal invoice generated once a
+// Sales Order's advance payment is received and it's ready to dispatch
+// (replaces the previously-manual "generate in Tally, email by hand"
+// process). Distinct from ProformaInvoice — see backend schema.prisma
+// comment on the TaxInvoice model. No separate TaxInvoiceItem table either
+// — line items are read through the linked Sales Order, same convention.
+export interface TaxInvoice {
+  id: string;
+  invoiceNumber: string;
+  fiscalYear: string;
+  sequenceNumber: number;
+  salesOrderId: string;
+  salesOrder?: SalesOrder;
+  customerId: string;
+  customer?: Customer;
+  invoiceDate: string;
+  dispatchedThrough?: string | null;
+  destination?: string | null;
+  termsOfDelivery?: string | null;
+  buyersOrderNo?: string | null;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  grandTotal: number;
+  status: TaxInvoiceStatus;
+  createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -9,6 +9,7 @@ export interface MailerLink {
   salesOrderId?: string;
   proformaInvoiceId?: string;
   jobExecutionOrderId?: string;
+  taxInvoiceId?: string;
 }
 
 export interface MailerSendOptions {
@@ -135,6 +136,7 @@ export class MailerService {
         salesOrderId: options.link.salesOrderId,
         proformaInvoiceId: options.link.proformaInvoiceId,
         jobExecutionOrderId: options.link.jobExecutionOrderId,
+        taxInvoiceId: options.link.taxInvoiceId,
         templateKey: options.templateKey,
         subject,
         recipientEmail: to || '(none)',

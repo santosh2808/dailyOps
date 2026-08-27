@@ -6,6 +6,7 @@ import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
+import { UpdateProformaInvoiceAdvanceDto } from './dto/update-proforma-invoice-advance.dto';
 import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
 
 const INVOICE_NUMBER_PREFIX = 'PI-';
@@ -231,6 +232,30 @@ export class ProformaInvoicesService {
       where: { proformaInvoiceId: id },
       orderBy: { sentAt: 'desc' },
     });
+  }
+
+  // Record/update the actual advance amount received against this invoice —
+  // the one thing this schema had no way to update after creation (see
+  // schema.prisma comment on advanceReceived). This is what the Sales Order
+  // dispatch gate and Tax Invoice generation both check against.
+  async updateAdvance(id: string, dto: UpdateProformaInvoiceAdvanceDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.proformaInvoice.update({
+      where: { id },
+      data: { advanceReceived: dto.advanceReceived },
+      include: PROFORMA_INVOICE_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'ProformaInvoice',
+        recordId: id,
+        action: 'Advance Received Updated',
+        actorName,
+        oldValue: { advanceReceived: existing.advanceReceived },
+        newValue: { advanceReceived: updated.advanceReceived },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
   }
 
   // Branded PDF (replicates "Proforma Invoice 001.doc") — used both for the

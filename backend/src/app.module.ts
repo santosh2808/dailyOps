@@ -11,6 +11,7 @@ import { LeadsModule } from './leads/leads.module';
 import { QuotationsModule } from './quotations/quotations.module';
 import { SalesOrdersModule } from './sales-orders/sales-orders.module';
 import { ProformaInvoicesModule } from './proforma-invoices/proforma-invoices.module';
+import { TaxInvoicesModule } from './tax-invoices/tax-invoices.module';
 import { JobExecutionOrdersModule } from './job-execution-orders/job-execution-orders.module';
 import { MaterialCategoriesModule } from './material-categories/material-categories.module';
 import { MaterialUnitsModule } from './material-units/material-units.module';
@@ -44,6 +45,7 @@ import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.
     QuotationsModule,
     SalesOrdersModule,
     ProformaInvoicesModule,
+    TaxInvoicesModule,
     JobExecutionOrdersModule,
     StateSeriesCodesModule,
     MaterialCategoriesModule,

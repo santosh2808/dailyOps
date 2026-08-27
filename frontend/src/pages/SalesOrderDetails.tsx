@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList, ExternalLink, FileSpreadsheet, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -9,7 +19,9 @@ import SalesOrderStatusBadge from "@/components/sales-orders/SalesOrderStatusBad
 import ChangeSalesOrderStatusDialog from "@/components/sales-orders/ChangeSalesOrderStatusDialog";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
 import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/GenerateProformaInvoiceDialog";
+import RecordAdvancePaymentDialog from "@/components/proforma-invoices/RecordAdvancePaymentDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
+import GenerateTaxInvoiceDialog from "@/components/tax-invoices/GenerateTaxInvoiceDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -23,6 +35,7 @@ import {
 import {
   createProformaInvoice,
   listProformaInvoices,
+  updateProformaInvoiceAdvance,
   type ProformaInvoicePayload,
 } from "@/api/proforma-invoices";
 import {
@@ -30,7 +43,8 @@ import {
   listJobExecutionOrders,
   type JeoPayload,
 } from "@/api/job-execution-orders";
-import type { EmailHistoryEntry, SalesOrder, SalesOrderStatus } from "@/types";
+import { createTaxInvoice, listTaxInvoices, type TaxInvoicePayload } from "@/api/tax-invoices";
+import type { EmailHistoryEntry, ProformaInvoice, SalesOrder, SalesOrderStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -65,9 +79,14 @@ export default function SalesOrderDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
-  const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
+  // Full active Proforma Invoice (not just its id) — the dispatch gate and
+  // "Generate Tax Invoice" button both need its advanceReceived value.
+  const [activeInvoice, setActiveInvoice] = useState<ProformaInvoice | null>(null);
+  const [recordAdvanceOpen, setRecordAdvanceOpen] = useState(false);
   const [generateJeoOpen, setGenerateJeoOpen] = useState(false);
   const [activeJeoId, setActiveJeoId] = useState<string | null>(null);
+  const [activeTaxInvoiceId, setActiveTaxInvoiceId] = useState<string | null>(null);
+  const [generateTaxInvoiceOpen, setGenerateTaxInvoiceOpen] = useState(false);
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
@@ -99,15 +118,32 @@ export default function SalesOrderDetails() {
     try {
       const res = await listProformaInvoices({ salesOrderId: id, limit: 20 });
       const active = res.data.find((inv) => inv.status !== "CANCELLED");
-      setActiveInvoiceId(active?.id ?? null);
+      setActiveInvoice(active ?? null);
     } catch {
-      setActiveInvoiceId(null);
+      setActiveInvoice(null);
     }
   }, [id]);
 
   useEffect(() => {
     checkActiveInvoice();
   }, [checkActiveInvoice]);
+
+  // Same "View instead of Generate" pattern for the Tax Invoice — only one
+  // active (not CANCELLED) Tax Invoice may exist per sales order at a time.
+  const checkActiveTaxInvoice = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await listTaxInvoices({ salesOrderId: id, limit: 20 });
+      const active = res.data.find((inv) => inv.status !== "CANCELLED");
+      setActiveTaxInvoiceId(active?.id ?? null);
+    } catch {
+      setActiveTaxInvoiceId(null);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    checkActiveTaxInvoice();
+  }, [checkActiveTaxInvoice]);
 
   // Only one active (not yet COMPLETED) JEO may exist per sales order at a
   // time (enforced server-side) — same "View instead of Generate" pattern
@@ -144,6 +180,13 @@ export default function SalesOrderDetails() {
     navigate(`/proforma-invoices/${created.id}`);
   }
 
+  async function handleRecordAdvanceConfirm(advanceReceived: number) {
+    if (!activeInvoice) return;
+    await updateProformaInvoiceAdvance(activeInvoice.id, advanceReceived);
+    toast.success("Advance payment recorded.");
+    await checkActiveInvoice();
+  }
+
   async function handleGenerateJeoConfirm(payload: Omit<JeoPayload, "salesOrderId">) {
     if (!id) return;
     const created = await createJobExecutionOrder({ ...payload, salesOrderId: id });
@@ -152,9 +195,17 @@ export default function SalesOrderDetails() {
     navigate(`/job-execution-orders/${created.id}`);
   }
 
-  async function handleStatusConfirm(status: SalesOrderStatus) {
+  async function handleGenerateTaxInvoiceConfirm(payload: Omit<TaxInvoicePayload, "salesOrderId">) {
     if (!id) return;
-    await updateSalesOrderStatus(id, status);
+    const created = await createTaxInvoice({ ...payload, salesOrderId: id });
+    toast.success("Tax Invoice generated and emailed to the customer.");
+    await checkActiveTaxInvoice();
+    navigate(`/tax-invoices/${created.id}`);
+  }
+
+  async function handleStatusConfirm(status: SalesOrderStatus, dispatchOverrideNote?: string) {
+    if (!id) return;
+    await updateSalesOrderStatus(id, status, dispatchOverrideNote);
     toast.success(`Sales Order status updated to ${statusLabel(status)}.`);
     await fetchSalesOrder();
   }
@@ -206,15 +257,40 @@ export default function SalesOrderDetails() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {activeInvoiceId ? (
-                    <Button variant="outline" onClick={() => navigate(`/proforma-invoices/${activeInvoiceId}`)}>
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      View Proforma Invoice
-                    </Button>
+                  {activeInvoice ? (
+                    <>
+                      <Button variant="outline" onClick={() => navigate(`/proforma-invoices/${activeInvoice.id}`)}>
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        View Proforma Invoice
+                      </Button>
+                      <Button variant="outline" onClick={() => setRecordAdvanceOpen(true)}>
+                        <Wallet className="mr-2 h-4 w-4" />
+                        Record Advance Payment
+                      </Button>
+                    </>
                   ) : (
                     <Button onClick={() => setGenerateInvoiceOpen(true)}>
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
                       Generate Proforma Invoice
+                    </Button>
+                  )}
+                  {activeTaxInvoiceId ? (
+                    <Button variant="outline" onClick={() => navigate(`/tax-invoices/${activeTaxInvoiceId}`)}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View Tax Invoice
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => setGenerateTaxInvoiceOpen(true)}
+                      disabled={!activeInvoice || activeInvoice.advanceReceived <= 0}
+                      title={
+                        !activeInvoice || activeInvoice.advanceReceived <= 0
+                          ? "Record an advance payment on the Proforma Invoice first"
+                          : undefined
+                      }
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Generate Tax Invoice
                     </Button>
                   )}
                   {activeJeoId ? (
@@ -257,7 +333,16 @@ export default function SalesOrderDetails() {
                     label="Advance %"
                     value={salesOrder.advancePercentage != null ? `${salesOrder.advancePercentage}%` : null}
                   />
+                  <Field
+                    label="Advance Received"
+                    value={activeInvoice ? formatCurrency(activeInvoice.advanceReceived) : null}
+                  />
                   <Field label="Created By" value={salesOrder.createdBy} />
+                  {salesOrder.dispatchOverrideNote && (
+                    <div className="col-span-2 sm:col-span-4">
+                      <Field label="Dispatch Override Note" value={salesOrder.dispatchOverrideNote} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -369,11 +454,23 @@ export default function SalesOrderDetails() {
         salesOrder={salesOrder}
         onConfirm={handleGenerateInvoiceConfirm}
       />
+      <RecordAdvancePaymentDialog
+        open={recordAdvanceOpen}
+        onOpenChange={setRecordAdvanceOpen}
+        invoice={activeInvoice}
+        onConfirm={handleRecordAdvanceConfirm}
+      />
       <GenerateJeoDialog
         open={generateJeoOpen}
         onOpenChange={setGenerateJeoOpen}
         salesOrder={salesOrder}
         onConfirm={handleGenerateJeoConfirm}
+      />
+      <GenerateTaxInvoiceDialog
+        open={generateTaxInvoiceOpen}
+        onOpenChange={setGenerateTaxInvoiceOpen}
+        salesOrder={salesOrder}
+        onConfirm={handleGenerateTaxInvoiceConfirm}
       />
     </div>
   );

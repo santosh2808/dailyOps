@@ -54,6 +54,13 @@ export async function updateProformaInvoiceStatus(id: string, status: ProformaIn
   return res.data;
 }
 
+// Record/update the actual advance amount received — the dispatch gate on
+// the Sales Order and Tax Invoice generation both read this value.
+export async function updateProformaInvoiceAdvance(id: string, advanceReceived: number) {
+  const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/advance`, { advanceReceived });
+  return res.data;
+}
+
 export async function getProformaInvoiceEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/proforma-invoices/${id}/email-history`);
   return res.data;

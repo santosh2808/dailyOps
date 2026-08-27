@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -395,11 +395,53 @@ export class SalesOrdersService {
     });
   }
 
+  // Dispatch gate (advance-payment check): a Sales Order cannot move to
+  // READY_FOR_DISPATCH or DISPATCHED unless some advance amount has been
+  // recorded against it (via its Proforma Invoice's advanceReceived — see
+  // ProformaInvoicesService.updateAdvance()), unless the caller supplies a
+  // mandatory dispatchOverrideNote. Any amount greater than zero counts —
+  // this deliberately does not enforce the full advancePercentage%, per
+  // the simpler "any advance received" rule chosen for this feature.
+  private readonly DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ['READY_FOR_DISPATCH', 'DISPATCHED'];
+
   async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+
+    let dispatchOverrideNote: string | null = null;
+    let dispatchOverrideBy: string | null = null;
+    let dispatchOverrideAt: Date | null = null;
+
+    if (this.DISPATCH_GATE_STATUSES.includes(dto.status)) {
+      const activeInvoice = await this.prisma.proformaInvoice.findFirst({
+        where: { salesOrderId: id, status: { not: 'CANCELLED' } },
+        orderBy: { createdAt: 'desc' },
+        select: { advanceReceived: true },
+      });
+      const advanceReceived = activeInvoice?.advanceReceived ?? 0;
+
+      if (advanceReceived <= 0) {
+        const note = dto.dispatchOverrideNote?.trim();
+        if (!note) {
+          throw new BadRequestException(
+            'Advance payment has not been received for this order — it cannot be marked Ready for Dispatch / Dispatched. Record the advance payment on the Proforma Invoice first, or provide an override note to proceed anyway.',
+          );
+        }
+        dispatchOverrideNote = note;
+        dispatchOverrideBy = actorName ?? null;
+        dispatchOverrideAt = new Date();
+      }
+      // advanceReceived > 0: proceed normally, and clear out any earlier
+      // override note — it no longer reflects the current situation.
+    }
+
     const updated = await this.prisma.salesOrder.update({
       where: { id },
-      data: { status: dto.status },
+      data: {
+        status: dto.status,
+        ...(this.DISPATCH_GATE_STATUSES.includes(dto.status)
+          ? { dispatchOverrideNote, dispatchOverrideBy, dispatchOverrideAt }
+          : {}),
+      },
       include: SALES_ORDER_DETAIL_INCLUDE,
     });
 

@@ -40,7 +40,11 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
 
   { module: 'ProformaInvoice', action: 'View', description: 'View proforma invoices' },
   { module: 'ProformaInvoice', action: 'Create', description: 'Generate a proforma invoice from a sales order' },
-  { module: 'ProformaInvoice', action: 'Edit', description: 'Change proforma invoice status' },
+  { module: 'ProformaInvoice', action: 'Edit', description: 'Change proforma invoice status, record advance payments' },
+
+  { module: 'TaxInvoice', action: 'View', description: 'View tax invoices' },
+  { module: 'TaxInvoice', action: 'Create', description: 'Generate the final GST tax invoice for a dispatch-ready sales order' },
+  { module: 'TaxInvoice', action: 'Edit', description: 'Change tax invoice status' },
 
   { module: 'JEO', action: 'View', description: 'View job execution orders and the Production Dashboard' },
   { module: 'JEO', action: 'Create', description: 'Generate a job execution order from a sales order' },
@@ -119,6 +123,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     ...permissionsForModule('Quotation'),
     ...permissionsForModule('SalesOrder'),
     ...permissionsForModule('Complaint'),
+    'proformainvoice.view',
+    'proformainvoice.edit',
+    'taxinvoice.view',
+    'taxinvoice.create',
     'product.view',
   ],
   'Sales Executive': [
@@ -145,6 +153,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'salesorder.view',
     'material.view',
     'proformainvoice.view',
+    'taxinvoice.view',
     'stateseriescode.view',
   ],
   Finance: [
@@ -153,6 +162,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'proformainvoice.view',
     'proformainvoice.create',
     'proformainvoice.edit',
+    ...permissionsForModule('TaxInvoice'),
     'customer.view',
   ],
   Stores: [
@@ -377,6 +387,13 @@ async function main() {
       name: 'Dispatch Notification Email',
       subject: 'Your order {{salesOrderNumber}} has been dispatched',
       bodyHtml: '<p>Dear {{customerName}},</p><p>Sales Order {{salesOrderNumber}} has been dispatched.</p>',
+    },
+    {
+      key: 'TAX_INVOICE',
+      name: 'Tax Invoice Email',
+      subject: 'Tax Invoice {{invoiceNumber}} - Smart Rotamach',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Please find attached the Tax Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamach Finance Team</p>',
     },
   ];
   for (const template of emailTemplateSeed) {

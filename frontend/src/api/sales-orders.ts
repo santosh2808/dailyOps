@@ -60,8 +60,8 @@ export async function updateSalesOrder(id: string, payload: Partial<Omit<SalesOr
   return res.data;
 }
 
-export async function updateSalesOrderStatus(id: string, status: SalesOrderStatus) {
-  const res = await api.patch<SalesOrder>(`/api/v1/sales-orders/${id}/status`, { status });
+export async function updateSalesOrderStatus(id: string, status: SalesOrderStatus, dispatchOverrideNote?: string) {
+  const res = await api.patch<SalesOrder>(`/api/v1/sales-orders/${id}/status`, { status, dispatchOverrideNote });
   return res.data;
 }
 
