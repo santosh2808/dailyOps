@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, RefreshCw, Send } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
+import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -49,6 +50,7 @@ export default function TaxInvoiceDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
@@ -140,8 +142,22 @@ export default function TaxInvoiceDetails() {
                     <Download className="mr-2 h-4 w-4" />
                     View PDF
                   </Button>
+                  {invoice.status !== "CANCELLED" && (
+                    <Button onClick={() => setSendOpen(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      {invoice.status === "SENT" ? "Resend to Customer" : "Send to Customer"}
+                    </Button>
+                  )}
                 </div>
               </div>
+
+              {invoice.status === "SENT" && invoice.sentToEmail && (
+                <p className="text-xs text-muted-foreground">
+                  Sent to {invoice.sentToEmail}
+                  {invoice.sentAt ? ` on ${formatDate(invoice.sentAt)}` : ""}
+                  {invoice.sentBy ? ` by ${invoice.sentBy}` : ""}.
+                </p>
+              )}
 
               {pdfError && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -247,6 +263,22 @@ export default function TaxInvoiceDetails() {
         onOpenChange={setStatusOpen}
         invoice={invoice}
         onConfirm={handleStatusConfirm}
+      />
+
+      <SendTaxInvoiceDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        invoice={invoice}
+        onSent={() => {
+          fetchInvoice();
+          if (id) {
+            setEmailHistoryLoading(true);
+            getTaxInvoiceEmailHistory(id)
+              .then(setEmailHistory)
+              .catch(() => {})
+              .finally(() => setEmailHistoryLoading(false));
+          }
+        }}
       />
     </div>
   );

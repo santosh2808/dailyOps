@@ -747,6 +747,9 @@ export interface TaxInvoice {
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+  sentAt?: string | null;
+  sentBy?: string | null;
+  sentToEmail?: string | null;
 }
 
 export const JEO_STATUSES = [

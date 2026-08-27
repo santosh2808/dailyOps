@@ -198,7 +198,7 @@ export default function SalesOrderDetails() {
   async function handleGenerateTaxInvoiceConfirm(payload: Omit<TaxInvoicePayload, "salesOrderId">) {
     if (!id) return;
     const created = await createTaxInvoice({ ...payload, salesOrderId: id });
-    toast.success("Tax Invoice generated and emailed to the customer.");
+    toast.success("Tax Invoice generated. Review it and send it to the customer when ready.");
     await checkActiveTaxInvoice();
     navigate(`/tax-invoices/${created.id}`);
   }

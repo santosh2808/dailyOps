@@ -48,6 +48,23 @@ export async function updateTaxInvoiceStatus(id: string, status: TaxInvoiceStatu
   return res.data;
 }
 
+export interface SendTaxInvoicePayload {
+  recipientEmail?: string;
+  ccEmails?: string;
+}
+
+export interface SendTaxInvoiceResult extends TaxInvoice {
+  emailStatus: "SENT" | "SIMULATED" | "FAILED";
+}
+
+// Review-then-send: create() only generates a DRAFT invoice (no auto-email).
+// This is the explicit step — mirrors sendQuotation() — that actually emails
+// the customer, letting the recipient/CC be reviewed or overridden first.
+export async function sendTaxInvoice(id: string, payload: SendTaxInvoicePayload) {
+  const res = await api.post<SendTaxInvoiceResult>(`/api/v1/tax-invoices/${id}/send`, payload);
+  return res.data;
+}
+
 export async function getTaxInvoiceEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/tax-invoices/${id}/email-history`);
   return res.data;

@@ -313,12 +313,17 @@ export class TaxInvoicePdfService {
     {
       const amountWords = `INR ${this.numberToIndianWords(Math.round(invoice.grandTotal))} Only`;
       const y = doc.y;
-      const height = Math.max(doc.heightOfString(amountWords, { width: contentWidth - 12 }), 12) + 10;
+      doc.font('Helvetica-Bold').fontSize(9.5);
+      const wordsHeight = doc.heightOfString(amountWords, { width: contentWidth - 12 });
+      const labelRowHeight = 16;
+      const height = labelRowHeight + wordsHeight + 8;
       doc.lineWidth(0.75).strokeColor(BORDER).rect(contentLeft, y, contentWidth, height).stroke();
-      doc.font('Helvetica-Bold').fontSize(9.5).fillColor('black');
+      doc.fillColor('black');
       doc.text('Amount Chargeable (in words)', contentLeft + 6, y + 5, { width: contentWidth - 100 });
       doc.font('Helvetica-Oblique').fontSize(8).text('E. & O.E', contentLeft, y + 5, { width: contentWidth - 6, align: 'right' });
-      doc.font('Helvetica-Bold').fontSize(9.5).text(amountWords, contentLeft + 6, y + 18, { width: contentWidth - 12 });
+      doc.font('Helvetica-Bold').fontSize(9.5).text(amountWords, contentLeft + 6, y + labelRowHeight, {
+        width: contentWidth - 12,
+      });
       doc.y = y + height;
     }
 
@@ -415,6 +420,14 @@ export class TaxInvoicePdfService {
 
   // ---- Row helpers (all take/return explicit y coordinates) -------------
 
+  // BUG FIX: this used to allocate a fixed 12px slot per line regardless of
+  // whether the text actually fit on one line at that column width (e.g. a
+  // long single-string customer address with no newlines). A wrapped line
+  // would silently overflow into the next line's fixed y position, printing
+  // garbled overlapping text (see the Consignee/Buyer blocks). Every line's
+  // real rendered height — including wrapping — is now measured up front via
+  // heightOfString(), and each column is stacked using its own cumulative
+  // offset, so the two columns can wrap independently without colliding.
   private drawTwoColLines(
     doc: PDFKit.PDFDocument,
     contentLeft: number,
@@ -424,37 +437,56 @@ export class TaxInvoicePdfService {
     rightLines: { text: string; bold: boolean }[],
   ): number {
     const y = doc.y;
-    const lineHeight = 12;
-    const leftHeight = Math.max(leftLines.length, 1) * lineHeight;
-    const rightHeight = Math.max(rightLines.length, 1) * lineHeight;
-    const height = Math.max(leftHeight, rightHeight) + 10;
+    const linePad = 3;
+    const fontSize = 9;
+
+    const measure = (lines: { text: string; bold: boolean }[], width: number) => {
+      const heights = lines.map((line) => {
+        doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+        return Math.max(doc.heightOfString(line.text || ' ', { width: width - 12 }), fontSize + 2);
+      });
+      const total = heights.reduce((sum, h) => sum + h + linePad, 0);
+      return { heights, total };
+    };
+
+    const left = measure(leftLines, col1);
+    const right = measure(rightLines, col2);
+    const height = Math.max(left.total, right.total, 1) + 7;
 
     doc.lineWidth(0.75).strokeColor(BORDER);
     doc.rect(contentLeft, y, col1, height).stroke();
     doc.rect(contentLeft + col1, y, col2, height).stroke();
 
-    doc.fontSize(9).fillColor('black');
+    doc.fillColor('black');
+    let cursorY = y + 5;
     leftLines.forEach((line, i) => {
-      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica');
-      doc.text(line.text, contentLeft + 6, y + 5 + i * lineHeight, { width: col1 - 12 });
+      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+      doc.text(line.text, contentLeft + 6, cursorY, { width: col1 - 12 });
+      cursorY += left.heights[i] + linePad;
     });
+    cursorY = y + 5;
     rightLines.forEach((line, i) => {
-      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica');
-      doc.text(line.text, contentLeft + col1 + 6, y + 5 + i * lineHeight, { width: col2 - 12 });
+      doc.font(line.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+      doc.text(line.text, contentLeft + col1 + 6, cursorY, { width: col2 - 12 });
+      cursorY += right.heights[i] + linePad;
     });
 
     return y + height;
   }
 
+  // BUG FIX: same fixed-height overflow bug as drawTwoColLines above — a
+  // header label too wide for its column (e.g. "Total Tax Amount" in the
+  // HSN-wise tax table) would wrap and bleed into the row below. Height is
+  // now measured the same way drawItemsDataRow already does.
   private drawItemsHeaderRow(doc: PDFKit.PDFDocument, contentLeft: number, widths: number[], labels: string[]): number {
     const y = doc.y;
-    const height = 20;
+    doc.font('Helvetica-Bold').fontSize(8);
+    const height = Math.max(...labels.map((label, i) => doc.heightOfString(label, { width: widths[i] - 6 }))) + 10;
     let x = contentLeft;
     doc.lineWidth(0.75).strokeColor(BORDER);
-    doc.font('Helvetica-Bold').fontSize(8);
     labels.forEach((label, i) => {
       doc.rect(x, y, widths[i], height).fillAndStroke('#eef2f7', BORDER);
-      doc.fillColor('black').text(label, x + 3, y + 6, { width: widths[i] - 6, align: i >= 2 ? 'center' : 'left' });
+      doc.fillColor('black').text(label, x + 3, y + 5, { width: widths[i] - 6, align: i >= 2 ? 'center' : 'left' });
       x += widths[i];
     });
     return y + height;

@@ -75,9 +75,11 @@ export default function GenerateTaxInvoiceDialog({
         termsOfDelivery: form.termsOfDelivery.trim() || undefined,
       });
       onOpenChange(false);
-    } catch {
-      setError("Could not generate the Tax Invoice. Please try again.");
-      toast.error("Could not generate the Tax Invoice.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message || "Could not generate the Tax Invoice. Please try again.";
+      setError(Array.isArray(message) ? message.join(" ") : message);
+      toast.error(Array.isArray(message) ? message.join(" ") : message);
     } finally {
       setSubmitting(false);
     }
@@ -92,8 +94,9 @@ export default function GenerateTaxInvoiceDialog({
           <DialogTitle>Generate Tax Invoice</DialogTitle>
           <DialogDescription>
             Customer and amounts will be copied automatically from{" "}
-            <span className="font-medium text-slate-900">{salesOrder.salesOrderNumber}</span>. It
-            will also be emailed to the customer automatically once generated.
+            <span className="font-medium text-slate-900">{salesOrder.salesOrderNumber}</span>.
+            You'll be able to review the PDF and choose who to send it to on the next screen —
+            it won't be emailed automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -148,7 +151,7 @@ export default function GenerateTaxInvoiceDialog({
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
-            {submitting ? "Generating..." : "Generate & Email Invoice"}
+            {submitting ? "Generating..." : "Generate Invoice"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -773,7 +773,15 @@ model TaxInvoice {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  // Additive: emailed to the customer on generation, same as ProformaInvoice.
+  // Review-then-send flow (mirrors Quotation's sendQuotation()): generating
+  // a Tax Invoice no longer emails it automatically — status starts DRAFT
+  // and stays there until an explicit Send action moves it to SENT and
+  // stamps who/when/which address it went to.
+  sentAt         DateTime?
+  sentBy         String?
+  sentToEmail    String?
+
+  // Additive: emailed to the customer once explicitly sent (see sentAt above).
   emailHistory   EmailHistory[]
 
   @@index([status])

@@ -7,6 +7,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
 import { UpdateTaxInvoiceStatusDto } from './dto/update-tax-invoice-status.dto';
 import { QueryTaxInvoiceDto } from './dto/query-tax-invoice.dto';
+import { SendTaxInvoiceDto } from './dto/send-tax-invoice.dto';
 
 // First fiscal-year sequence floor: FY2026-27 already had Tax Invoice
 // SRM/2026-27/134 issued by hand in Tally before this automated numbering
@@ -180,11 +181,10 @@ export class TaxInvoicesService {
           })
           .catch((error) => this.logger.error('AuditLog record failed', error));
 
-        // Automates the previously-manual "generate in Tally, email
-        // manually" step end to end — PDF + email always happen together,
-        // on every Tax Invoice generation.
-        await this.sendInvoiceEmail(created, actorName);
-
+        // Generation only creates the DRAFT record — it no longer emails
+        // automatically. The user reviews it (View PDF) and explicitly
+        // triggers Send Tax Invoice when ready, same review-then-send
+        // pattern as Quotation's sendQuotation().
         return created;
       } catch (error) {
         if (this.isInvoiceNumberConflict(error) && attempt < MAX_INVOICE_NUMBER_ATTEMPTS) {
@@ -266,33 +266,60 @@ export class TaxInvoicesService {
     };
   }
 
-  private async sendInvoiceEmail(
-    invoice: Prisma.TaxInvoiceGetPayload<{ include: typeof TAX_INVOICE_DETAIL_INCLUDE }>,
-    actorName?: string,
-  ) {
-    try {
-      const pdf = await this.taxInvoicePdfService.render(this.toPdfInput(invoice));
-
-      await this.mailerService.send({
-        templateKey: 'TAX_INVOICE',
-        fallbackSubject: `Tax Invoice ${invoice.invoiceNumber}`,
-        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached the Tax Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p>`,
-        vars: {
-          customerName: invoice.customer.contactPerson,
-          invoiceNumber: invoice.invoiceNumber,
-          salesOrderNumber: invoice.salesOrder.salesOrderNumber,
-          grandTotal: invoice.grandTotal.toFixed(2),
-        },
-        to: invoice.customer.email,
-        // "CC Finance" — same convention as Proforma Invoice emails.
-        cc: process.env.FINANCE_TEAM_EMAIL || undefined,
-        attachments: [{ filename: `${invoice.invoiceNumber.replace(/\//g, '-')}.pdf`, content: pdf }],
-        actorName,
-        link: { module: 'TaxInvoice', taxInvoiceId: invoice.id },
-      });
-    } catch (error) {
-      this.logger.error(`Tax Invoice email failed for ${invoice.id}`, error);
+  // Send Tax Invoice: the explicit step that actually emails the customer,
+  // separated from create() so the generated invoice can be reviewed (View
+  // PDF) first — same review-then-send pattern as
+  // QuotationsService.sendQuotation(). Lets the sender override the
+  // recipient/CC for this send only; defaults to the customer's email on
+  // file. Blocked once cancelled — there's nothing left to send.
+  async sendInvoice(id: string, dto: SendTaxInvoiceDto, actorName?: string) {
+    const invoice = await this.findOne(id);
+    if (invoice.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Tax Invoice cannot be sent');
     }
+
+    const to = dto.recipientEmail?.trim() || invoice.customer.email || undefined;
+    const pdf = await this.taxInvoicePdfService.render(this.toPdfInput(invoice));
+
+    const result = await this.mailerService.send({
+      templateKey: 'TAX_INVOICE',
+      fallbackSubject: `Tax Invoice ${invoice.invoiceNumber}`,
+      fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached the Tax Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p>`,
+      vars: {
+        customerName: invoice.customer.contactPerson,
+        invoiceNumber: invoice.invoiceNumber,
+        salesOrderNumber: invoice.salesOrder.salesOrderNumber,
+        grandTotal: invoice.grandTotal.toFixed(2),
+      },
+      to,
+      cc: dto.ccEmails || process.env.FINANCE_TEAM_EMAIL || undefined,
+      attachments: [{ filename: `${invoice.invoiceNumber.replace(/\//g, '-')}.pdf`, content: pdf }],
+      actorName,
+      link: { module: 'TaxInvoice', taxInvoiceId: invoice.id },
+    });
+
+    const updated = await this.prisma.taxInvoice.update({
+      where: { id },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        sentBy: actorName,
+        sentToEmail: to,
+      },
+      include: TAX_INVOICE_DETAIL_INCLUDE,
+    });
+
+    await this.auditLogService
+      .record({
+        module: 'TaxInvoice',
+        recordId: id,
+        action: 'Sent Email',
+        actorName,
+        newValue: { to, emailStatus: result.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    return { ...updated, emailStatus: result.status };
   }
 
   // Fiscal year (April 1 - March 31) + a plain numeric sequence per fiscal
