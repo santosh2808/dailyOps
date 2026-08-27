@@ -215,10 +215,12 @@ export default function Sidebar() {
       {/* Full lockup image (gear/SR icon + "DailyOps" wordmark + "By Smart
           Rotamach" caption all baked in) — replaces the old two-row
           icon+text/caption layout, so no separate caption element is
-          needed here anymore. h-16 matches Topbar's header height so the
-          logo's vertical center lines up with the "Dashboard" title. */}
-      <div className="flex h-16 items-center px-6 pb-6">
-        <img src="/sr-dailyops-logo-full.svg" alt="SR DailyOps — by Smart Rotamach" className="h-16 w-auto" />
+          needed here anymore. h-20 matches the row height so the image
+          (h-14) has room to sit fully inside it without being clipped —
+          the earlier pb-6 shrank the content box below the image's own
+          height and cropped its top edge. */}
+      <div className="flex h-20 items-center px-6">
+        <img src="/sr-dailyops-logo-full.svg" alt="SR DailyOps — by Smart Rotamach" className="h-14 w-auto" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
