@@ -230,8 +230,10 @@ export default function SalesOrderForm() {
         toast.success("Sales Order created successfully.");
         navigate(`/sales-orders/${created.id}`);
       }
-    } catch {
-      const message = "Something went wrong while saving this sales order. Please try again.";
+    } catch (err: any) {
+      const raw =
+        err?.response?.data?.message || "Something went wrong while saving this sales order. Please try again.";
+      const message = Array.isArray(raw) ? raw.join(" ") : raw;
       setSubmitError(message);
       toast.error(message);
       setSubmitting(false);
