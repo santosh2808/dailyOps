@@ -201,6 +201,7 @@ export interface DashboardStats {
   salesByExecutive: SalesByExecutiveEntry[];
   // Additive: Dashboard Redesign.
   dispatchCount: number;
+  readyForDispatchCount: number;
   delayedOrdersCount: number;
   pendingApprovalsCount: number;
   // Additive: Complaints module — replaces the Revenue (This Month) KPI

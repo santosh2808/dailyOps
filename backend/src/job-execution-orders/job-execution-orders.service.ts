@@ -1,10 +1,11 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
 import { StateSeriesCodesService } from '../state-series-codes/state-series-codes.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SalesOrdersService } from '../sales-orders/sales-orders.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
 import { UpdateProductionChecklistDto } from './dto/update-production-checklist.dto';
@@ -108,7 +109,18 @@ export class JobExecutionOrdersService {
     private jeoPdfService: JeoPdfService,
     private stateSeriesCodesService: StateSeriesCodesService,
     private auditLogService: AuditLogService,
+    private salesOrdersService: SalesOrdersService,
   ) {}
+
+  // Sales Orders that haven't reached the dispatch stage yet — the only
+  // statuses an auto-advance-on-production-complete should ever move away
+  // from. Anything already at/past READY_FOR_DISPATCH, or CANCELLED, is
+  // left untouched.
+  private readonly PRE_DISPATCH_SALES_ORDER_STATUSES: SalesOrderStatus[] = [
+    'DRAFT',
+    'CONFIRMED',
+    'PRODUCTION_STARTED',
+  ];
 
   async findAll(query: QueryJeoDto) {
     const page = query.page ?? 1;
@@ -289,6 +301,34 @@ export class JobExecutionOrdersService {
         newValue: { status: dto.status },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    // Production finishing (READY_FOR_DISPATCH or COMPLETED) auto-advances
+    // the linked Sales Order to READY_FOR_DISPATCH too, so the Dashboard's
+    // "Dispatch" KPI (which counts Sales Orders, not JEOs) actually reflects
+    // production progress instead of requiring a separate manual status
+    // change on the Sales Order itself. Only moves orders still short of
+    // the dispatch stage — never touches one already READY_FOR_DISPATCH/
+    // DISPATCHED/COMPLETED/CANCELLED. The advance-payment dispatch gate
+    // (SalesOrdersService.updateStatus()) still applies: if no advance has
+    // been recorded, the gate rejects the change and we simply leave the
+    // Sales Order where it was — this is a best-effort side effect, not
+    // something that should ever fail the JEO status update itself.
+    if (['READY_FOR_DISPATCH', 'COMPLETED'].includes(dto.status)) {
+      if (this.PRE_DISPATCH_SALES_ORDER_STATUSES.includes(updated.salesOrder.status)) {
+        try {
+          await this.salesOrdersService.updateStatus(
+            updated.salesOrderId,
+            { status: 'READY_FOR_DISPATCH' },
+            actorName,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Could not auto-advance Sales Order ${updated.salesOrderId} to READY_FOR_DISPATCH after JEO ${id} reached ${dto.status}: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+    }
+
     return updated;
   }
 

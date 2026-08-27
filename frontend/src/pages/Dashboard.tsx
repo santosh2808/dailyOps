@@ -16,6 +16,7 @@ import {
   Plus,
   FileSpreadsheet,
   PackageSearch,
+  PackageCheck,
   X,
   MessageSquareWarning,
 } from "lucide-react";
@@ -649,6 +650,19 @@ export default function Dashboard() {
               icon={MessageSquareWarning}
               loading={loading}
               onClick={() => navigate("/complaints?status=OPEN")}
+            />
+            {/* Ready for Dispatch: this is what moves when production
+                finishes a Sales Order's JEO(s) on the Production Dashboard
+                (auto-advance — see JobExecutionOrdersService.updateStatus()).
+                "Dispatch" below only moves once someone explicitly marks a
+                Sales Order DISPATCHED — the two are deliberately separate
+                stages, not the same count. */}
+            <KpiCard
+              label="Ready for Dispatch"
+              value={stats?.readyForDispatchCount ?? 0}
+              icon={PackageCheck}
+              loading={loading}
+              onClick={() => navigate("/sales-orders?status=READY_FOR_DISPATCH")}
             />
             <KpiCard
               label="Dispatch"

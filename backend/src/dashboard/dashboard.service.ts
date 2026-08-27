@@ -56,6 +56,13 @@ export interface DashboardStats {
   // records, and DISPATCHED is the one unambiguous single-status filter
   // the Sales Orders list already supports.
   dispatchCount: number;
+  // Ready for Dispatch: Sales Orders staged for shipment but not yet
+  // physically dispatched — status = READY_FOR_DISPATCH exactly, same
+  // single-status-filter convention as dispatchCount above. This is what
+  // actually moves when a JEO finishes production and auto-advances its
+  // Sales Order (see JobExecutionOrdersService.updateStatus()) — dispatchCount
+  // itself only moves once someone explicitly marks a Sales Order DISPATCHED.
+  readyForDispatchCount: number;
   // Delayed Orders: still open (not dispatched/completed/cancelled) with a
   // deliveryDate that has already passed.
   delayedOrdersCount: number;
@@ -281,6 +288,7 @@ export class DashboardService {
       ordersInProductionCount,
       salesOrdersForExecutiveSummary,
       dispatchCount,
+      readyForDispatchCount,
       delayedOrdersCount,
       pendingApprovalsCount,
       openComplaintsCount,
@@ -361,6 +369,11 @@ export class DashboardService {
       this.prisma.salesOrder.count({
         where: { deletedAt: null, status: 'DISPATCHED' as SalesOrderStatus },
       }),
+      // Ready for Dispatch KPI — see the DashboardStats.readyForDispatchCount
+      // field comment.
+      this.prisma.salesOrder.count({
+        where: { deletedAt: null, status: 'READY_FOR_DISPATCH' as SalesOrderStatus },
+      }),
       // Delayed Orders — still open, past their promised deliveryDate.
       this.prisma.salesOrder.count({
         where: {
@@ -424,6 +437,7 @@ export class DashboardService {
       ordersInProductionCount,
       salesByExecutive,
       dispatchCount,
+      readyForDispatchCount,
       delayedOrdersCount,
       pendingApprovalsCount,
       openComplaintsCount,
