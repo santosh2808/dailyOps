@@ -210,8 +210,11 @@ export default function Sidebar() {
           icon+text/caption layout, so no separate caption element is
           needed here anymore. h-16 matches Topbar's header height so the
           logo's vertical center lines up with the "Dashboard" title. */}
-      <div className="flex h-16 items-center px-6 pb-6">
-        <img src="/sr-dailyops-logo-full.png" alt="SR DailyOps — by Smart Rotamach" className="h-12 w-auto" />
+      <div className="flex h-24 items-center px-4 pb-4">
+        {/* Sized as large as the 256px-wide sidebar allows — any smaller
+            and the "By Smart Rotamach" caption baked into the image
+            becomes too small to read. */}
+        <img src="/sr-dailyops-logo-full.png" alt="SR DailyOps — by Smart Rotamach" className="h-24 w-auto" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
