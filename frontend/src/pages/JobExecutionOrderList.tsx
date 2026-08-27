@@ -19,6 +19,7 @@ import JeoFiltersBar, {
   type JeoFilters,
 } from "@/components/job-execution-orders/JeoFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { toast } from "@/lib/toast";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
@@ -188,7 +189,9 @@ export default function JobExecutionOrderList() {
                     onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
                   >
                     <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
-                    <TableCell>{jeo.customer?.companyName ?? "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={jeo.customer?.companyName ?? "—"} />
+                    </TableCell>
                     <TableCell>{jeo.customer?.state ?? "—"}</TableCell>
                     <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                     <TableCell>

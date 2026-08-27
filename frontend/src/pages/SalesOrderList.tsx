@@ -18,6 +18,9 @@ import SalesOrderFiltersBar, {
   type SalesOrderFilters,
 } from "@/components/sales-orders/SalesOrderFiltersBar";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
@@ -80,6 +83,9 @@ export default function SalesOrderList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedSalesOrder, setSelectedSalesOrder] = useState<SalesOrder | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const fetchSalesOrders = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -122,6 +128,10 @@ export default function SalesOrderList() {
     return () => clearTimeout(handle);
   }, [filters]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedFilters, sortBy, sortOrder]);
+
   function toggleSort(column: SortableColumn) {
     if (sortBy === column) {
       setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
@@ -149,6 +159,39 @@ export default function SalesOrderList() {
     if (!selectedSalesOrder) return;
     await deleteSalesOrder(selectedSalesOrder.id);
     toast.success(`Sales Order "${selectedSalesOrder.salesOrderNumber}" deleted.`);
+    await fetchSalesOrders();
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === salesOrders.length ? new Set() : new Set(salesOrders.map((s) => s.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteSalesOrder(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} sales order${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} sales order${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
     await fetchSalesOrders();
   }
 
@@ -213,9 +256,36 @@ export default function SalesOrderList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} sales order{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < salesOrders.length;
+                    }}
+                    checked={salesOrders.length > 0 && selectedIds.size === salesOrders.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all sales orders on this page"
+                  />
+                </TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -256,7 +326,7 @@ export default function SalesOrderList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading sales orders...
                     </span>
@@ -264,7 +334,7 @@ export default function SalesOrderList() {
                 </TableRow>
               ) : salesOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     No sales orders found.
                   </TableCell>
                 </TableRow>
@@ -275,10 +345,19 @@ export default function SalesOrderList() {
                     className="cursor-pointer"
                     onClick={() => navigate(`/sales-orders/${salesOrder.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(salesOrder.id)}
+                        onChange={() => toggleSelected(salesOrder.id)}
+                        aria-label={`Select sales order ${salesOrder.salesOrderNumber}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {salesOrder.salesOrderNumber}
                     </TableCell>
-                    <TableCell>{salesOrder.customer?.companyName ?? "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
+                    </TableCell>
                     <TableCell>{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
                     <TableCell>{salesOrder.createdBy ?? "—"}</TableCell>
                     <TableCell>
@@ -356,6 +435,15 @@ export default function SalesOrderList() {
         onOpenChange={setDeleteOpen}
         salesOrder={selectedSalesOrder}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} sales order${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected sales orders. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );

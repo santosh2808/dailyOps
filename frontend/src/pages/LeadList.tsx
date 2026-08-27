@@ -27,6 +27,9 @@ import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
@@ -79,6 +82,12 @@ export default function LeadList() {
   const [importOpen, setImportOpen] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
+  // Bulk delete — select-multiple checkboxes in the table, scoped to the
+  // rows currently on screen (see the reset effect below for why selection
+  // doesn't persist across a page/filter/sort change).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -110,6 +119,13 @@ export default function LeadList() {
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
+
+  // Selection is scoped to whatever's currently on screen — clear it
+  // whenever the page/filters/sort change so a stale id from a page the
+  // user has left can't get silently deleted.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedFilters, sortBy, sortOrder]);
 
   // Debounce the whole filter object so typing in search / changing a
   // select don't each trigger their own separate request storm.
@@ -148,6 +164,44 @@ export default function LeadList() {
     if (!selectedLead) return;
     await deleteLead(selectedLead.id);
     toast.success(`Lead "${selectedLead.leadNumber}" deleted.`);
+    await fetchLeads();
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === leads.length ? new Set() : new Set(leads.map((l) => l.id))
+    );
+  }
+
+  // Runs the existing single-delete endpoint per selected row rather than a
+  // new bulk API — same result, and this list is a paginated admin table
+  // (tens of rows at a time), not something at a scale where N requests is
+  // a real cost. Uses allSettled so one lead a business rule blocks doesn't
+  // stop the rest from deleting.
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteLead(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} lead${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} lead${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
     await fetchLeads();
   }
 
@@ -193,6 +247,23 @@ export default function LeadList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} lead{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Lead Management Phase 1 (requirement #7) — exactly these
               columns: Lead No, Company, Contact, Phone, Email, Source,
               Assigned To, Status, Next Follow-up, Last Updated, Actions.
@@ -200,6 +271,16 @@ export default function LeadList() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < leads.length;
+                    }}
+                    checked={leads.length > 0 && selectedIds.size === leads.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all leads on this page"
+                  />
+                </TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -235,7 +316,7 @@ export default function LeadList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading leads...
                     </span>
@@ -243,18 +324,31 @@ export default function LeadList() {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
                     No leads found. Click "Create Lead" to add one.
                   </TableCell>
                 </TableRow>
               ) : (
                 leads.map((lead) => (
                   <TableRow key={lead.id} className="cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(lead.id)}
+                        onChange={() => toggleSelected(lead.id)}
+                        aria-label={`Select lead ${lead.leadNumber}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">{lead.leadNumber}</TableCell>
-                    <TableCell>{lead.companyName || "-"}</TableCell>
-                    <TableCell>{lead.contactPerson || "-"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={lead.companyName || "-"} />
+                    </TableCell>
+                    <TableCell>
+                      <TruncatedText text={lead.contactPerson || "-"} className="max-w-[160px]" />
+                    </TableCell>
                     <TableCell>{lead.phone || "-"}</TableCell>
-                    <TableCell>{lead.email || "-"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={lead.email || "-"} />
+                    </TableCell>
                     <TableCell>{sourceLabel(lead.source)}</TableCell>
                     <TableCell>{lead.state || "—"}</TableCell>
                     {/* Full name only — never the role — with an explicit
@@ -336,6 +430,15 @@ export default function LeadList() {
         onOpenChange={setDeleteOpen}
         lead={selectedLead}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} lead${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected leads. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
       <ImportLeadsDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchLeads} />
     </div>

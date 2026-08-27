@@ -16,6 +16,9 @@ import {
 import MaterialStockBadge from "@/components/materials/MaterialStockBadge";
 import DeleteMaterialConfirmDialog from "@/components/materials/DeleteMaterialConfirmDialog";
 import ImportMaterialsDialog from "@/components/materials/ImportMaterialsDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
@@ -68,6 +71,9 @@ export default function MaterialList() {
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const fetchMaterials = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -101,6 +107,10 @@ export default function MaterialList() {
     return () => clearTimeout(handle);
   }, [search]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedSearch, stockStatus]);
+
   function openDeleteDialog(material: Material) {
     setSelectedMaterial(material);
     setDeleteOpen(true);
@@ -110,6 +120,39 @@ export default function MaterialList() {
     if (!selectedMaterial) return;
     await deactivateMaterial(selectedMaterial.id);
     toast.success(`Material "${selectedMaterial.materialCode}" deleted.`);
+    await fetchMaterials();
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === materials.length ? new Set() : new Set(materials.map((m) => m.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deactivateMaterial(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} material${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} material${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
     await fetchMaterials();
   }
 
@@ -177,9 +220,36 @@ export default function MaterialList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} material{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < materials.length;
+                    }}
+                    checked={materials.length > 0 && selectedIds.size === materials.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all materials on this page"
+                  />
+                </TableHead>
                 <TableHead>Material Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
@@ -193,7 +263,7 @@ export default function MaterialList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading materials...
                     </span>
@@ -201,7 +271,7 @@ export default function MaterialList() {
                 </TableRow>
               ) : materials.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     No materials found. Click "Create Material" to add one.
                   </TableCell>
                 </TableRow>
@@ -212,10 +282,19 @@ export default function MaterialList() {
                     className="cursor-pointer"
                     onClick={() => navigate(`/materials/${material.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(material.id)}
+                        onChange={() => toggleSelected(material.id)}
+                        aria-label={`Select material ${material.materialCode}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {material.materialCode}
                     </TableCell>
-                    <TableCell>{material.name}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={material.name} />
+                    </TableCell>
                     <TableCell>{material.category?.name ?? "—"}</TableCell>
                     <TableCell>{material.unit?.symbol || material.unit?.name || "—"}</TableCell>
                     <TableCell>{formatCurrency(material.cost)}</TableCell>
@@ -293,6 +372,15 @@ export default function MaterialList() {
         onOpenChange={setDeleteOpen}
         material={selectedMaterial}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} material${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will remove the selected materials from the catalog. The records themselves are not permanently erased."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
       <ImportMaterialsDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchMaterials} />
     </div>

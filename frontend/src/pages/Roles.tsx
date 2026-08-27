@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import RoleFormDialog from "@/components/roles/RoleFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { createRole, deleteRole, listRoles, updateRole, type RolePayload } from "@/api/roles";
@@ -27,6 +29,9 @@ export default function Roles() {
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<Role | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const fetchRoles = useCallback(async () => {
     setLoading(true);
@@ -76,6 +81,37 @@ export default function Roles() {
     await fetchRoles();
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => (prev.size === roles.length ? new Set() : new Set(roles.map((r) => r.id))));
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteRole(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} role${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} role${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
+    await fetchRoles();
+  }
+
   return (
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
@@ -95,9 +131,36 @@ export default function Roles() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} role{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < roles.length;
+                    }}
+                    checked={roles.length > 0 && selectedIds.size === roles.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all roles"
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Permissions</TableHead>
@@ -108,7 +171,7 @@ export default function Roles() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading roles...
                     </span>
@@ -116,15 +179,24 @@ export default function Roles() {
                 </TableRow>
               ) : roles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No roles found.
                   </TableCell>
                 </TableRow>
               ) : (
                 roles.map((role) => (
                   <TableRow key={role.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(role.id)}
+                        onChange={() => toggleSelected(role.id)}
+                        aria-label={`Select role ${role.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">{role.name}</TableCell>
-                    <TableCell>{role.description || "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={role.description || "—"} />
+                    </TableCell>
                     <TableCell>
                       <Badge variant="orange">{role.permissions?.length ?? 0}</Badge>
                     </TableCell>
@@ -180,6 +252,15 @@ export default function Roles() {
         confirmingLabel="Deleting..."
         errorMessage="Could not delete this role. Please try again."
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} role${selectedIds.size === 1 ? "" : "s"}?`}
+        description="Users assigned to these roles will lose the permissions they granted."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );

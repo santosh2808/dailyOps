@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import DepartmentFormDialog from "@/components/departments/DepartmentFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -33,6 +35,9 @@ export default function Departments() {
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<Department | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const fetchDepartments = useCallback(async () => {
     setLoading(true);
@@ -82,6 +87,39 @@ export default function Departments() {
     await fetchDepartments();
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === departments.length ? new Set() : new Set(departments.map((d) => d.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteDepartment(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} department${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} department${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
+    await fetchDepartments();
+  }
+
   return (
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
@@ -100,9 +138,36 @@ export default function Departments() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} department{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < departments.length;
+                    }}
+                    checked={departments.length > 0 && selectedIds.size === departments.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all departments"
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Users</TableHead>
@@ -112,7 +177,7 @@ export default function Departments() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading departments...
                     </span>
@@ -120,17 +185,26 @@ export default function Departments() {
                 </TableRow>
               ) : departments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     No departments found.
                   </TableCell>
                 </TableRow>
               ) : (
                 departments.map((department) => (
                   <TableRow key={department.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(department.id)}
+                        onChange={() => toggleSelected(department.id)}
+                        aria-label={`Select department ${department.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {department.name}
                     </TableCell>
-                    <TableCell>{department.description || "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={department.description || "—"} />
+                    </TableCell>
                     <TableCell>
                       <Badge variant="muted">{department._count?.users ?? 0}</Badge>
                     </TableCell>
@@ -183,6 +257,15 @@ export default function Departments() {
         confirmingLabel="Deleting..."
         errorMessage="Could not delete this department. Please try again."
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} department${selectedIds.size === 1 ? "" : "s"}?`}
+        description="Users assigned to these departments will simply lose their department assignment."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );

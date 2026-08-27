@@ -18,6 +18,7 @@ import ProformaInvoiceFiltersBar, {
   type ProformaInvoiceFilters,
 } from "@/components/proforma-invoices/ProformaInvoiceFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { toast } from "@/lib/toast";
 import { listProformaInvoices } from "@/api/proforma-invoices";
 import type { ProformaInvoice } from "@/types";
@@ -191,7 +192,9 @@ export default function ProformaInvoiceList() {
                     <TableCell className="font-medium text-slate-900">
                       {invoice.invoiceNumber}
                     </TableCell>
-                    <TableCell>{invoice.customer?.companyName ?? "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={invoice.customer?.companyName ?? "—"} />
+                    </TableCell>
                     <TableCell>{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                     <TableCell>
                       <ProformaInvoiceStatusBadge status={invoice.status} />

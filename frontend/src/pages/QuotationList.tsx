@@ -18,6 +18,9 @@ import QuotationFiltersBar, {
   type QuotationFilters,
 } from "@/components/quotations/QuotationFiltersBar";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
@@ -72,6 +75,9 @@ export default function QuotationList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const fetchQuotations = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -111,6 +117,10 @@ export default function QuotationList() {
     return () => clearTimeout(handle);
   }, [filters]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedFilters, sortBy, sortOrder]);
+
   function toggleSort(column: SortableColumn) {
     if (sortBy === column) {
       setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
@@ -141,6 +151,39 @@ export default function QuotationList() {
     await fetchQuotations();
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === quotations.length ? new Set() : new Set(quotations.map((q) => q.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteQuotation(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} quotation${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} quotation${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
+    await fetchQuotations();
+  }
+
   return (
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
@@ -157,9 +200,36 @@ export default function QuotationList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} quotation{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < quotations.length;
+                    }}
+                    checked={quotations.length > 0 && selectedIds.size === quotations.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all quotations on this page"
+                  />
+                </TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -199,7 +269,7 @@ export default function QuotationList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading quotations...
                     </span>
@@ -207,7 +277,7 @@ export default function QuotationList() {
                 </TableRow>
               ) : quotations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No quotations found. Click "Create Quotation" to add one.
                   </TableCell>
                 </TableRow>
@@ -218,10 +288,19 @@ export default function QuotationList() {
                     className="cursor-pointer"
                     onClick={() => navigate(`/quotations/${quotation.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(quotation.id)}
+                        onChange={() => toggleSelected(quotation.id)}
+                        aria-label={`Select quotation ${quotation.quotationNumber}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {quotation.quotationNumber}
                     </TableCell>
-                    <TableCell>{quotation.customer?.companyName ?? "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={quotation.customer?.companyName ?? "—"} />
+                    </TableCell>
                     <TableCell>
                       <QuotationStatusBadge status={quotation.status} />
                     </TableCell>
@@ -298,6 +377,15 @@ export default function QuotationList() {
         onOpenChange={setDeleteOpen}
         quotation={selectedQuotation}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} quotation${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected quotations. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );

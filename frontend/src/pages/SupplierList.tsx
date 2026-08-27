@@ -19,6 +19,9 @@ import SupplierFiltersBar, {
 } from "@/components/suppliers/SupplierFiltersBar";
 import DeleteSupplierConfirmDialog from "@/components/suppliers/DeleteSupplierConfirmDialog";
 import ImportSupplierDialog from "@/components/suppliers/ImportSupplierDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -48,6 +51,9 @@ export default function SupplierList() {
   const [importOpen, setImportOpen] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
@@ -86,6 +92,10 @@ export default function SupplierList() {
     return () => clearTimeout(handle);
   }, [filters]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedFilters]);
+
   function openDeleteDialog(supplier: Supplier) {
     setSelectedSupplier(supplier);
     setDeleteOpen(true);
@@ -95,6 +105,39 @@ export default function SupplierList() {
     if (!selectedSupplier) return;
     await deleteSupplier(selectedSupplier.id);
     toast.success(`Supplier "${selectedSupplier.supplierName}" deleted.`);
+    await fetchSuppliers();
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === suppliers.length ? new Set() : new Set(suppliers.map((s) => s.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteSupplier(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} supplier${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} supplier${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
     await fetchSuppliers();
   }
 
@@ -155,9 +198,36 @@ export default function SupplierList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} supplier{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < suppliers.length;
+                    }}
+                    checked={suppliers.length > 0 && selectedIds.size === suppliers.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all suppliers on this page"
+                  />
+                </TableHead>
                 <TableHead>Supplier Code</TableHead>
                 <TableHead>Supplier Name</TableHead>
                 <TableHead>Contact Person</TableHead>
@@ -172,7 +242,7 @@ export default function SupplierList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading suppliers...
                     </span>
@@ -180,7 +250,7 @@ export default function SupplierList() {
                 </TableRow>
               ) : suppliers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                     No suppliers found. Click "Add Supplier" to create one.
                   </TableCell>
                 </TableRow>
@@ -191,10 +261,19 @@ export default function SupplierList() {
                     className="cursor-pointer"
                     onClick={() => navigate(`/suppliers/${supplier.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(supplier.id)}
+                        onChange={() => toggleSelected(supplier.id)}
+                        aria-label={`Select supplier ${supplier.supplierName}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {supplier.supplierCode}
                     </TableCell>
-                    <TableCell>{supplier.supplierName}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={supplier.supplierName} />
+                    </TableCell>
                     <TableCell>{supplier.contactPerson || "—"}</TableCell>
                     <TableCell>{supplier.phone || "—"}</TableCell>
                     <TableCell>{supplier.email || "—"}</TableCell>
@@ -273,6 +352,15 @@ export default function SupplierList() {
         onOpenChange={setDeleteOpen}
         supplier={selectedSupplier}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} supplier${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected suppliers. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
       <ImportSupplierDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchSuppliers} />
     </div>

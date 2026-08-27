@@ -18,6 +18,9 @@ import ComplaintFiltersBar, {
   type ComplaintFilters,
 } from "@/components/complaints/ComplaintFiltersBar";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteComplaint, listComplaints } from "@/api/complaints";
@@ -56,6 +59,9 @@ export default function ComplaintList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const fetchComplaints = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -92,6 +98,10 @@ export default function ComplaintList() {
     return () => clearTimeout(handle);
   }, [filters]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedFilters]);
+
   function openDeleteDialog(complaint: Complaint) {
     setSelectedComplaint(complaint);
     setDeleteOpen(true);
@@ -101,6 +111,39 @@ export default function ComplaintList() {
     if (!selectedComplaint) return;
     await deleteComplaint(selectedComplaint.id);
     toast.success(`Complaint ${selectedComplaint.complaintNumber} deleted.`);
+    await fetchComplaints();
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === complaints.length ? new Set() : new Set(complaints.map((c) => c.id))
+    );
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteComplaint(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} complaint${succeeded === 1 ? "" : "s"} deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} complaint${failed === 1 ? "" : "s"} could not be deleted.`);
+    }
+    setSelectedIds(new Set());
     await fetchComplaints();
   }
 
@@ -120,9 +163,36 @@ export default function ComplaintList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} complaint{selectedIds.size === 1 ? "" : "s"} selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < complaints.length;
+                    }}
+                    checked={complaints.length > 0 && selectedIds.size === complaints.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all complaints on this page"
+                  />
+                </TableHead>
                 <TableHead>Complaint No.</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Sales Order</TableHead>
@@ -135,7 +205,7 @@ export default function ComplaintList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading complaints...
                     </span>
@@ -143,7 +213,7 @@ export default function ComplaintList() {
                 </TableRow>
               ) : complaints.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No complaints found. Click "Log Complaint" to create one.
                   </TableCell>
                 </TableRow>
@@ -156,12 +226,23 @@ export default function ComplaintList() {
                       className="cursor-pointer"
                       onClick={() => navigate(`/complaints/${complaint.id}`)}
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(complaint.id)}
+                          onChange={() => toggleSelected(complaint.id)}
+                          aria-label={`Select complaint ${complaint.complaintNumber}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium text-slate-900">
                         {complaint.complaintNumber}
                       </TableCell>
-                      <TableCell>{complaint.subject}</TableCell>
+                      <TableCell>
+                        <TruncatedText text={complaint.subject} />
+                      </TableCell>
                       <TableCell>{complaint.salesOrder?.salesOrderNumber || "—"}</TableCell>
-                      <TableCell>{complaint.salesOrder?.customer?.companyName || "—"}</TableCell>
+                      <TableCell>
+                        <TruncatedText text={complaint.salesOrder?.customer?.companyName || "—"} />
+                      </TableCell>
                       <TableCell>{invoice?.invoiceNumber || "—"}</TableCell>
                       <TableCell>
                         <ComplaintStatusBadge status={complaint.status} />
@@ -237,6 +318,15 @@ export default function ComplaintList() {
         onOpenChange={setDeleteOpen}
         complaint={selectedComplaint}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} complaint${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected complaints. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );

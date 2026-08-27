@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import CustomerFormDialog from "@/components/customers/CustomerFormDialog";
 import DeactivateConfirmDialog from "@/components/customers/DeactivateConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -164,11 +165,15 @@ export default function Customers() {
                     onClick={() => navigate(`/customers/${customer.id}`)}
                   >
                     <TableCell className="font-medium text-slate-900">
-                      {customer.companyName}
+                      <TruncatedText text={customer.companyName} />
                     </TableCell>
-                    <TableCell>{customer.contactPerson}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={customer.contactPerson} className="max-w-[160px]" />
+                    </TableCell>
                     <TableCell>{customer.phone}</TableCell>
-                    <TableCell>{customer.email || "—"}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={customer.email || "—"} />
+                    </TableCell>
                     <TableCell>{customer.state || "—"}</TableCell>
                     <TableCell>
                       {customer.gstNumber || <Badge variant="muted">Not provided</Badge>}

@@ -17,6 +17,7 @@ import {
 import ProductFormDialog from "@/components/products/ProductFormDialog";
 import ProductViewDialog from "@/components/products/ProductViewDialog";
 import DeactivateProductConfirmDialog from "@/components/products/DeactivateProductConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -210,7 +211,7 @@ export default function Products() {
                 products.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell className="font-medium text-slate-900">
-                      {product.name}
+                      <TruncatedText text={product.name} />
                     </TableCell>
                     <TableCell>
                       <Badge variant="orange">{product.category}</Badge>

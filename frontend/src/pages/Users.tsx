@@ -16,6 +16,7 @@ import {
 import UserFormDialog from "@/components/users/UserFormDialog";
 import ResetPasswordDialog from "@/components/users/ResetPasswordDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -177,11 +178,15 @@ export default function Users() {
               ) : (
                 users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium text-slate-900">{user.name}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      <TruncatedText text={user.name} className="max-w-[160px]" />
+                    </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {user.username}
                     </TableCell>
-                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <TruncatedText text={user.email} />
+                    </TableCell>
                     <TableCell>{user.department?.name ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

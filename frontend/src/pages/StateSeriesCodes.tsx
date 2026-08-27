@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import StateSeriesCodeFormDialog from "@/components/state-series-codes/StateSeriesCodeFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -32,6 +33,9 @@ export default function StateSeriesCodes() {
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<StateSeriesCode | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const fetchCodes = useCallback(async () => {
     setLoading(true);
@@ -67,6 +71,37 @@ export default function StateSeriesCodes() {
     await fetchCodes();
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => (prev.size === codes.length ? new Set() : new Set(codes.map((c) => c.id))));
+  }
+
+  async function handleBulkDeleteConfirm() {
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(ids.map((id) => deleteStateSeriesCode(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} series deleted.`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} series could not be deleted.`);
+    }
+    setSelectedIds(new Set());
+    await fetchCodes();
+  }
+
   return (
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
@@ -87,9 +122,36 @@ export default function StateSeriesCodes() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
+              <p className="text-sm text-slate-700">
+                {selectedIds.size} series selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < codes.length;
+                    }}
+                    checked={codes.length > 0 && selectedIds.size === codes.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all state series"
+                  />
+                </TableHead>
                 <TableHead>State</TableHead>
                 <TableHead>Series Start</TableHead>
                 <TableHead>Next JEO Number</TableHead>
@@ -100,7 +162,7 @@ export default function StateSeriesCodes() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading state series codes...
                     </span>
@@ -108,7 +170,7 @@ export default function StateSeriesCodes() {
                 </TableRow>
               ) : codes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No state series configured yet. Every state currently uses the original
                     JEO-YYYY-NNNNNN numbering.
                   </TableCell>
@@ -116,6 +178,13 @@ export default function StateSeriesCodes() {
               ) : (
                 codes.map((code) => (
                   <TableRow key={code.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(code.id)}
+                        onChange={() => toggleSelected(code.id)}
+                        aria-label={`Select series for ${code.state}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-slate-900">{code.state}</TableCell>
                     <TableCell>{code.seriesStart}</TableCell>
                     <TableCell>
@@ -164,6 +233,15 @@ export default function StateSeriesCodes() {
         confirmingLabel="Deleting..."
         errorMessage="Could not delete this series. Please try again."
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} series?`}
+        description="JEOs already generated keep their numbers; future JEOs for these states will fall back to the original JEO-YYYY-NNNNNN numbering until a new series is added."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        onConfirm={handleBulkDeleteConfirm}
       />
     </div>
   );
