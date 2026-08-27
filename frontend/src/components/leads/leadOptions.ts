@@ -114,7 +114,10 @@ export function nextActionFor(lead: Lead): NextAction {
     case "QUOTATION_SENT":
       return {
         label: "Waiting for Customer Response",
-        hint: "Customer Acceptance and Sales Order creation are part of Phase 2.",
+        // Customer Quotation Acceptance workflow: the customer decides via
+        // the secure link in the email — this lead moves to WON
+        // automatically on Accept (see LeadsService.recordQuotationAccepted()).
+        hint: "The customer has been emailed a secure link to view, accept, or reject the quotation.",
       };
     case "WON":
       return lead.isConverted

@@ -126,9 +126,13 @@ export default function ChangeQuotationStatusDialog({
   // refuses this transition outright (see QuotationsService.updateStatus()).
   // Hiding the option here means the user never sees a status they could
   // pick and then get an error back for.
-  const statusOptions = quotation.customerId
+  // VIEWED is a customer-triggered transition only (set automatically when
+  // the customer opens the public /quote/:token link) — never offered as a
+  // manual choice here.
+  const statusOptions = (quotation.customerId
     ? STATUS_OPTIONS
-    : STATUS_OPTIONS.filter((s) => s.value !== "ACCEPTED");
+    : STATUS_OPTIONS.filter((s) => s.value !== "ACCEPTED")
+  ).filter((s) => s.value !== "VIEWED");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

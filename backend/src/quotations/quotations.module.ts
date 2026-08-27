@@ -8,6 +8,7 @@ import { PdfModule } from '../pdf/pdf.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { LeadsModule } from '../leads/leads.module';
 import { QuotationsController } from './quotations.controller';
+import { PublicQuotationsController } from './public-quotations.controller';
 import { QuotationsService } from './quotations.service';
 
 @Module({
@@ -29,7 +30,11 @@ import { QuotationsService } from './quotations.service';
     AuditLogModule,
     LeadsModule,
   ],
-  controllers: [QuotationsController],
+  // PublicQuotationsController: Customer Quotation Acceptance workflow's
+  // unauthenticated /api/v1/public/quotations/:token routes. Shares this
+  // module's QuotationsService instance — no export needed since both
+  // controllers live in the same module.
+  controllers: [QuotationsController, PublicQuotationsController],
   providers: [QuotationsService],
 })
 export class QuotationsModule {}

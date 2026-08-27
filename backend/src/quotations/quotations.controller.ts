@@ -74,6 +74,16 @@ export class QuotationsController {
     return this.quotationsService.getEmailHistory(id);
   }
 
+  // Quotation History timeline (Customer Quotation Acceptance workflow,
+  // requirement #10/#14) — reads the existing generic AuditLog table
+  // (module='Quotation'), not the Administrator-only /api/v1/audit-log
+  // endpoint, so any Sales user who can view this quotation can see it.
+  @Get(':id/history')
+  @RequirePermission('Quotation', 'View')
+  getHistory(@Param('id') id: string) {
+    return this.quotationsService.getHistory(id);
+  }
+
   @Post()
   @RequirePermission('Quotation', 'Create')
   create(@Body() dto: CreateQuotationDto, @Req() req: any) {

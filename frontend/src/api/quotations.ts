@@ -5,6 +5,7 @@ import type {
   Quotation,
   QuotationApprovalRequest,
   QuotationCommercialTerms,
+  QuotationHistoryEntry,
   QuotationStatus,
 } from "@/types";
 
@@ -133,6 +134,12 @@ export async function sendQuotation(id: string, payload: SendQuotationPayload) {
 
 export async function getQuotationEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/quotations/${id}/email-history`);
+  return res.data;
+}
+
+// Quotation History timeline (Customer Quotation Acceptance workflow).
+export async function getQuotationHistory(id: string) {
+  const res = await api.get<QuotationHistoryEntry[]>(`/api/v1/quotations/${id}/history`);
   return res.data;
 }
 

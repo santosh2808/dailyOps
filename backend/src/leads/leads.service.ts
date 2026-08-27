@@ -554,6 +554,66 @@ export class LeadsService {
     });
   }
 
+  // Called by QuotationsService.acceptViaPublicLink() when the accepted
+  // quotation is lead-originated. Mirrors recordQuotationSent()'s "don't
+  // regress a further-along lead" guard — but WON is the one status this
+  // never skips advancing to, since it's the terminal outcome the whole
+  // Customer Quotation Acceptance workflow (section 9) exists to record.
+  // Idempotent: a lead already WON or LOST is left untouched, so a second
+  // call (which acceptViaPublicLink() itself already prevents via its own
+  // duplicate-acceptance check) would be a safe no-op regardless.
+  async recordQuotationAccepted(leadId: string, quotationNumber: string, actorName?: string) {
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead || (['WON', 'LOST'] as string[]).includes(lead.status)) {
+      return;
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.lead.update({ where: { id: leadId }, data: { status: 'WON' } });
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId,
+          oldStatus: lead.status,
+          newStatus: 'WON',
+          remarks: `Automatically advanced — customer accepted Quotation ${quotationNumber} via the public quotation link`,
+          changedBy: actorName,
+        },
+      });
+      await tx.leadHistory.create({
+        data: {
+          leadId,
+          action: 'QUOTATION_ACCEPTED',
+          description: `Quotation ${quotationNumber} accepted by customer`,
+          performedBy: actorName,
+        },
+      });
+    });
+  }
+
+  // Called by QuotationsService.rejectViaPublicLink(). Unlike acceptance,
+  // a rejection deliberately does NOT change the Lead's status — Sales may
+  // still want to follow up, revise pricing, or reassign rather than
+  // treating this as an automatic dead end, so this only ever logs the
+  // Timeline entry.
+  async recordQuotationRejected(
+    leadId: string,
+    quotationNumber: string,
+    reason: string,
+    actorName?: string,
+  ) {
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) {
+      return;
+    }
+    await this.prisma.leadHistory.create({
+      data: {
+        leadId,
+        action: 'QUOTATION_REJECTED',
+        description: `Quotation ${quotationNumber} rejected by customer — ${reason}`,
+        performedBy: actorName,
+      },
+    });
+  }
+
   // Merges the persisted LeadHistory log with synthesized entries for
   // everything downstream of a converted Lead's Customer — Quotation
   // Created/Sent, Sales Order Created, Proforma Invoice Generated, JEO

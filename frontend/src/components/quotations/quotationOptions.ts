@@ -9,6 +9,9 @@ export const STATUS_OPTIONS: { value: QuotationStatus; label: string; badge: Bad
   { value: "DRAFT", label: "Draft", badge: "muted" },
   { value: "READY", label: "Ready", badge: "warning" },
   { value: "SENT", label: "Sent", badge: "info" },
+  // Customer Quotation Acceptance workflow — set only when the customer
+  // opens the public /quote/:token link (see PublicQuotation.tsx).
+  { value: "VIEWED", label: "Viewed by Customer", badge: "orange" },
   { value: "ACCEPTED", label: "Accepted", badge: "success" },
   { value: "REJECTED", label: "Rejected", badge: "destructive" },
   { value: "EXPIRED", label: "Expired", badge: "warning" },

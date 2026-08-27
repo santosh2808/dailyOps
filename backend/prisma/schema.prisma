@@ -333,6 +333,11 @@ enum LeadHistoryAction {
   // the follow-up branch of update().
   NOTE_ADDED
   FOLLOWUP_ADDED
+  // Additive: Customer Quotation Acceptance workflow — written directly by
+  // LeadsService.recordQuotationAccepted()/recordQuotationRejected() when
+  // the customer decides via the secure public quotation link.
+  QUOTATION_ACCEPTED
+  QUOTATION_REJECTED
 }
 
 model LeadHistory {
@@ -412,6 +417,11 @@ enum QuotationStatus {
   // than being selectable via the existing PATCH .../status endpoint.
   READY
   SENT
+  // Additive: Customer Quotation Acceptance workflow — set the moment the
+  // customer opens the secure public link (see
+  // QuotationsService.recordPublicView()). Never set any other way, and
+  // never regressed back to SENT.
+  VIEWED
   ACCEPTED
   REJECTED
   EXPIRED
@@ -467,6 +477,33 @@ model Quotation {
   sentAt          DateTime?
   sentBy          String?
   sentToEmail     String?
+  // Additive: Customer Quotation Acceptance workflow — the secure public
+  // link is /quote/{publicToken}, generated fresh every time
+  // sendQuotation() runs (see QuotationsService). Nullable: a quotation
+  // that has never been sent has no token yet. Never exposes the
+  // quotation's own database id.
+  publicToken     String?         @unique
+  tokenExpiresAt  DateTime?
+  // View tracking (requirement #7) — updated by
+  // QuotationsService.recordPublicView() on every GET of the public link,
+  // regardless of how many times it's opened.
+  firstViewedAt   DateTime?
+  lastViewedAt    DateTime?
+  viewCount       Int             @default(0)
+  // Customer Acceptance (requirement #4) — set together, exactly once, by
+  // QuotationsService.acceptViaPublicLink(). "Customer" is always the
+  // recorded actor for the accompanying AuditLog/QuotationHistory entry,
+  // not a User — there is deliberately no login for the customer side of
+  // this workflow.
+  acceptedAt              DateTime?
+  acceptedByName          String?
+  acceptedByDesignation   String?
+  acceptanceComment       String?
+  // Customer Rejection (requirement #5) — set together, exactly once, by
+  // QuotationsService.rejectViaPublicLink().
+  rejectedAt              DateTime?
+  rejectionReason         String?
+  rejectionComment        String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   deletedAt       DateTime?

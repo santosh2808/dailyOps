@@ -390,6 +390,10 @@ export const LEAD_HISTORY_ACTIONS = [
   "SALES_ORDER_CREATED",
   "PROFORMA_INVOICE_GENERATED",
   "JEO_GENERATED",
+  // Additive: Customer Quotation Acceptance workflow — written directly by
+  // LeadsService when the customer decides via the secure public link.
+  "QUOTATION_ACCEPTED",
+  "QUOTATION_REJECTED",
 ] as const;
 export type LeadHistoryAction = (typeof LEAD_HISTORY_ACTIONS)[number];
 
@@ -428,7 +432,10 @@ export interface LeadStatusHistoryEntry {
   createdAt: string;
 }
 
-export const QUOTATION_STATUSES = ["DRAFT", "READY", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"] as const;
+// Customer Quotation Acceptance workflow: VIEWED sits between SENT and
+// ACCEPTED/REJECTED — set only when the customer opens the public link
+// (see PublicQuotation.tsx / QuotationsService.getPublicQuotation()).
+export const QUOTATION_STATUSES = ["DRAFT", "READY", "SENT", "VIEWED", "ACCEPTED", "REJECTED", "EXPIRED"] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 
 export interface QuotationItem {
@@ -495,11 +502,43 @@ export interface Quotation {
   sentAt?: string | null;
   sentBy?: string | null;
   sentToEmail?: string | null;
+  // Customer Quotation Acceptance workflow — secure public link + view
+  // tracking + accept/reject capture. publicToken is included by the API
+  // for completeness but the frontend never needs to build the link itself
+  // (the email already contains it); tokenExpiresAt is still useful to show
+  // staff when a sent link will/did expire.
+  publicToken?: string | null;
+  tokenExpiresAt?: string | null;
+  firstViewedAt?: string | null;
+  lastViewedAt?: string | null;
+  viewCount?: number;
+  acceptedAt?: string | null;
+  acceptedByName?: string | null;
+  acceptedByDesignation?: string | null;
+  acceptanceComment?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  rejectionComment?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   items?: QuotationItem[];
   _count?: { items: number };
+}
+
+// Quotation History timeline entry (Customer Quotation Acceptance workflow,
+// requirement #10) — this is a slice of the existing generic AuditLog
+// table (module: 'Quotation'), read via GET /api/v1/quotations/:id/history.
+export interface QuotationHistoryEntry {
+  id: string;
+  module: string;
+  recordId: string;
+  action: string;
+  actorName?: string | null;
+  oldValue?: unknown;
+  newValue?: unknown;
+  remarks?: string | null;
+  createdAt: string;
 }
 
 // Additive: Sales Automation — Email Templates, Email History, Approval

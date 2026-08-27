@@ -37,6 +37,7 @@ import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
 import Permissions from "@/pages/Permissions";
 import Departments from "@/pages/Departments";
+import PublicQuotation from "@/pages/PublicQuotation";
 
 export default function App() {
   return (
@@ -44,6 +45,11 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* Customer Quotation Acceptance workflow — public, unauthenticated
+              page reached from the "View Quotation" email link. Sibling to
+              /login (no ProtectedRoute wrapper): a customer never has a
+              DailyOps session at all. */}
+          <Route path="/quote/:token" element={<PublicQuotation />} />
           <Route
             path="/change-password"
             element={

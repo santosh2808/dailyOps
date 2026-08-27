@@ -306,9 +306,36 @@ async function main() {
     {
       key: 'QUOTATION',
       name: 'Quotation Email',
-      subject: 'Quotation {{quotationNumber}} from Smart Rotamac',
+      subject: 'Quotation {{quotationNumber}} - Smart Rotamac',
       bodyHtml:
-        '<p>Dear {{customerName}},</p><p>Please find attached Quotation {{quotationNumber}}, total amount {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamac Sales Team</p>',
+        '<p>Dear {{customerName}},</p>' +
+        '<p>Thank you for your interest in Smart Rotamac.</p>' +
+        '<p>Please find your quotation {{quotationNumber}}.</p>' +
+        '<p>You can review the quotation using the link below.</p>' +
+        '<p><a href="{{quotationLink}}">View Quotation</a></p>' +
+        '<p>After reviewing the quotation, you can accept or reject it online.</p>' +
+        '<p>Regards,<br/>{{salespersonName}}<br/>Smart Rotamac</p>',
+    },
+    // Customer Quotation Acceptance workflow — internal notification to the
+    // salesperson (requirement #8), sent via the same Mailer/EmailHistory
+    // path as every other email in this system rather than a separate
+    // in-app notification system (none exists yet — see MailerService's
+    // own "smallest appropriate mechanism" comment).
+    {
+      key: 'QUOTATION_ACCEPTED_INTERNAL',
+      name: 'Quotation Accepted — Internal Notification',
+      subject: 'Quotation {{quotationNumber}} has been accepted',
+      bodyHtml:
+        '<p>Quotation {{quotationNumber}} has been accepted by {{customerCompany}}.</p>' +
+        '<p>Accepted by: {{acceptedByName}}</p>',
+    },
+    {
+      key: 'QUOTATION_REJECTED_INTERNAL',
+      name: 'Quotation Rejected — Internal Notification',
+      subject: 'Quotation {{quotationNumber}} has been rejected',
+      bodyHtml:
+        '<p>Quotation {{quotationNumber}} has been rejected by {{customerCompany}}.</p>' +
+        '<p>Reason: {{rejectionReason}}</p>',
     },
     {
       key: 'ORDER_CONFIRMATION',

@@ -3,12 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRightCircle,
+  CheckCircle2,
+  Eye,
   FileDown,
   Mail,
   Pencil,
   RefreshCw,
   Send,
   Trash2,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -24,11 +28,12 @@ import {
   deleteQuotation,
   getQuotation,
   getQuotationEmailHistory,
+  getQuotationHistory,
   openQuotationPdf,
   updateQuotationStatus,
 } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
-import type { EmailHistoryEntry, Quotation, QuotationStatus } from "@/types";
+import type { EmailHistoryEntry, Quotation, QuotationHistoryEntry, QuotationStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -53,6 +58,11 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  return new Date(value).toLocaleString();
+}
+
 export default function QuotationDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -69,6 +79,11 @@ export default function QuotationDetails() {
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
   const [pdfError, setPdfError] = useState("");
 
+  // Quotation History timeline (Customer Quotation Acceptance workflow,
+  // requirement #10/#14).
+  const [quotationHistory, setQuotationHistory] = useState<QuotationHistoryEntry[]>([]);
+  const [quotationHistoryLoading, setQuotationHistoryLoading] = useState(true);
+
   const fetchEmailHistory = useCallback(async () => {
     if (!id) return;
     setEmailHistoryLoading(true);
@@ -81,9 +96,22 @@ export default function QuotationDetails() {
     }
   }, [id]);
 
+  const fetchQuotationHistory = useCallback(async () => {
+    if (!id) return;
+    setQuotationHistoryLoading(true);
+    try {
+      setQuotationHistory(await getQuotationHistory(id));
+    } catch {
+      // Non-critical section; leave the previous list in place on failure.
+    } finally {
+      setQuotationHistoryLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchEmailHistory();
-  }, [fetchEmailHistory]);
+    fetchQuotationHistory();
+  }, [fetchEmailHistory, fetchQuotationHistory]);
 
   const fetchQuotation = useCallback(async () => {
     if (!id) return;
@@ -140,6 +168,7 @@ export default function QuotationDetails() {
     }
     toast.success("Quotation status updated.");
     await fetchQuotation();
+    await fetchQuotationHistory();
   }
 
   async function handleDeleteConfirm() {
@@ -238,11 +267,51 @@ export default function QuotationDetails() {
               )}
               {pdfError && <p className="text-sm text-destructive">{pdfError}</p>}
 
-              {/* Lead Management Phase 1 (requirement #12) — always show
-                  the next available action so nobody has to wonder. */}
-              {quotation.leadId && quotation.status === "SENT" && (
+              {/* Lead Management Phase 1 (requirement #12), extended by the
+                  Customer Quotation Acceptance workflow (requirement #15) —
+                  always show the next available action so nobody has to
+                  wonder. */}
+              {quotation.status === "SENT" && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Waiting for Customer Response — Customer Acceptance and Sales Order creation are part of Phase 2.
+                  Waiting for Customer Response — the customer has been emailed a secure link to
+                  view, accept, or reject this quotation.
+                </div>
+              )}
+              {quotation.status === "VIEWED" && (
+                <div className="flex items-center gap-2 rounded-md border border-orange/30 bg-orange/5 px-4 py-3 text-sm text-orange">
+                  <Eye className="h-4 w-4 flex-shrink-0" />
+                  The customer has viewed this quotation and has not yet made a decision.
+                </div>
+              )}
+              {quotation.status === "ACCEPTED" && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                    ✓ Quotation Accepted
+                    {quotation.acceptedByName ? ` by ${quotation.acceptedByName}` : ""}
+                    {quotation.acceptedAt ? ` on ${formatDateTime(quotation.acceptedAt)}` : ""}
+                  </span>
+                  {/* Requirement #9/#15 — Do NOT auto-convert to Customer;
+                      just point at the existing Lead Details "Convert to
+                      Customer" action (already surfaces automatically once
+                      LeadsService.recordQuotationAccepted() moves the lead
+                      to WON — see leadOptions.ts). */}
+                  {quotation.leadId && !quotation.customerId && (
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/leads/${quotation.leadId}`)}>
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      Convert to Customer
+                    </Button>
+                  )}
+                </div>
+              )}
+              {quotation.status === "REJECTED" && (
+                <div className="rounded-md border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                  <span className="flex items-center gap-2 font-medium text-slate-900">
+                    <XCircle className="h-4 w-4 flex-shrink-0" />
+                    Quotation Rejected by Customer
+                  </span>
+                  {quotation.rejectionReason && <p className="mt-1">Reason: {quotation.rejectionReason}</p>}
+                  {quotation.rejectionComment && <p className="mt-0.5">"{quotation.rejectionComment}"</p>}
                 </div>
               )}
               {quotation.status === "DRAFT" && (
@@ -333,6 +402,50 @@ export default function QuotationDetails() {
                 </CardContent>
               </Card>
 
+              {/* Customer Quotation Acceptance workflow, requirement #14 —
+                  sales-side tracking. Only shown once the quotation has
+                  actually been sent (nothing to track before that). */}
+              {quotation.sentAt && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Customer Tracking</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <Field label="Customer Email" value={quotation.sentToEmail} />
+                    <Field label="Sent Date" value={formatDateTime(quotation.sentAt)} />
+                    <Field label="View Count" value={String(quotation.viewCount ?? 0)} />
+                    <Field label="First Viewed" value={formatDateTime(quotation.firstViewedAt)} />
+                    <Field label="Last Viewed" value={formatDateTime(quotation.lastViewedAt)} />
+                    <Field
+                      label="Link Expires"
+                      value={quotation.tokenExpiresAt ? formatDate(quotation.tokenExpiresAt) : null}
+                    />
+                    {quotation.status === "ACCEPTED" && (
+                      <>
+                        <Field label="Accepted Date" value={formatDateTime(quotation.acceptedAt)} />
+                        <Field label="Accepted By" value="Customer" />
+                        <Field label="Accepted By (Name)" value={quotation.acceptedByName} />
+                        {quotation.acceptedByDesignation && (
+                          <Field label="Designation" value={quotation.acceptedByDesignation} />
+                        )}
+                        {quotation.acceptanceComment && (
+                          <Field label="Comment" value={quotation.acceptanceComment} />
+                        )}
+                      </>
+                    )}
+                    {quotation.status === "REJECTED" && (
+                      <>
+                        <Field label="Rejected Date" value={formatDateTime(quotation.rejectedAt)} />
+                        <Field label="Reason" value={quotation.rejectionReason} />
+                        {quotation.rejectionComment && (
+                          <Field label="Comment" value={quotation.rejectionComment} />
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Email History</CardTitle>
@@ -386,6 +499,55 @@ export default function QuotationDetails() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Quotation History timeline (requirement #10) — reads the
+                  existing generic AuditLog table (module='Quotation'), same
+                  storage LeadActivityPanel's Timeline reads for Leads, just
+                  scoped to this record via a dedicated non-admin endpoint. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Quotation History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {quotationHistoryLoading ? (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Spinner /> Loading history...
+                    </p>
+                  ) : quotationHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+                  ) : (
+                    <ol className="space-y-3">
+                      {quotationHistory.map((entry) => (
+                        <li key={entry.id} className="flex items-start gap-3 border-b pb-3 text-sm last:border-b-0 last:pb-0">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange/10 text-orange">
+                            {entry.action.includes("Accepted") ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            ) : entry.action.includes("Rejected") ? (
+                              <XCircle className="h-3.5 w-3.5" />
+                            ) : entry.action.includes("Viewed") ? (
+                              <Eye className="h-3.5 w-3.5" />
+                            ) : (
+                              <Mail className="h-3.5 w-3.5" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                              <p className="font-medium text-slate-900">{entry.action}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDateTime(entry.createdAt)}
+                              </p>
+                            </div>
+                            {entry.actorName && (
+                              <p className="text-xs text-muted-foreground">by {entry.actorName}</p>
+                            )}
+                            {entry.remarks && <p className="mt-0.5 text-muted-foreground">{entry.remarks}</p>}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
         </main>
@@ -410,6 +572,7 @@ export default function QuotationDetails() {
         onSent={() => {
           fetchQuotation();
           fetchEmailHistory();
+          fetchQuotationHistory();
         }}
       />
     </div>

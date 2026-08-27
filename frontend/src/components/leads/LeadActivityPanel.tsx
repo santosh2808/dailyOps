@@ -11,6 +11,7 @@ import {
   ShoppingCart,
   StickyNote,
   UserCog,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,8 @@ const ACTION_ICON: Record<LeadHistoryAction, LucideIcon> = {
   SALES_ORDER_CREATED: ShoppingCart,
   PROFORMA_INVOICE_GENERATED: Receipt,
   JEO_GENERATED: Factory,
+  QUOTATION_ACCEPTED: CheckCircle2,
+  QUOTATION_REJECTED: XCircle,
 };
 
 const ACTION_LABEL: Record<LeadHistoryAction, string> = {
@@ -59,6 +62,8 @@ const ACTION_LABEL: Record<LeadHistoryAction, string> = {
   SALES_ORDER_CREATED: "Sales Order Created",
   PROFORMA_INVOICE_GENERATED: "Proforma Invoice Generated",
   JEO_GENERATED: "JEO Generated",
+  QUOTATION_ACCEPTED: "Quotation Accepted",
+  QUOTATION_REJECTED: "Quotation Rejected",
 };
 
 function formatDateTime(value: string) {

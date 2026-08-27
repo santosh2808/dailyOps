@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
 import { ProformaInvoicesService } from '../proforma-invoices/proforma-invoices.service';
@@ -24,6 +25,8 @@ import { QuotationItemInputDto } from './dto/quotation-item-input.dto';
 import { RequestQuotationApprovalDto } from './dto/request-quotation-approval.dto';
 import { DecideQuotationApprovalDto } from './dto/decide-quotation-approval.dto';
 import { SendQuotationDto } from './dto/send-quotation.dto';
+import { AcceptPublicQuotationDto } from './dto/accept-public-quotation.dto';
+import { RejectPublicQuotationDto } from './dto/reject-public-quotation.dto';
 
 // Passed by the controller from the JWT payload (req.user) — never trusted
 // from the request body. `roles` drives the Approval Matrix / Administrator
@@ -49,6 +52,88 @@ const DEFAULT_GST_PERCENT = 18;
 // has no equivalent rate — it varies by site/distance — so it's never
 // auto-computed, only ever taken from what was supplied (defaulting to 0).
 const INSTALLATION_RATE_PER_FAN = 8000;
+
+// Customer Quotation Acceptance workflow — the secure public link is
+// /quote/{publicToken} on the FRONTEND origin (not the API), so the
+// customer lands on a page, not a raw JSON response. No hardcoded
+// company-specific host per "no hardcoding" — configurable, defaults to
+// the Vite dev server's own default port since that's what this project
+// runs locally.
+const DEFAULT_FRONTEND_URL = 'http://localhost:5173';
+const DEFAULT_QUOTATION_LINK_EXPIRY_DAYS = 30;
+
+function frontendBaseUrl(): string {
+  return (process.env.FRONTEND_URL?.trim() || DEFAULT_FRONTEND_URL).replace(/\/+$/, '');
+}
+
+function quotationLinkExpiryDays(): number {
+  const parsed = Number(process.env.QUOTATION_LINK_EXPIRY_DAYS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_QUOTATION_LINK_EXPIRY_DAYS;
+}
+
+// Sanitized shape returned by the public endpoints — deliberately hand-
+// picked fields only (requirement #3/#11: never expose the quotation's own
+// database id, salesperson internal notes, approval information, or
+// internal pricing rules/margins).
+export interface PublicQuotationView {
+  quotationNumber: string;
+  quotationDate: Date;
+  validUntil: Date | null;
+  customerName: string;
+  customerCompany: string;
+  items: {
+    productName: string;
+    description: string | null;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
+  subtotal: number;
+  gstPercent: number;
+  gstAmount: number;
+  installationCharge: number;
+  transportationCharge: number;
+  grandTotal: number;
+  paymentTerms: string | null;
+  deliveryTerms: string | null;
+  notes: string | null;
+  terms: string | null;
+  status: string;
+  acceptedAt: Date | null;
+  acceptedByName: string | null;
+  rejectedAt: Date | null;
+  rejectionReason: string | null;
+}
+
+// A handful of very lightweight, in-memory, per-process rate limits on the
+// public accept/reject actions (requirement #11) — this backend has no
+// Redis/rate-limiting package installed today (see MailerService's own
+// "smallest appropriate mechanism" precedent for notifications), so this is
+// the smallest addition that meaningfully slows down brute-forcing/spamming
+// a single token without adding a new dependency or any shared state. Not a
+// substitute for a real distributed limiter behind a load balancer with
+// multiple instances — see the deliverable's Security/Limitations notes.
+class SimpleRateLimiter {
+  private hits = new Map<string, number[]>();
+  constructor(
+    private readonly max: number,
+    private readonly windowMs: number,
+  ) {}
+
+  // Returns true if `key` is currently allowed to proceed (and records this
+  // attempt); false if it's been called too many times within the window.
+  check(key: string): boolean {
+    const now = Date.now();
+    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < this.windowMs);
+    if (recent.length >= this.max) {
+      this.hits.set(key, recent);
+      return false;
+    }
+    recent.push(now);
+    this.hits.set(key, recent);
+    return true;
+  }
+}
 
 // Whitelisted so `sortBy` from the query string can never be used to sort by
 // an arbitrary/unindexed or sensitive column.
@@ -96,6 +181,13 @@ interface ComputedTotals {
 @Injectable()
 export class QuotationsService {
   private readonly logger = new Logger(QuotationsService.name);
+
+  // Requirement #11 — view/accept/reject are all cheap-to-call public
+  // endpoints; keyed by publicToken (viewing/deciding) so this only ever
+  // throttles repeated hits against one specific quotation's link, never
+  // across the whole public quotation surface at once.
+  private readonly viewRateLimiter = new SimpleRateLimiter(30, 60_000);
+  private readonly decisionRateLimiter = new SimpleRateLimiter(10, 60_000);
 
   constructor(
     private prisma: PrismaService,
@@ -646,14 +738,33 @@ export class QuotationsService {
     const to = dto.recipientEmail?.trim() || recipientEmail || undefined;
     const pdf = await this.quotationPdfService.render(quotation);
 
+    // Customer Quotation Acceptance workflow (requirement #2) — a fresh
+    // token every time this quotation is (re)sent, rather than reusing one
+    // that already exists: resending implies a fresh 30-day (configurable)
+    // window, and it means any previously-issued link for this quotation
+    // stops working the moment a newer one goes out, which is the safer
+    // default for a token that's meant to be single-purpose.
+    const publicToken = crypto.randomBytes(32).toString('base64url');
+    const tokenExpiresAt = new Date(Date.now() + quotationLinkExpiryDays() * 24 * 60 * 60 * 1000);
+    const quotationLink = `${frontendBaseUrl()}/quote/${publicToken}`;
+
     const result = await this.mailerService.send({
       templateKey: 'QUOTATION',
-      fallbackSubject: `Quotation ${quotation.quotationNumber} from Smart Rotamac`,
-      fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached Quotation {{quotationNumber}}, total amount {{grandTotal}}.</p>`,
+      fallbackSubject: `Quotation {{quotationNumber}} - Smart Rotamac`,
+      fallbackBodyHtml:
+        '<p>Dear {{customerName}},</p>' +
+        '<p>Thank you for your interest in Smart Rotamac.</p>' +
+        '<p>Please find your quotation {{quotationNumber}}.</p>' +
+        '<p>You can review the quotation using the link below.</p>' +
+        '<p><a href="{{quotationLink}}">View Quotation</a></p>' +
+        '<p>After reviewing the quotation, you can accept or reject it online.</p>' +
+        '<p>Regards,<br/>{{salespersonName}}<br/>Smart Rotamac</p>',
       vars: {
         customerName: recipientName,
         quotationNumber: quotation.quotationNumber,
         grandTotal: quotation.grandTotal.toFixed(2),
+        quotationLink,
+        salespersonName: actor.name || 'Smart Rotamac Sales Team',
       },
       to,
       cc: dto.ccEmails,
@@ -667,7 +778,14 @@ export class QuotationsService {
 
     const updated = await this.prisma.quotation.update({
       where: { id },
-      data: { status: 'SENT', sentAt: new Date(), sentBy: actor.name, sentToEmail: to },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        sentBy: actor.name,
+        sentToEmail: to,
+        publicToken,
+        tokenExpiresAt,
+      },
       include: QUOTATION_DETAIL_INCLUDE,
     });
 
@@ -708,6 +826,332 @@ export class QuotationsService {
       where: { quotationId: id },
       orderBy: { sentAt: 'desc' },
     });
+  }
+
+  // Quotation History timeline (requirement #10) — internal, staff-facing
+  // (gated by Quotation:View in the controller, unlike the Administrator-
+  // only /api/v1/audit-log). Reuses the existing generic AuditLog table
+  // rather than a new dedicated table, per "Do NOT create duplicate/
+  // conflicting status systems" — this is exactly the module='Quotation'
+  // slice of it, oldest first to read top-to-bottom like the spec's own
+  // example.
+  getHistory(id: string) {
+    return this.prisma.auditLog.findMany({
+      where: { module: 'Quotation', recordId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  // ===========================================================================
+  // Customer Quotation Acceptance workflow — secure public link.
+  // Everything below is reachable from PublicQuotationsController, which has
+  // no auth guard at all (this is a customer-facing, unauthenticated
+  // surface by design — requirement: "Do NOT require the customer to have a
+  // DailyOps account"). Every method here re-validates the token/expiry
+  // itself rather than trusting anything about how it was reached.
+  // ===========================================================================
+
+  private async findByPublicToken(token: string) {
+    // A malformed/unknown token gets exactly the same NotFoundException as
+    // a well-formed-but-nonexistent one (requirement #11: "Prevent token
+    // enumeration") — no distinction in the response that would help an
+    // attacker learn anything about which tokens are real.
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { publicToken: token },
+      include: QUOTATION_DETAIL_INCLUDE,
+    });
+    if (!quotation) {
+      throw new NotFoundException('This quotation link is invalid.');
+    }
+    return quotation;
+  }
+
+  private toPublicView(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): PublicQuotationView {
+    return {
+      quotationNumber: quotation.quotationNumber,
+      quotationDate: quotation.createdAt,
+      validUntil: quotation.validUntil,
+      customerName: quotation.customer?.contactPerson ?? quotation.lead?.contactPerson ?? 'Customer',
+      customerCompany: quotation.customer?.companyName ?? quotation.lead?.companyName ?? '',
+      items: quotation.items.map((item) => ({
+        productName: item.product?.name ?? 'Product',
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      })),
+      subtotal: quotation.subtotal,
+      gstPercent: quotation.gstPercent,
+      gstAmount: quotation.gstAmount,
+      installationCharge: quotation.installationCharge,
+      transportationCharge: quotation.transportationCharge,
+      grandTotal: quotation.grandTotal,
+      paymentTerms: (quotation.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
+      deliveryTerms: (quotation.commercialTerms as Prisma.JsonObject | null)?.delivery as string | null ?? null,
+      notes: quotation.notes,
+      terms: quotation.terms,
+      status: quotation.status,
+      acceptedAt: quotation.acceptedAt,
+      acceptedByName: quotation.acceptedByName,
+      rejectedAt: quotation.rejectedAt,
+      rejectionReason: quotation.rejectionReason,
+    };
+  }
+
+  // A comment/name field a customer typed is never HTML-rendered anywhere
+  // in this app (React escapes text content by default, and the PDF/email
+  // paths never interpolate it either), so the main risk is unbounded
+  // length / control characters rather than script injection — trimmed and
+  // length-capped here as the actual persisted value, on top of the DTO's
+  // own @MaxLength.
+  private sanitizeText(value: string | undefined, maxLength: number): string | undefined {
+    if (!value) return undefined;
+    // Strip control characters (keep normal whitespace) before trimming.
+    const cleaned = value.split('').filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    }).join('').trim();
+    return cleaned ? cleaned.slice(0, maxLength) : undefined;
+  }
+
+  // GET /api/v1/public/quotations/:token (requirement #3/#7). Recording the
+  // view is a deliberate side effect of this same read — every open of the
+  // link is one "view" (requirement #7's "View Count" counts page loads,
+  // not unique visitors/sessions; see the deliverable's Limitations note).
+  // Never regresses an already-ACCEPTED/REJECTED quotation's status, and
+  // never advances anything other than SENT -> VIEWED.
+  async getPublicQuotation(
+    token: string,
+    clientKey: string,
+  ): Promise<{ expired: true; quotationNumber: string } | { expired: false; quotation: PublicQuotationView }> {
+    if (!this.viewRateLimiter.check(`view:${clientKey}`)) {
+      throw new BadRequestException('Too many requests. Please try again in a moment.');
+    }
+
+    const quotation = await this.findByPublicToken(token);
+
+    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+      return { expired: true, quotationNumber: quotation.quotationNumber };
+    }
+
+    const now = new Date();
+    const isFirstView = !quotation.firstViewedAt;
+    const updated = await this.prisma.quotation.update({
+      where: { id: quotation.id },
+      data: {
+        firstViewedAt: quotation.firstViewedAt ?? now,
+        lastViewedAt: now,
+        viewCount: { increment: 1 },
+        // SENT -> VIEWED exactly once — a quotation already VIEWED (or
+        // further along) simply gets its view-tracking fields bumped above
+        // without touching status again.
+        ...(quotation.status === 'SENT' ? { status: 'VIEWED' as const } : {}),
+      },
+      include: QUOTATION_DETAIL_INCLUDE,
+    });
+
+    if (isFirstView || quotation.status === 'SENT') {
+      await this.auditLogService
+        .record({ module: 'Quotation', recordId: quotation.id, action: 'Customer Viewed Quotation' })
+        .catch((error) => this.logger.error('AuditLog record failed', error));
+    }
+
+    return { expired: false, quotation: this.toPublicView(updated) };
+  }
+
+  // GET /api/v1/public/quotations/:token/pdf (requirement #3's "View/
+  // Download PDF" button) — the existing /api/v1/quotations/:id/pdf route
+  // requires a JWT, which an anonymous customer will never have, so this is
+  // a second, token-authenticated entry point onto the exact same
+  // QuotationPdfService.render() used everywhere else in the app (no PDF
+  // template duplication). Shares the view rate limiter; deliberately does
+  // NOT bump viewCount/firstViewedAt/lastViewedAt itself since the
+  // customer's page load already counted the view via getPublicQuotation()
+  // above by the time this is ever called.
+  async getPublicPdf(token: string, clientKey: string): Promise<Buffer> {
+    if (!this.viewRateLimiter.check(`view:${clientKey}`)) {
+      throw new BadRequestException('Too many requests. Please try again in a moment.');
+    }
+    const quotation = await this.findByPublicToken(token);
+    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('This quotation link has expired.');
+    }
+    return this.quotationPdfService.render(quotation);
+  }
+
+  // POST /api/v1/public/quotations/:token/accept (requirement #4). Per the
+  // Sales Automation phase boundary this feature intentionally keeps in
+  // place: this NEVER triggers Sales Order/Proforma Invoice/JEO creation,
+  // regardless of whether this quotation has a Customer yet — that cascade
+  // stays exactly where it already lives (the internal Change Status ->
+  // ACCEPTED flow, via performAccept()), reachable afterwards from the
+  // existing "Create Sales Order" button on Quotation Details once
+  // quotation.customerId is set. The immediate goal here is acceptance
+  // tracking, not re-running that cascade from a second trigger.
+  async acceptViaPublicLink(token: string, dto: AcceptPublicQuotationDto, clientKey: string) {
+    if (!this.decisionRateLimiter.check(`decide:${clientKey}`)) {
+      throw new BadRequestException('Too many requests. Please try again in a moment.');
+    }
+
+    const quotation = await this.findByPublicToken(token);
+
+    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('This quotation link has expired.');
+    }
+    // Requirement #4.8/#11 — prevent duplicate acceptance, and prevent
+    // "accepting" something already rejected (or vice versa, in
+    // rejectViaPublicLink() below) from a stale open tab.
+    if (quotation.status === 'ACCEPTED' || quotation.status === 'REJECTED') {
+      throw new ConflictException(`This quotation has already been ${quotation.status.toLowerCase()}.`);
+    }
+
+    const name = this.sanitizeText(dto.name, 150) ?? 'Customer';
+    const designation = this.sanitizeText(dto.designation, 150);
+    const comment = this.sanitizeText(dto.comment, 1000);
+    const acceptedAt = new Date();
+
+    const updated = await this.prisma.quotation.update({
+      where: { id: quotation.id },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt,
+        acceptedByName: name,
+        acceptedByDesignation: designation ?? null,
+        acceptanceComment: comment ?? null,
+      },
+      include: QUOTATION_DETAIL_INCLUDE,
+    });
+
+    await this.auditLogService
+      .record({
+        module: 'Quotation',
+        recordId: quotation.id,
+        action: 'Accepted by Customer',
+        actorName: 'Customer',
+        newValue: { acceptedByName: name, acceptedByDesignation: designation, acceptanceComment: comment },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    if (quotation.leadId) {
+      await this.leadsService
+        .recordQuotationAccepted(quotation.leadId, quotation.quotationNumber, 'Customer')
+        .catch((error) => this.logger.error('Lead Timeline entry for Quotation Accepted failed', error));
+    }
+
+    await this.notifyInternalOfDecision(updated, 'ACCEPTED');
+
+    return {
+      quotationNumber: updated.quotationNumber,
+      companyName: updated.customer?.companyName ?? updated.lead?.companyName ?? '',
+    };
+  }
+
+  // POST /api/v1/public/quotations/:token/reject (requirement #5).
+  // Deliberately does not touch Lead status at all — see
+  // LeadsService.recordQuotationRejected()'s own comment.
+  async rejectViaPublicLink(token: string, dto: RejectPublicQuotationDto, clientKey: string) {
+    if (!this.decisionRateLimiter.check(`decide:${clientKey}`)) {
+      throw new BadRequestException('Too many requests. Please try again in a moment.');
+    }
+
+    const quotation = await this.findByPublicToken(token);
+
+    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('This quotation link has expired.');
+    }
+    if (quotation.status === 'ACCEPTED' || quotation.status === 'REJECTED') {
+      throw new ConflictException(`This quotation has already been ${quotation.status.toLowerCase()}.`);
+    }
+
+    const comment = this.sanitizeText(dto.comment, 1000);
+    const rejectedAt = new Date();
+
+    const updated = await this.prisma.quotation.update({
+      where: { id: quotation.id },
+      data: {
+        status: 'REJECTED',
+        rejectedAt,
+        rejectionReason: dto.reason,
+        rejectionComment: comment ?? null,
+      },
+      include: QUOTATION_DETAIL_INCLUDE,
+    });
+
+    await this.auditLogService
+      .record({
+        module: 'Quotation',
+        recordId: quotation.id,
+        action: 'Rejected by Customer',
+        actorName: 'Customer',
+        newValue: { rejectionReason: dto.reason, rejectionComment: comment },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    if (quotation.leadId) {
+      await this.leadsService
+        .recordQuotationRejected(quotation.leadId, quotation.quotationNumber, dto.reason, 'Customer')
+        .catch((error) => this.logger.error('Lead Timeline entry for Quotation Rejected failed', error));
+    }
+
+    await this.notifyInternalOfDecision(updated, 'REJECTED');
+
+    return {
+      quotationNumber: updated.quotationNumber,
+      companyName: updated.customer?.companyName ?? updated.lead?.companyName ?? '',
+    };
+  }
+
+  // Sales team notification (requirement #8) — reuses the existing
+  // Mailer/EmailTemplate/EmailHistory architecture exactly like every other
+  // email in this system, rather than introducing a separate in-app
+  // notification mechanism (none exists here today). Recipient resolution:
+  // prefer the Lead's own assigned salesperson (a real User with an email
+  // on file); otherwise fall back to looking up a User whose name matches
+  // whoever sent the quotation (quotation.sentBy is a plain display-name
+  // scalar, not a FK — same "no cross-module FK to Users" convention as
+  // SalesOrder.createdBy/Lead.assignedTo's own schema comments). If neither
+  // resolves to an email, MailerService.send() already handles a missing
+  // recipient gracefully (status FAILED, visible in Email History) rather
+  // than throwing — this never blocks the customer's Accept/Reject action.
+  private async notifyInternalOfDecision(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+    decision: 'ACCEPTED' | 'REJECTED',
+  ) {
+    let recipientEmail: string | undefined;
+    if (quotation.lead?.assignedToUserId) {
+      const assignee = await this.prisma.user.findUnique({ where: { id: quotation.lead.assignedToUserId } });
+      recipientEmail = assignee?.email ?? undefined;
+    }
+    if (!recipientEmail && quotation.sentBy) {
+      const sender = await this.prisma.user.findFirst({ where: { name: quotation.sentBy } });
+      recipientEmail = sender?.email ?? undefined;
+    }
+
+    const companyName = quotation.customer?.companyName ?? quotation.lead?.companyName ?? 'the customer';
+
+    await this.mailerService
+      .send({
+        templateKey: decision === 'ACCEPTED' ? 'QUOTATION_ACCEPTED_INTERNAL' : 'QUOTATION_REJECTED_INTERNAL',
+        fallbackSubject:
+          decision === 'ACCEPTED'
+            ? `Quotation ${quotation.quotationNumber} has been accepted`
+            : `Quotation ${quotation.quotationNumber} has been rejected`,
+        fallbackBodyHtml:
+          decision === 'ACCEPTED'
+            ? `<p>Quotation {{quotationNumber}} has been accepted by {{customerCompany}}.</p><p>Accepted by: {{acceptedByName}}</p>`
+            : `<p>Quotation {{quotationNumber}} has been rejected by {{customerCompany}}.</p><p>Reason: {{rejectionReason}}</p>`,
+        vars: {
+          quotationNumber: quotation.quotationNumber,
+          customerCompany: companyName,
+          acceptedByName: quotation.acceptedByName ?? '',
+          rejectionReason: quotation.rejectionReason ?? '',
+        },
+        to: recipientEmail,
+        link: { module: 'Quotation', quotationId: quotation.id },
+      })
+      .catch((error) => this.logger.error('Internal notification email failed', error));
   }
 
   async remove(id: string, actorName?: string) {
