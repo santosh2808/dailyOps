@@ -13,6 +13,7 @@ export interface ProductPayload {
   category: string;
   sku?: string;
   description?: string;
+  applicableTo?: string;
   price?: number;
   // Additive: Sales Automation price validation.
   standardPrice?: number;

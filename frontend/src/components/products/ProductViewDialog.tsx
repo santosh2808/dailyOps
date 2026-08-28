@@ -54,6 +54,7 @@ export default function ProductViewDialog({
           <Field label="Product Name" value={product.name} />
           <Field label="Category" value={<Badge variant="orange">{product.category}</Badge>} />
           <Field label="SKU / Model Code" value={product.sku} />
+          <Field label="Applicable To" value={product.applicableTo} />
           <Field label="Price" value={formatPrice(product.price)} />
           <Field
             label="Status"

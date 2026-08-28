@@ -103,6 +103,11 @@ interface FormState {
   sku: string;
   price: string;
   description: string;
+  // Free text noting which fan(s) a spare part (motor, drive, etc.) applies
+  // to — e.g. "HVLS SPYRO 14" or "All HVLS Fans". Optional, kept in the
+  // simple always-visible section since it's the main thing that
+  // distinguishes one spare part from another.
+  applicableTo: string;
   // Price Validation (requirement #8): Standard Price is what discount % is
   // measured against, Minimum Price is the hard floor a Quotation item may
   // never go below without an approval request, and Max Discount % is
@@ -121,6 +126,7 @@ const emptyForm: FormState = {
   sku: "",
   price: "",
   description: "",
+  applicableTo: "",
   standardPrice: "",
   minPrice: "",
   maxDiscountPercent: "",
@@ -153,6 +159,7 @@ export default function ProductFormDialog({
               sku: product.sku ?? "",
               price: product.price != null ? String(product.price) : "",
               description: product.description ?? "",
+              applicableTo: product.applicableTo ?? "",
               standardPrice: product.standardPrice != null ? String(product.standardPrice) : "",
               minPrice: product.minPrice != null ? String(product.minPrice) : "",
               maxDiscountPercent:
@@ -220,6 +227,7 @@ export default function ProductFormDialog({
         category: form.category.trim(),
         sku: form.sku.trim() || undefined,
         description: form.description.trim() || undefined,
+        applicableTo: form.applicableTo.trim() || undefined,
         price: form.price.trim() ? Number(form.price) : undefined,
         standardPrice: form.standardPrice.trim() ? Number(form.standardPrice) : undefined,
         minPrice: form.minPrice.trim() ? Number(form.minPrice) : undefined,
@@ -289,6 +297,20 @@ export default function ProductFormDialog({
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="applicableTo">Applicable To</Label>
+            <Input
+              id="applicableTo"
+              value={form.applicableTo}
+              onChange={(e) => setForm({ ...form, applicableTo: e.target.value })}
+              placeholder="e.g. HVLS SPYRO 14, All HVLS Fans"
+            />
+            <p className="text-xs text-muted-foreground">
+              For a spare part (motor, drive, etc.) sold on its own — which fan(s) it applies to.
+              Leave blank for a standalone product like a fan itself.
+            </p>
           </div>
 
           <div className="space-y-2">

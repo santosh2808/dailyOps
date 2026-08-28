@@ -160,6 +160,12 @@ model Product {
   category    String
   sku         String?
   description String?
+  // Additive: free text for a spare part (motor, drive, etc.) sold on its
+  // own — e.g. "HVLS SPYRO 14" or "All HVLS Fans" — so staff can note which
+  // fan(s) it's a replacement/compatible part for. Optional, not used for
+  // filtering/search; just displayed on the product and printed on the
+  // quotation for that line item.
+  applicableTo String?
   price       Float?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

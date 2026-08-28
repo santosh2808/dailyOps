@@ -69,6 +69,13 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
+  // Additive: free text for a spare part (motor, drive, etc.) sold on its
+  // own, noting which fan(s) it applies to — e.g. "HVLS SPYRO 14".
+  @ApiPropertyOptional({ example: 'HVLS SPYRO 14' })
+  @IsOptional()
+  @IsString()
+  applicableTo?: string;
+
   @ApiPropertyOptional({ example: 125000 })
   @IsOptional()
   @Type(() => Number)

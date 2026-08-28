@@ -153,6 +153,8 @@ export interface Product {
   category: string;
   sku?: string | null;
   description?: string | null;
+  // Additive: which fan(s) a spare part (motor, drive, etc.) applies to.
+  applicableTo?: string | null;
   price?: number | null;
   isActive: boolean;
   createdAt: string;

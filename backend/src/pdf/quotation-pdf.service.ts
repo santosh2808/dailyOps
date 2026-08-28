@@ -30,6 +30,7 @@ export interface QuotationPdfItem {
   product: {
     name: string;
     description?: string | null;
+    applicableTo?: string | null;
     technicalSpec?: unknown;
   };
 }
@@ -617,9 +618,11 @@ export class QuotationPdfService {
     if (!this.hasPopulatedSpec(item)) {
       // Simple line item (spare part sold on its own) — no fan spec sheet
       // to show, so skip straight to product/price/commercial-terms rows.
+      const applicableTo = item.product.applicableTo?.trim();
       return [
         { label: 'Product', value: item.product.name },
         { label: 'Description', value: dash(item.description ?? item.product.description ?? undefined) },
+        ...(applicableTo ? [{ label: 'Applicable To', value: applicableTo }] : []),
         { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
         { label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge },
         {
