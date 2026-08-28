@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -77,6 +77,18 @@ function buildTechnicalSpec(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+// Simple products (a standalone motor, a drive, a spare part) never need
+// pricing-rule/technical-spec fields — most products won't. So that section
+// stays collapsed by default and only auto-opens when editing a product that
+// already has something in it, so existing data is never hidden by surprise.
+function hasAdvancedData(p?: Product | null): boolean {
+  if (!p) return false;
+  if (p.standardPrice != null || p.minPrice != null || p.maxDiscountPercent != null) return true;
+  const spec = p.technicalSpec;
+  if (!spec) return false;
+  return Object.keys(spec).length > 0;
+}
+
 interface ProductFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -128,9 +140,11 @@ export default function ProductFormDialog({
   const [errors, setErrors] = useState<Partial<FormState>>({});
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setShowAdvanced(hasAdvancedData(product));
       setForm(
         product
           ? {
@@ -232,7 +246,7 @@ export default function ProductFormDialog({
           <DialogDescription>
             {isEdit
               ? "Update this product's details below."
-              : "Fill in the details to add a new product or offering."}
+              : "Name, category and price are all you need for a spare part like a motor or drive. Add pricing rules or fan spec sheets below only if this product needs them."}
           </DialogDescription>
         </DialogHeader>
 
@@ -289,6 +303,37 @@ export default function ProductFormDialog({
             {errors.price && <p className="text-xs text-destructive">{errors.price}</p>}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Optional details about this product or service"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="flex w-full items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            {showAdvanced ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            Pricing rules &amp; technical specifications (optional)
+          </button>
+          {!showAdvanced && (
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Only needed for fan quotations with an Annexure-I spec sheet, or products with
+              approval-matrix pricing rules. Skip this for spare parts.
+            </p>
+          )}
+
+          {showAdvanced && (
+          <>
           <div className="rounded-md border bg-slate-50 p-3">
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Price Validation (Quotation approval)
@@ -337,16 +382,6 @@ export default function ProductFormDialog({
               is fixed or an approval is requested. Standard Price is what the Approval Matrix
               measures discount % against; Max Discount % is shown for reference only.
             </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Optional details about this product or service"
-            />
           </div>
 
           <div className="rounded-md border bg-slate-50 p-3">
@@ -439,6 +474,8 @@ export default function ProductFormDialog({
               )}
             </div>
           </div>
+          </>
+          )}
 
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 

@@ -47,10 +47,12 @@ export interface QuotationActor {
 // forever; nothing renumbers them retroactively.
 const MAX_QUOTATION_NUMBER_ATTEMPTS = 5;
 const DEFAULT_GST_PERCENT = 18;
-// Installation is Rs.8,000 per fan, auto-computed from total item quantity
-// unless a quotation explicitly overrides installationCharge. Transportation
-// has no equivalent rate — it varies by site/distance — so it's never
-// auto-computed, only ever taken from what was supplied (defaulting to 0).
+// Installation is Rs.8,000 per fan, auto-computed from the quantity of
+// fan-type items only (products with a technical spec sheet) — spare parts
+// like a standalone motor/drive don't carry this default, unless a quotation
+// explicitly overrides installationCharge. Transportation has no equivalent
+// rate — it varies by site/distance — so it's never auto-computed, only ever
+// taken from what was supplied (defaulting to 0).
 const INSTALLATION_RATE_PER_FAN = 8000;
 
 // Customer Quotation Acceptance workflow — the secure public link is
@@ -1206,9 +1208,20 @@ export class QuotationsService {
     });
 
     const subtotal = Math.round(computedItems.reduce((sum, i) => sum + i.lineTotal, 0) * 100) / 100;
-    const totalQuantity = computedItems.reduce((sum, i) => sum + i.quantity, 0);
+    // Only fan-type items (products with an Annexure-I technical spec sheet
+    // filled in) count toward the auto-computed installation charge —
+    // spare parts sold alone (a replacement motor/drive) don't need fan
+    // erection labour, so they default to Rs.0 installation here. Staff can
+    // still type in a real installation/transportation figure per quotation
+    // (e.g. for a paid out-of-warranty spare-part visit) exactly as they
+    // already do for transportationCharge, which is never auto-computed.
+    const fanQuantity = computedItems.reduce((sum, i) => {
+      const spec = productMap.get(i.productId)?.technicalSpec as Record<string, unknown> | null;
+      const isFan = !!spec && Object.keys(spec).length > 0;
+      return isFan ? sum + i.quantity : sum;
+    }, 0);
     const effectiveInstallationCharge =
-      installationCharge ?? Math.round(INSTALLATION_RATE_PER_FAN * totalQuantity * 100) / 100;
+      installationCharge ?? Math.round(INSTALLATION_RATE_PER_FAN * fanQuantity * 100) / 100;
     const effectiveTransportationCharge = transportationCharge ?? 0;
     const effectiveGstPercent = gstPercent ?? DEFAULT_GST_PERCENT;
     // GST is charged on the full pre-tax total — fans + installation +

@@ -26,8 +26,10 @@ export interface QuotationPdfItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  description?: string | null;
   product: {
     name: string;
+    description?: string | null;
     technicalSpec?: unknown;
   };
 }
@@ -200,20 +202,26 @@ export class QuotationPdfService {
         this.drawTwoColRow(doc, row.label, row.value, contentLeft, contentWidth, ensureSpace);
       }
 
-      doc.moveDown(0.6);
-      ensureSpace(24);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Standard Scope of Supply Includes:', contentLeft, doc.y, { width: contentWidth });
-      doc.moveDown(0.3);
+      // Scope-of-supply is a fan-installation concept (hanging pipe, blades,
+      // etc.) — skip the whole section for a simple spare-part line item
+      // rather than printing a "(nothing configured)" placeholder for
+      // something that was never meant to apply.
+      if (this.hasPopulatedSpec(item)) {
+        doc.moveDown(0.6);
+        ensureSpace(24);
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Standard Scope of Supply Includes:', contentLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.3);
 
-      const scope = this.getTechnicalSpec(item)?.scopeOfSupply ?? [];
-      if (scope.length === 0) {
-        ensureSpace(16);
-        doc.font('Helvetica-Oblique').fontSize(9).fillColor('#64748b').text('(No scope-of-supply items configured for this product yet.)', contentLeft, doc.y, { width: contentWidth });
-        doc.moveDown(0.5);
-      } else {
-        this.drawTableHeaderRow(doc, ['Items', 'Quantity / Fan'], [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
-        for (const row of scope) {
-          this.drawTwoColDataRow(doc, row.item, row.quantityPerFan, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+        const scope = this.getTechnicalSpec(item)?.scopeOfSupply ?? [];
+        if (scope.length === 0) {
+          ensureSpace(16);
+          doc.font('Helvetica-Oblique').fontSize(9).fillColor('#64748b').text('(No scope-of-supply items configured for this product yet.)', contentLeft, doc.y, { width: contentWidth });
+          doc.moveDown(0.5);
+        } else {
+          this.drawTableHeaderRow(doc, ['Items', 'Quantity / Fan'], [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+          for (const row of scope) {
+            this.drawTwoColDataRow(doc, row.item, row.quantityPerFan, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+          }
         }
       }
       doc.moveDown(0.8);
@@ -407,6 +415,11 @@ export class QuotationPdfService {
   }
 
   private buildModelTitle(items: QuotationPdfItem[]): string {
+    // "HVLS ... MODEL" phrasing only makes sense once at least one item is
+    // an actual fan (has a filled-in technical spec). A quotation for a
+    // standalone spare part (e.g. a replacement motor) uses plain product
+    // names instead so the cover page doesn't call a motor a "fan model".
+    const anyFan = items.some((item) => this.hasPopulatedSpec(item));
     const labels = [
       ...new Set(
         items.map((item) => {
@@ -415,6 +428,10 @@ export class QuotationPdfService {
         }),
       ),
     ];
+    if (!anyFan) {
+      if (labels.length === 0) return 'SPARE PARTS';
+      return labels.join(' & ');
+    }
     if (labels.length === 0) return 'HVLS SPYRO FAN MODEL';
     if (labels.length === 1) return `HVLS ${labels[0]} MODEL`;
     return `HVLS ${labels.join(' & ')} MODELS`;
@@ -582,10 +599,40 @@ export class QuotationPdfService {
     return raw as ProductTechnicalSpec;
   }
 
+  // A product only has a technicalSpec blob once someone has filled in the
+  // fan-spec section in Add/Edit Product — spare parts (a standalone motor,
+  // drive, etc.) are deliberately left blank there. Without this gate every
+  // spare-part line item would render all 30 fan-spec rows as em-dashes,
+  // which looks broken rather than simply "not applicable".
+  private hasPopulatedSpec(item: QuotationPdfItem): boolean {
+    const spec = this.getTechnicalSpec(item);
+    return !!spec && Object.keys(spec).length > 0;
+  }
+
   private buildSpecRows(item: QuotationPdfItem, quotation: QuotationPdfInput): SpecRow[] {
     const spec = this.getTechnicalSpec(item) ?? {};
     const dash = (v?: string) => (v && v.trim() ? v.trim() : '—');
     const terms = this.resolveCommercialTerms(quotation);
+
+    if (!this.hasPopulatedSpec(item)) {
+      // Simple line item (spare part sold on its own) — no fan spec sheet
+      // to show, so skip straight to product/price/commercial-terms rows.
+      return [
+        { label: 'Product', value: item.product.name },
+        { label: 'Description', value: dash(item.description ?? item.product.description ?? undefined) },
+        { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
+        { label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge },
+        {
+          label: 'Transportation',
+          value:
+            quotation.transportationCharge > 0
+              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all items)`
+              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+        },
+        { label: `GST ${quotation.gstPercent}%`, value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
+        { label: 'Quantity', value: `${item.quantity} Nos.` },
+      ];
+    }
 
     return [
       { label: 'Manufacturer (Make)', value: COMPANY_NAME },
