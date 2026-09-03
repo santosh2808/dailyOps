@@ -94,10 +94,18 @@ export function nextActionFor(lead: Lead): NextAction {
       };
     case "QUALIFIED": {
       const latest = lead.quotations?.[0];
-      if (!latest) {
+      // Reopened lead (e.g. was Lost, moved back to Qualified to requote):
+      // the most recent quotation is REJECTED or EXPIRED and can't move
+      // forward on its own — treat it the same as "no quotation yet" so the
+      // rep can generate a fresh one instead of dead-ending at "View
+      // Quotation" on a stale record. The old quotation stays on file as
+      // history; this just stops it from blocking a new one.
+      if (!latest || latest.status === "REJECTED" || latest.status === "EXPIRED") {
         return {
           label: "Generate Quotation",
-          hint: "This lead is Qualified — generate a quotation from its linked products.",
+          hint: latest
+            ? `Quotation ${latest.quotationNumber} was ${latest.status === "REJECTED" ? "rejected" : "left unactioned and expired"} — generate a new one from this lead's current products.`
+            : "This lead is Qualified — generate a quotation from its linked products.",
         };
       }
       if (latest.status === "DRAFT" || latest.status === "READY") {
@@ -124,7 +132,10 @@ export function nextActionFor(lead: Lead): NextAction {
         ? { label: "Deal Won", hint: "This lead has been converted to a Customer." }
         : { label: "Convert to Customer", hint: "Convert this Won lead into a Customer record." };
     case "LOST":
-      return { label: "Lead Lost", hint: "No further action is needed on this lead." };
+      return {
+        label: "Lead Lost",
+        hint: "If the customer comes back, change the status to Qualified to requote them.",
+      };
     default:
       return { label: "", hint: "" };
   }
