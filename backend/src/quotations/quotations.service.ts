@@ -124,8 +124,11 @@ interface QuotationSentSnapshot {
   validUntil: string | null;
   customerName: string;
   customerCompany: string;
-  customer: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null } | null;
-  lead: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null } | null;
+  // state: added for GST split (CGST+SGST vs IGST) on the Quotation PDF —
+  // see QuotationPdfService.isIntraState(). Optional/nullable since older
+  // snapshots (written before this field existed) won't have it.
+  customer: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null; state?: string | null } | null;
+  lead: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null; state?: string | null } | null;
   items: {
     productName: string;
     productDescription?: string | null;
@@ -1042,6 +1045,7 @@ export class QuotationsService {
             contactPerson: quotation.customer.contactPerson,
             phone: quotation.customer.phone,
             email: quotation.customer.email,
+            state: quotation.customer.state,
           }
         : null,
       lead: quotation.lead
@@ -1050,6 +1054,7 @@ export class QuotationsService {
             contactPerson: quotation.lead.contactPerson,
             phone: quotation.lead.phone,
             email: quotation.lead.email,
+            state: quotation.lead.state,
           }
         : null,
       items: quotation.items.map((item) => ({

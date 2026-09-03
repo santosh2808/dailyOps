@@ -20,6 +20,14 @@ export interface QuotationPdfCustomerLike {
   contactPerson?: string | null;
   phone?: string | null;
   email?: string | null;
+  // Added for GST split (CGST+SGST vs IGST) on the Quotation Summary block
+  // and Annexure rows below — same intra/inter-state rule as the Tax
+  // Invoice PDF (see COMPANY_STATE there). Optional/nullable since older
+  // sentSnapshot rows (see QuotationsService.resolveOfferContent) and any
+  // customer/lead created before Customer.state/Lead.state existed won't
+  // have it; isIntraState() below treats a missing state as inter-state
+  // (shows a flat IGST line) rather than guessing.
+  state?: string | null;
 }
 
 export interface QuotationPdfItem {
@@ -114,6 +122,11 @@ const BORDER = '#94a3b8';
 const COMPANY_NAME = 'SMART ROTAMACH PRIVATE LIMITED';
 const COMPANY_ADDRESS = '# 6-2-982, 3rd Floor, GNR Arcade, Khairatabad, Hyderabad-500004, Telangana, India.';
 const COMPANY_CONTACT_LINE = 'Sales Ph: 9949465932; Email : info@spyrofan.com; www.spyrofan.com';
+// The company's own home state for GST purposes — same constant/rule as
+// TaxInvoicePdfService.COMPANY_STATE. A customer/lead in Telangana is an
+// intra-state supply (CGST + SGST, split evenly); anywhere else is
+// inter-state (a single IGST rate).
+const COMPANY_STATE = 'Telangana';
 
 // Identical boilerplate across every one of the customer's real quotations
 // (all 8 fan sizes) — company-wide warranty disclaimer, not per-product, so
@@ -252,11 +265,18 @@ export class QuotationPdfService {
       ensureSpace(90);
       doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Quotation Summary', contentLeft, doc.y, { width: contentWidth });
       doc.moveDown(0.3);
+      const isIntra = this.isIntraState(quotation);
+      const gstSummaryLines: [string, string][] = isIntra
+        ? [
+            [`CGST (${quotation.gstPercent / 2}%)`, this.formatCurrency(quotation.gstAmount / 2)],
+            [`SGST (${quotation.gstPercent / 2}%)`, this.formatCurrency(quotation.gstAmount / 2)],
+          ]
+        : [[`IGST (${quotation.gstPercent}%)`, this.formatCurrency(quotation.gstAmount)]];
       const summaryLines: [string, string][] = [
         ['Subtotal (Fans)', this.formatCurrency(quotation.subtotal)],
         ['Installation Charges', this.formatCurrency(quotation.installationCharge)],
         ['Transportation Charges', this.formatCurrency(quotation.transportationCharge)],
-        [`GST (${quotation.gstPercent}%)`, this.formatCurrency(quotation.gstAmount)],
+        ...gstSummaryLines,
         ['Grand Total', this.formatCurrency(quotation.grandTotal)],
       ];
       for (const [label, value] of summaryLines) {
@@ -276,7 +296,7 @@ export class QuotationPdfService {
     doc.moveDown(0.5);
 
     const terms = this.resolveCommercialTerms(quotation);
-    const commercialRows = this.buildCommercialTermsRows(terms, quotation.gstPercent);
+    const commercialRows = this.buildCommercialTermsRows(terms, quotation);
     commercialRows.forEach((term, index) => {
       const valueHeight = doc.heightOfString(term.value, { width: contentWidth - 200 });
       const height = Math.max(valueHeight, 12) + 6;
@@ -572,10 +592,13 @@ export class QuotationPdfService {
     return { ...DEFAULT_COMMERCIAL_TERMS, ...given };
   }
 
-  private buildCommercialTermsRows(terms: QuotationCommercialTerms, gstPercent: number): SpecRow[] {
+  private buildCommercialTermsRows(terms: QuotationCommercialTerms, quotation: QuotationPdfInput): SpecRow[] {
     const rows: SpecRow[] = [
       { label: 'Price', value: terms.priceBasis || DEFAULT_COMMERCIAL_TERMS.priceBasis },
-      { label: 'Taxes', value: `GST ${gstPercent}% ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}` },
+      {
+        label: 'Taxes',
+        value: `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
+      },
       { label: 'Transportation', value: terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation },
       { label: 'Packing & Forwarding', value: terms.packingForwarding || DEFAULT_COMMERCIAL_TERMS.packingForwarding },
       { label: 'Transport Insurance', value: terms.transportInsurance || DEFAULT_COMMERCIAL_TERMS.transportInsurance },
@@ -632,7 +655,7 @@ export class QuotationPdfService {
               ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all items)`
               : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
         },
-        { label: `GST ${quotation.gstPercent}%`, value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
+        { label: this.gstLabel(quotation), value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
       ];
     }
@@ -686,6 +709,23 @@ export class QuotationPdfService {
       { label: `GST ${quotation.gstPercent}%`, value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
       { label: 'Quantity', value: `${item.quantity} Nos.` },
     ];
+  }
+
+  // ---- GST split (CGST+SGST vs IGST) --------------------------------------
+
+  // Same intra/inter-state rule as TaxInvoicePdfService.isIntraState — a
+  // customer/lead based in Telangana (the company's own home state) is an
+  // intra-state supply, split evenly into CGST+SGST; anywhere else (or an
+  // unknown/blank state) renders as a single IGST line.
+  private isIntraState(quotation: QuotationPdfInput): boolean {
+    const state = quotation.customer?.state ?? quotation.lead?.state ?? null;
+    return (state ?? '').trim() === COMPANY_STATE;
+  }
+
+  private gstLabel(quotation: QuotationPdfInput): string {
+    return this.isIntraState(quotation)
+      ? `CGST ${quotation.gstPercent / 2}% + SGST ${quotation.gstPercent / 2}%`
+      : `IGST ${quotation.gstPercent}%`;
   }
 
   // ---- Small utilities ----------------------------------------------------

@@ -19,6 +19,11 @@ export interface ProformaInvoicePdfCustomer {
   contactPerson?: string | null;
   phone?: string | null;
   gstNumber?: string | null;
+  // Added for GST split (CGST+SGST vs IGST) on the summary block below —
+  // same intra/inter-state rule as the Tax Invoice / Quotation PDFs (see
+  // COMPANY_STATE). Optional/nullable — a missing state renders as a flat
+  // IGST line rather than guessing.
+  state?: string | null;
 }
 
 export interface ProformaInvoicePdfItem {
@@ -75,6 +80,9 @@ const COMPANY_GST = '36ABECS1637F1ZG';
 // with a different HSN code is ever added, this should move onto Product
 // itself instead of staying a global constant.
 const HSN_CODE_FANS = '84145990';
+// The company's own home state for GST purposes — same constant/rule as
+// TaxInvoicePdfService.COMPANY_STATE / QuotationPdfService.COMPANY_STATE.
+const COMPANY_STATE = 'Telangana';
 
 // Same banker details already used on the Quotation PDF's Annexure-II
 // (see quotation-pdf.service.ts) — duplicated rather than imported, per
@@ -214,9 +222,16 @@ export class ProformaInvoicePdfService {
     // fit on a single line.
     const receivable = Math.max(invoice.grandTotal - invoice.advanceReceived, 0);
     const summaryLabelWidth = widths[0] + widths[1] + widths[2] + widths[3];
+    const isIntra = this.isIntraState(invoice);
+    const gstSummaryRows: [string, string, boolean][] = isIntra
+      ? [
+          [`CGST ${invoice.taxPercent / 2}%`, this.formatNumber(invoice.tax / 2), false],
+          [`SGST ${invoice.taxPercent / 2}%`, this.formatNumber(invoice.tax / 2), false],
+        ]
+      : [[`IGST ${invoice.taxPercent}%`, this.formatNumber(invoice.tax), false]];
     const summaryRows: [string, string, boolean][] = [
       ['Total', this.formatNumber(invoice.subtotal), false],
-      [`GST ${invoice.taxPercent}%`, this.formatNumber(invoice.tax), false],
+      ...gstSummaryRows,
       ['Grand Total', this.formatNumber(invoice.grandTotal), false],
       ['Advance received', this.formatNumber(invoice.advanceReceived), true],
       ['Receivable', this.formatNumber(receivable), true],
@@ -392,6 +407,16 @@ export class ProformaInvoicePdfService {
     } catch (error) {
       this.logger.warn(`Could not embed image ${filePath}: ${error instanceof Error ? error.message : error}`);
     }
+  }
+
+  // ---- GST split (CGST+SGST vs IGST) --------------------------------------
+
+  // Same intra/inter-state rule as TaxInvoicePdfService/QuotationPdfService
+  // — a customer based in Telangana (the company's own home state) is an
+  // intra-state supply, split evenly into CGST+SGST; anywhere else (or an
+  // unknown/blank state) renders as a single IGST line.
+  private isIntraState(invoice: ProformaInvoicePdfInput): boolean {
+    return (invoice.customer.state ?? '').trim() === COMPANY_STATE;
   }
 
   // ---- Formatting ---------------------------------------------------------

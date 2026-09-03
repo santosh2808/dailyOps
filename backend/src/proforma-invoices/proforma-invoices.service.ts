@@ -287,6 +287,7 @@ export class ProformaInvoicesService {
         contactPerson: invoice.customer.contactPerson,
         phone: invoice.customer.phone,
         gstNumber: invoice.customer.gstNumber,
+        state: invoice.customer.state,
       },
       billingAddress: invoice.salesOrder.billingAddress,
       items: invoice.salesOrder.items.map((item) => ({
