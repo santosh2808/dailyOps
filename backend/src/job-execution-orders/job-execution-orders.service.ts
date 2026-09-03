@@ -328,7 +328,7 @@ export class JobExecutionOrdersService {
           await this.salesOrdersService.updateStatus(
             updated.salesOrderId,
             { status: 'READY_FOR_DISPATCH' },
-            actorName,
+            { name: actorName },
           );
         } catch (error) {
           this.logger.warn(

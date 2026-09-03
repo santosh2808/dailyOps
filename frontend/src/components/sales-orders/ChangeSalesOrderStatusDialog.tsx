@@ -14,32 +14,51 @@ import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { STATUS_OPTIONS } from "./salesOrderOptions";
-import type { SalesOrder, SalesOrderStatus } from "@/types";
+import { DISPATCH_OVERRIDE_APPROVERS, type SalesOrder, type SalesOrderStatus } from "@/types";
 
 interface ChangeSalesOrderStatusDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   salesOrder: SalesOrder | null;
-  onConfirm: (status: SalesOrderStatus, dispatchOverrideNote?: string) => Promise<void>;
+  // Current advance received on the active Proforma Invoice (0 if none) —
+  // passed in from SalesOrderDetails.tsx so the 50% threshold can be
+  // checked proactively instead of only reacting to a backend rejection.
+  advanceReceived: number;
+  // Whether the acting user holds the Administrator role — only an Admin
+  // may record a dispatch override (see SalesOrdersService.updateStatus()).
+  // This only drives which UI is shown; the backend enforces it for real.
+  isAdmin: boolean;
+  onConfirm: (
+    status: SalesOrderStatus,
+    dispatchOverrideNote?: string,
+    dispatchOverrideApprovedBy?: string,
+  ) => Promise<void>;
 }
 
-// Dispatch gate (advance-payment check): moving to READY_FOR_DISPATCH or
-// DISPATCHED is blocked server-side unless some advance has been recorded
-// against the linked Proforma Invoice (see SalesOrdersService.updateStatus()).
-// Rather than pre-fetching the advance amount just to decide whether to show
-// the override field, this dialog always offers it for these two statuses
-// and only relies on it if the plain status update is rejected — the
-// backend's error message explains exactly why.
+// Dispatch gate: moving to READY_FOR_DISPATCH or DISPATCHED is blocked
+// server-side unless at least 50% of the order total has been received as
+// advance against the linked Proforma Invoice (see
+// SalesOrdersService.updateStatus()). Below that, only an Administrator can
+// dispatch anyway, and only by recording that one of the two fixed named
+// approvers (Santosh Kumar Chegondi / Amarpal Gampa) authorized it.
 const DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ["READY_FOR_DISPATCH", "DISPATCHED"];
+const DISPATCH_ADVANCE_THRESHOLD_PERCENT = 50;
+
+function formatRupees(value: number) {
+  return `₹${value.toLocaleString("en-IN")}`;
+}
 
 export default function ChangeSalesOrderStatusDialog({
   open,
   onOpenChange,
   salesOrder,
+  advanceReceived,
+  isAdmin,
   onConfirm,
 }: ChangeSalesOrderStatusDialogProps) {
   const [status, setStatus] = useState<SalesOrderStatus>("DRAFT");
   const [overrideNote, setOverrideNote] = useState("");
+  const [overrideApprovedBy, setOverrideApprovedBy] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
@@ -48,26 +67,35 @@ export default function ChangeSalesOrderStatusDialog({
     if (open && salesOrder) {
       setStatus(salesOrder.status);
       setOverrideNote("");
+      setOverrideApprovedBy("");
       setError("");
       setBlocked(false);
     }
   }, [open, salesOrder]);
 
-  const showOverrideField = DISPATCH_GATE_STATUSES.includes(status);
+  const showDispatchGate = DISPATCH_GATE_STATUSES.includes(status);
+  const grandTotal = salesOrder?.grandTotal ?? 0;
+  const requiredAdvance = grandTotal > 0 ? (grandTotal * DISPATCH_ADVANCE_THRESHOLD_PERCENT) / 100 : 0;
+  const belowThreshold = showDispatchGate && advanceReceived < requiredAdvance;
+  const canSubmit = !belowThreshold || (isAdmin && !!overrideApprovedBy);
 
   async function handleConfirm() {
     setSubmitting(true);
     setError("");
     try {
-      await onConfirm(status, overrideNote.trim() || undefined);
+      await onConfirm(
+        status,
+        overrideNote.trim() || undefined,
+        belowThreshold ? overrideApprovedBy || undefined : undefined,
+      );
       onOpenChange(false);
     } catch (err: any) {
       const message =
         err?.response?.data?.message || "Could not update the sales order status. Please try again.";
       setError(message);
       // The advance-payment block is the one error worth reacting to in the
-      // UI (highlight the override note field); anything else is just shown.
-      setBlocked(showOverrideField);
+      // UI (highlight the override fields); anything else is just shown.
+      setBlocked(showDispatchGate);
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -106,23 +134,57 @@ export default function ChangeSalesOrderStatusDialog({
           </Select>
         </div>
 
-        {showOverrideField && (
-          <div className="mt-3 space-y-2">
-            <Label htmlFor="dispatch-override-note">
-              Dispatch override note {blocked ? "(required)" : "(only if advance isn't received yet)"}
-            </Label>
-            <Textarea
-              id="dispatch-override-note"
-              placeholder="e.g. Customer confirmed payment on delivery — dispatching without advance per Sales Manager approval."
-              value={overrideNote}
-              onChange={(e) => setOverrideNote(e.target.value)}
-            />
+        {belowThreshold && !isAdmin && (
+          <div className="mt-3 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <p className="text-sm font-medium text-destructive">
+              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
+              {DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
+            </p>
             <p className="text-xs text-muted-foreground">
-              This order can only move to {status === "DISPATCHED" ? "Dispatched" : "Ready for Dispatch"}{" "}
-              once an advance payment is recorded on its Proforma Invoice. Leave this blank if the
-              advance has already been received — it's only needed to override the block.
+              Only an Administrator can dispatch this order below the threshold, and only with
+              authorization from Santosh Kumar Chegondi or Amarpal Gampa.
             </p>
           </div>
+        )}
+
+        {belowThreshold && isAdmin && (
+          <div className="mt-3 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-900">
+              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
+              {DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="dispatch-override-approved-by">Approved By (required)</Label>
+              <Select
+                id="dispatch-override-approved-by"
+                value={overrideApprovedBy}
+                onChange={(e) => setOverrideApprovedBy(e.target.value)}
+              >
+                <option value="">Select...</option>
+                {DISPATCH_OVERRIDE_APPROVERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dispatch-override-note">Note (optional)</Label>
+              <Textarea
+                id="dispatch-override-note"
+                placeholder="e.g. Customer confirmed payment on delivery — dispatching per approval."
+                value={overrideNote}
+                onChange={(e) => setOverrideNote(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {blocked && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Leave the note blank if the advance has already been recorded — it's only needed alongside
+            an approver when overriding the block.
+          </p>
         )}
 
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
@@ -136,7 +198,7 @@ export default function ChangeSalesOrderStatusDialog({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting}>
+          <Button type="button" onClick={handleConfirm} disabled={submitting || !canSubmit}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Updating..." : "Update Status"}
           </Button>

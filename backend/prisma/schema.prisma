@@ -631,6 +631,14 @@ model SalesOrder {
   dispatchOverrideNote String?
   dispatchOverrideBy    String?
   dispatchOverrideAt    DateTime?
+  // Which of the two fixed named approvers (Santosh Kumar Chegondi /
+  // Amarpal Gampa — see SalesOrdersService.DISPATCH_OVERRIDE_APPROVERS)
+  // authorized this override. Neither is a real User account in this
+  // system, so this is a plain scalar validated against a fixed allow-list
+  // at the DTO layer, not a User relation. Reset to null alongside the
+  // other dispatchOverride* fields whenever a dispatch transition succeeds
+  // without needing an override.
+  dispatchOverrideApprovedBy String?
 
   // Back-relations required by Prisma for ProformaInvoice.salesOrder and
   // JobExecutionOrder.salesOrder. Additive only — no existing SalesOrder

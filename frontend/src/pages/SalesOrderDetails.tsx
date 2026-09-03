@@ -25,6 +25,7 @@ import GenerateTaxInvoiceDialog from "@/components/tax-invoices/GenerateTaxInvoi
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/context/AuthContext";
 import { statusLabel } from "@/components/sales-orders/salesOrderOptions";
 import {
   deleteSalesOrder,
@@ -72,6 +73,8 @@ function formatDate(value?: string | null) {
 export default function SalesOrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = !!user?.roles?.includes("Administrator");
 
   const [salesOrder, setSalesOrder] = useState<SalesOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,9 +206,13 @@ export default function SalesOrderDetails() {
     navigate(`/tax-invoices/${created.id}`);
   }
 
-  async function handleStatusConfirm(status: SalesOrderStatus, dispatchOverrideNote?: string) {
+  async function handleStatusConfirm(
+    status: SalesOrderStatus,
+    dispatchOverrideNote?: string,
+    dispatchOverrideApprovedBy?: string,
+  ) {
     if (!id) return;
-    await updateSalesOrderStatus(id, status, dispatchOverrideNote);
+    await updateSalesOrderStatus(id, status, dispatchOverrideNote, dispatchOverrideApprovedBy);
     toast.success(`Sales Order status updated to ${statusLabel(status)}.`);
     await fetchSalesOrder();
   }
@@ -338,6 +345,9 @@ export default function SalesOrderDetails() {
                     value={activeInvoice ? formatCurrency(activeInvoice.advanceReceived) : null}
                   />
                   <Field label="Created By" value={salesOrder.createdBy} />
+                  {salesOrder.dispatchOverrideApprovedBy && (
+                    <Field label="Dispatch Approved By" value={salesOrder.dispatchOverrideApprovedBy} />
+                  )}
                   {salesOrder.dispatchOverrideNote && (
                     <div className="col-span-2 sm:col-span-4">
                       <Field label="Dispatch Override Note" value={salesOrder.dispatchOverrideNote} />
@@ -440,6 +450,8 @@ export default function SalesOrderDetails() {
         open={statusOpen}
         onOpenChange={setStatusOpen}
         salesOrder={salesOrder}
+        advanceReceived={activeInvoice?.advanceReceived ?? 0}
+        isAdmin={isAdmin}
         onConfirm={handleStatusConfirm}
       />
       <DeleteSalesOrderConfirmDialog

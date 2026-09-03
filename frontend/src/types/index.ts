@@ -651,6 +651,12 @@ export interface SalesOrderItem {
   product?: Product;
 }
 
+// The two fixed people who may authorize dispatching an order below the
+// 50% advance threshold — mirrors backend SalesOrdersService's
+// DISPATCH_OVERRIDE_APPROVERS. Neither is a real login account.
+export const DISPATCH_OVERRIDE_APPROVERS = ["Santosh Kumar Chegondi", "Amarpal Gampa"] as const;
+export type DispatchOverrideApprover = (typeof DISPATCH_OVERRIDE_APPROVERS)[number];
+
 export interface SalesOrder {
   id: string;
   salesOrderNumber: string;
@@ -682,6 +688,7 @@ export interface SalesOrder {
   // DISPATCHED status change. Null on every normal transition.
   dispatchOverrideNote?: string | null;
   dispatchOverrideBy?: string | null;
+  dispatchOverrideApprovedBy?: string | null;
   dispatchOverrideAt?: string | null;
 }
 

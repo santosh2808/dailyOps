@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,11 +15,26 @@ import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
+import { DISPATCH_OVERRIDE_APPROVERS } from './dispatch-override-approvers';
 
 const SALES_ORDER_NUMBER_PREFIX = 'SO-';
 const SALES_ORDER_NUMBER_PAD = 6;
 const MAX_SALES_ORDER_NUMBER_ATTEMPTS = 5;
 const DEFAULT_GST_PERCENT = 18;
+
+// Passed by the controller from the JWT payload (req.user) — never trusted
+// from the request body. `roles` drives the dispatch-override Administrator
+// check below; `name` is the existing actor-display-name convention used
+// everywhere else in this codebase. Same shape/convention as Quotations'
+// QuotationActor.
+export interface SalesOrderActor {
+  name?: string;
+  roles?: string[];
+}
+
+// See dispatch-override-approvers.ts for DISPATCH_OVERRIDE_APPROVERS
+// (imported below) — split into its own file to avoid a circular import
+// with UpdateSalesOrderStatusDto's @IsIn() validator.
 
 // Whitelisted so `sortBy` from the query string can never be used to sort by
 // an arbitrary/unindexed or sensitive column.
@@ -396,19 +412,27 @@ export class SalesOrdersService {
   }
 
   // Dispatch gate (advance-payment check): a Sales Order cannot move to
-  // READY_FOR_DISPATCH or DISPATCHED unless some advance amount has been
-  // recorded against it (via its Proforma Invoice's advanceReceived — see
-  // ProformaInvoicesService.updateAdvance()), unless the caller supplies a
-  // mandatory dispatchOverrideNote. Any amount greater than zero counts —
-  // this deliberately does not enforce the full advancePercentage%, per
-  // the simpler "any advance received" rule chosen for this feature.
+  // READY_FOR_DISPATCH or DISPATCHED unless at least 50% of the order's
+  // grandTotal has been received as advance (via its Proforma Invoice's
+  // advanceReceived — see ProformaInvoicesService.updateAdvance()).
+  // Below that threshold, dispatch can still proceed, but only if BOTH:
+  //   (a) the caller selects one of the two fixed DISPATCH_OVERRIDE_APPROVERS
+  //       (Santosh Kumar Chegondi / Amarpal Gampa — either one is enough),
+  //       recorded in dispatchOverrideApprovedBy; and
+  //   (b) the acting user holds the Administrator role — the same
+  //       `actor.roles.includes('Administrator')` idiom used by
+  //       QuotationsService's approval-decision gate. A non-admin can never
+  //       self-override, even if they happen to know one of the two names.
   private readonly DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ['READY_FOR_DISPATCH', 'DISPATCHED'];
+  private static readonly DISPATCH_ADVANCE_THRESHOLD_PERCENT = 50;
 
-  async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actorName?: string) {
+  async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actor: SalesOrderActor = {}) {
+    const actorName = actor.name;
     const existing = await this.findOne(id);
 
     let dispatchOverrideNote: string | null = null;
     let dispatchOverrideBy: string | null = null;
+    let dispatchOverrideApprovedBy: string | null = null;
     let dispatchOverrideAt: Date | null = null;
 
     if (this.DISPATCH_GATE_STATUSES.includes(dto.status)) {
@@ -418,20 +442,39 @@ export class SalesOrdersService {
         select: { advanceReceived: true },
       });
       const advanceReceived = activeInvoice?.advanceReceived ?? 0;
+      // grandTotal <= 0 is a degenerate order with nothing to collect
+      // against — treat the threshold as already met rather than making it
+      // impossible to ever satisfy.
+      const requiredAdvance =
+        existing.grandTotal > 0
+          ? (existing.grandTotal * SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT) / 100
+          : 0;
 
-      if (advanceReceived <= 0) {
-        const note = dto.dispatchOverrideNote?.trim();
-        if (!note) {
+      if (advanceReceived < requiredAdvance) {
+        const approvedBy = dto.dispatchOverrideApprovedBy?.trim();
+        if (!approvedBy) {
           throw new BadRequestException(
-            'Advance payment has not been received for this order — it cannot be marked Ready for Dispatch / Dispatched. Record the advance payment on the Proforma Invoice first, or provide an override note to proceed anyway.',
+            `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be marked Ready for Dispatch / Dispatched. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a dispatch override.`,
           );
         }
-        dispatchOverrideNote = note;
+        if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
+          throw new BadRequestException(
+            `"${approvedBy}" is not a recognized dispatch-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize dispatching below the ${SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT}% advance threshold.`,
+          );
+        }
+        if (!(actor.roles ?? []).includes('Administrator')) {
+          throw new ForbiddenException(
+            'Only an Administrator can record a dispatch override for advance payment below the required threshold.',
+          );
+        }
+        dispatchOverrideNote = dto.dispatchOverrideNote?.trim() || null;
+        dispatchOverrideApprovedBy = approvedBy;
         dispatchOverrideBy = actorName ?? null;
         dispatchOverrideAt = new Date();
       }
-      // advanceReceived > 0: proceed normally, and clear out any earlier
-      // override note — it no longer reflects the current situation.
+      // advanceReceived >= requiredAdvance: proceed normally, and clear out
+      // any earlier override fields — they no longer reflect the current
+      // situation.
     }
 
     const updated = await this.prisma.salesOrder.update({
@@ -439,7 +482,7 @@ export class SalesOrdersService {
       data: {
         status: dto.status,
         ...(this.DISPATCH_GATE_STATUSES.includes(dto.status)
-          ? { dispatchOverrideNote, dispatchOverrideBy, dispatchOverrideAt }
+          ? { dispatchOverrideNote, dispatchOverrideBy, dispatchOverrideApprovedBy, dispatchOverrideAt }
           : {}),
       },
       include: SALES_ORDER_DETAIL_INCLUDE,
