@@ -1,12 +1,14 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
+import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
 import { UpdateProformaInvoiceAdvanceDto } from './dto/update-proforma-invoice-advance.dto';
+import { SendProformaInvoiceDto } from './dto/send-proforma-invoice.dto';
 import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
 
 const INVOICE_NUMBER_PREFIX = 'PI-';
@@ -207,6 +209,49 @@ export class ProformaInvoicesService {
     return this.create({ salesOrderId }, actorName);
   }
 
+  // Bug-fix requirement: edit a Proforma Invoice's printed details even
+  // after it's already been sent — sendInvoice() below has never blocked
+  // resending, so "edit, then Resend to Customer" is the intended
+  // fix-a-mistake flow. No status guard here, same as
+  // QuotationsService.update() / TaxInvoicesService.update().
+  async update(id: string, dto: UpdateProformaInvoiceDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.proformaInvoice.update({
+      where: { id },
+      data: {
+        ...(dto.invoiceDate !== undefined ? { invoiceDate: new Date(dto.invoiceDate) } : {}),
+        ...(dto.validUntil !== undefined ? { validUntil: dto.validUntil ? new Date(dto.validUntil) : null } : {}),
+        ...(dto.paymentTerms !== undefined ? { paymentTerms: dto.paymentTerms } : {}),
+        ...(dto.bankName !== undefined ? { bankName: dto.bankName } : {}),
+        ...(dto.accountNumber !== undefined ? { accountNumber: dto.accountNumber } : {}),
+        ...(dto.ifscCode !== undefined ? { ifscCode: dto.ifscCode } : {}),
+        ...(dto.branch !== undefined ? { branch: dto.branch } : {}),
+        ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      },
+      include: PROFORMA_INVOICE_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'ProformaInvoice',
+        recordId: id,
+        action: 'Edited',
+        actorName,
+        oldValue: {
+          invoiceDate: existing.invoiceDate,
+          validUntil: existing.validUntil,
+          paymentTerms: existing.paymentTerms,
+          bankName: existing.bankName,
+          accountNumber: existing.accountNumber,
+          ifscCode: existing.ifscCode,
+          branch: existing.branch,
+          notes: existing.notes,
+        },
+        newValue: { ...dto },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
   async updateStatus(id: string, dto: UpdateProformaInvoiceStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
     const updated = await this.prisma.proformaInvoice.update({
@@ -311,34 +356,88 @@ export class ProformaInvoicesService {
     };
   }
 
+  // Best-effort auto-send at generation time (requirement #12) — errors are
+  // swallowed/logged rather than failing create() itself, same as JEO's
+  // sendFactoryNotificationEmail(). For the explicit on-demand resend, see
+  // the public sendInvoice() below, which shares this same email payload
+  // but lets errors propagate (an explicit user action should surface a
+  // failure, not silently swallow it).
   private async sendInvoiceEmail(
     invoice: Prisma.ProformaInvoiceGetPayload<{ include: typeof PROFORMA_INVOICE_DETAIL_INCLUDE }>,
     actorName?: string,
   ) {
     try {
-      const pdf = await this.proformaInvoicePdfService.render(this.toPdfInput(invoice));
-
-      await this.mailerService.send({
-        templateKey: 'PROFORMA_INVOICE',
-        fallbackSubject: `Proforma Invoice ${invoice.invoiceNumber}`,
-        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached Proforma Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p>`,
-        vars: {
-          customerName: invoice.customer.contactPerson,
-          invoiceNumber: invoice.invoiceNumber,
-          salesOrderNumber: invoice.salesOrder.salesOrderNumber,
-          grandTotal: invoice.grandTotal.toFixed(2),
-        },
-        to: invoice.customer.email,
-        // "CC Finance" (requirement #12) — env-configurable so this isn't a
-        // hardcoded address; unset simply means no CC is added.
-        cc: process.env.FINANCE_TEAM_EMAIL || undefined,
-        attachments: [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdf }],
-        actorName,
-        link: { module: 'ProformaInvoice', proformaInvoiceId: invoice.id },
-      });
+      await this.mailerService.send(await this.buildInvoiceEmailPayload(invoice, actorName));
     } catch (error) {
       this.logger.error(`Proforma Invoice email failed for ${invoice.id}`, error);
     }
+  }
+
+  private async buildInvoiceEmailPayload(
+    invoice: Prisma.ProformaInvoiceGetPayload<{ include: typeof PROFORMA_INVOICE_DETAIL_INCLUDE }>,
+    actorName?: string,
+    overrides?: { to?: string; cc?: string },
+  ) {
+    const pdf = await this.proformaInvoicePdfService.render(this.toPdfInput(invoice));
+    return {
+      templateKey: 'PROFORMA_INVOICE',
+      fallbackSubject: `Proforma Invoice ${invoice.invoiceNumber}`,
+      fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Please find attached Proforma Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p>`,
+      vars: {
+        customerName: invoice.customer.contactPerson,
+        invoiceNumber: invoice.invoiceNumber,
+        salesOrderNumber: invoice.salesOrder.salesOrderNumber,
+        grandTotal: invoice.grandTotal.toFixed(2),
+      },
+      to: overrides?.to ?? invoice.customer.email,
+      // "CC Finance" (requirement #12) — env-configurable so this isn't a
+      // hardcoded address; unset simply means no CC is added.
+      cc: overrides?.cc ?? (process.env.FINANCE_TEAM_EMAIL || undefined),
+      attachments: [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdf }],
+      actorName,
+      link: { module: 'ProformaInvoice', proformaInvoiceId: invoice.id },
+    };
+  }
+
+  // Bug-fix requirement: explicit, on-demand (re)send — the only send
+  // mechanism before this was the private auto-fire inside create(), so a
+  // mistake on the first send (wrong recipient, stale details before an
+  // edit) had no in-app fix. Mirrors TaxInvoicesService.sendInvoice()
+  // exactly: only CANCELLED blocks it, lets the sender override
+  // recipient/CC for this send only, and — unlike the best-effort
+  // create()-time send — propagates a failure instead of swallowing it,
+  // since this is an explicit user action.
+  async sendInvoice(id: string, dto: SendProformaInvoiceDto, actorName?: string) {
+    const invoice = await this.findOne(id);
+    if (invoice.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Proforma Invoice cannot be sent');
+    }
+
+    const to = dto.recipientEmail?.trim() || invoice.customer.email || undefined;
+    const result = await this.mailerService.send(
+      await this.buildInvoiceEmailPayload(invoice, actorName, { to, cc: dto.ccEmails }),
+    );
+
+    const updated = await this.prisma.proformaInvoice.update({
+      where: { id },
+      // Only ever advances DRAFT -> SENT; a resend while already SENT/
+      // EXPIRED leaves status untouched — resending isn't itself a status
+      // transition, same as TaxInvoice's status only ever moving once.
+      data: invoice.status === 'DRAFT' ? { status: 'SENT' } : {},
+      include: PROFORMA_INVOICE_DETAIL_INCLUDE,
+    });
+
+    await this.auditLogService
+      .record({
+        module: 'ProformaInvoice',
+        recordId: id,
+        action: 'Sent Email',
+        actorName,
+        newValue: { to, emailStatus: result.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    return { ...updated, emailStatus: result.status };
   }
 
   private async generateInvoiceNumber(): Promise<string> {

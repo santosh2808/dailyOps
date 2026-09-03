@@ -7,8 +7,10 @@ import { StateSeriesCodesService } from '../state-series-codes/state-series-code
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
+import { UpdateJeoDto } from './dto/update-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
 import { UpdateProductionChecklistDto } from './dto/update-production-checklist.dto';
+import { SendJeoDto } from './dto/send-jeo.dto';
 import { QueryJeoDto } from './dto/query-jeo.dto';
 
 const JEO_NUMBER_PREFIX = 'JEO-';
@@ -284,6 +286,46 @@ export class JobExecutionOrdersService {
     return this.create({ salesOrderId, priority: 'MEDIUM' });
   }
 
+  // Bug-fix requirement: edit a JEO's details even after the factory
+  // notification has already gone out — pair with sendFactoryNotification()
+  // below (edit, then resend) as the intended fix-a-mistake flow. Only the
+  // fields the manual "Generate JEO" dialog itself collects are editable;
+  // salesOrderId and everything copied from it stay fixed. No status guard,
+  // same as QuotationsService.update().
+  async update(id: string, dto: UpdateJeoDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.jobExecutionOrder.update({
+      where: { id },
+      data: {
+        ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+        ...(dto.assignedTo !== undefined ? { assignedTo: dto.assignedTo } : {}),
+        ...(dto.remarks !== undefined ? { remarks: dto.remarks } : {}),
+        ...(dto.pipeLength !== undefined ? { pipeLength: dto.pipeLength.trim() || null } : {}),
+        ...(dto.hangingStructureType !== undefined ? { hangingStructureType: dto.hangingStructureType } : {}),
+        ...(dto.color !== undefined ? { color: dto.color.trim() || 'Aluminium' } : {}),
+      },
+      include: JEO_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'JEO',
+        recordId: id,
+        action: 'Edited',
+        actorName,
+        oldValue: {
+          priority: existing.priority,
+          assignedTo: existing.assignedTo,
+          remarks: existing.remarks,
+          pipeLength: existing.pipeLength,
+          hangingStructureType: existing.hangingStructureType,
+          color: existing.color,
+        },
+        newValue: { ...dto },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
   async updateStatus(id: string, dto: UpdateJeoStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
     const updated = await this.prisma.jobExecutionOrder.update({
@@ -380,36 +422,76 @@ export class JobExecutionOrdersService {
     };
   }
 
+  // Best-effort auto-send at generation time — errors are swallowed/logged
+  // rather than failing create() itself. For the explicit on-demand resend,
+  // see the public sendFactoryNotification() below, which shares this same
+  // email payload but lets errors propagate (an explicit user action should
+  // surface a failure, not silently swallow it).
   private async sendFactoryNotificationEmail(
     jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
     actorName?: string,
   ) {
     try {
-      const pdf = await this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+      await this.mailerService.send(await this.buildFactoryNotificationPayload(jeo, actorName));
+    } catch (error) {
+      this.logger.error(`Factory notification email failed for JEO ${jeo.id}`, error);
+    }
+  }
 
+  private async buildFactoryNotificationPayload(
+    jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
+    actorName?: string,
+    overrides?: { to?: string; cc?: string },
+  ) {
+    const pdf = await this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+    return {
+      templateKey: 'JEO_NOTIFICATION',
+      fallbackSubject: `New Job Execution Order ${jeo.jeoNumber}`,
+      fallbackBodyHtml: `<p>A new Job Execution Order {{jeoNumber}} has been generated for Sales Order {{salesOrderNumber}} (Customer: {{customerName}}). Priority: {{priority}}.</p>`,
+      vars: {
+        jeoNumber: jeo.jeoNumber,
+        salesOrderNumber: jeo.salesOrder.salesOrderNumber,
+        customerName: jeo.customer.companyName,
+        priority: jeo.priority,
+      },
       // "Notify Factory" — env-configurable Production Team recipient
       // (there's no per-user Production distribution list modeled yet), so
       // this is never a hardcoded address; unset simply skips the send
       // (logged as FAILED "no recipient" in EmailHistory, exactly like any
       // other missing-recipient case).
-      await this.mailerService.send({
-        templateKey: 'JEO_NOTIFICATION',
-        fallbackSubject: `New Job Execution Order ${jeo.jeoNumber}`,
-        fallbackBodyHtml: `<p>A new Job Execution Order {{jeoNumber}} has been generated for Sales Order {{salesOrderNumber}} (Customer: {{customerName}}). Priority: {{priority}}.</p>`,
-        vars: {
-          jeoNumber: jeo.jeoNumber,
-          salesOrderNumber: jeo.salesOrder.salesOrderNumber,
-          customerName: jeo.customer.companyName,
-          priority: jeo.priority,
-        },
-        to: process.env.FACTORY_NOTIFICATION_EMAIL,
-        attachments: [{ filename: `${jeo.jeoNumber}.pdf`, content: pdf }],
+      to: overrides?.to ?? process.env.FACTORY_NOTIFICATION_EMAIL,
+      cc: overrides?.cc,
+      attachments: [{ filename: `${jeo.jeoNumber}.pdf`, content: pdf }],
+      actorName,
+      link: { module: 'JEO', jobExecutionOrderId: jeo.id },
+    };
+  }
+
+  // Bug-fix requirement: explicit, on-demand (re)send of the factory
+  // notification — the only send mechanism before this was the private
+  // auto-fire inside create(), so a mistake on the first send (wrong
+  // FACTORY_NOTIFICATION_EMAIL, or details corrected via update() above)
+  // had no in-app fix. JeoStatus has no CANCELLED/terminal state, so
+  // there's nothing to guard against — always resendable, mirroring
+  // TaxInvoice/ProformaInvoice's sendInvoice() shape otherwise.
+  async sendFactoryNotification(id: string, dto: SendJeoDto, actorName?: string) {
+    const jeo = await this.findOne(id);
+    const to = dto.recipientEmail?.trim() || process.env.FACTORY_NOTIFICATION_EMAIL || undefined;
+    const result = await this.mailerService.send(
+      await this.buildFactoryNotificationPayload(jeo, actorName, { to, cc: dto.ccEmails }),
+    );
+
+    await this.auditLogService
+      .record({
+        module: 'JEO',
+        recordId: id,
+        action: 'Sent Email',
         actorName,
-        link: { module: 'JEO', jobExecutionOrderId: jeo.id },
-      });
-    } catch (error) {
-      this.logger.error(`Factory notification email failed for JEO ${jeo.id}`, error);
-    }
+        newValue: { to, emailStatus: result.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    return { ...jeo, emailStatus: result.status };
   }
 
   // Production Dashboard: six status counts (across ALL JEOs, including

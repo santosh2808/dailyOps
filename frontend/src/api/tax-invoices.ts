@@ -50,6 +50,16 @@ export async function updateTaxInvoiceStatus(id: string, status: TaxInvoiceStatu
   return res.data;
 }
 
+export type UpdateTaxInvoicePayload = Partial<Omit<TaxInvoicePayload, "salesOrderId">>;
+
+// Bug fix: edit a Tax Invoice's printed details even after it's already
+// been sent — pair with sendTaxInvoice() below (edit, then Resend) as the
+// intended fix-a-mistake flow.
+export async function updateTaxInvoice(id: string, payload: UpdateTaxInvoicePayload) {
+  const res = await api.patch<TaxInvoice>(`/api/v1/tax-invoices/${id}`, payload);
+  return res.data;
+}
+
 export interface SendTaxInvoicePayload {
   recipientEmail?: string;
   ccEmails?: string;

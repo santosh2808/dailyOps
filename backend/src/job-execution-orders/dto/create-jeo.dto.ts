@@ -23,8 +23,8 @@ export class CreateJeoDto {
   remarks?: string;
 
   // Scope of Work — see the JobExecutionOrder.pipeLength/hangingStructureType/
-  // color schema comments. All optional/site-specific, collected once here
-  // at generation time (no edit endpoint exists for a JEO afterward).
+  // color schema comments. All optional/site-specific, collected here at
+  // generation time; also editable afterward via UpdateJeoDto.
   @ApiPropertyOptional({ example: '12 ft', description: 'Pipe length used to hang the fan at site' })
   @IsOptional()
   @IsString()

@@ -49,8 +49,35 @@ export async function createProformaInvoice(payload: ProformaInvoicePayload) {
   return res.data;
 }
 
+export type UpdateProformaInvoicePayload = Partial<Omit<ProformaInvoicePayload, "salesOrderId" | "advanceReceived">>;
+
+// Bug fix: edit a Proforma Invoice's printed details even after it's
+// already been sent — pair with sendProformaInvoice() below (edit, then
+// Resend) as the intended fix-a-mistake flow.
+export async function updateProformaInvoice(id: string, payload: UpdateProformaInvoicePayload) {
+  const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}`, payload);
+  return res.data;
+}
+
 export async function updateProformaInvoiceStatus(id: string, status: ProformaInvoiceStatus) {
   const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/status`, { status });
+  return res.data;
+}
+
+export interface SendProformaInvoicePayload {
+  recipientEmail?: string;
+  ccEmails?: string;
+}
+
+export interface SendProformaInvoiceResult extends ProformaInvoice {
+  emailStatus: "SENT" | "SIMULATED" | "FAILED";
+}
+
+// Bug fix: explicit, on-demand (re)send — previously the only send was an
+// automatic, non-repeatable one at generation time. Mirrors
+// sendTaxInvoice()'s review-then-send shape.
+export async function sendProformaInvoice(id: string, payload: SendProformaInvoicePayload) {
+  const res = await api.post<SendProformaInvoiceResult>(`/api/v1/proforma-invoices/${id}/send`, payload);
   return res.data;
 }
 

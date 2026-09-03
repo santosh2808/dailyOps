@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Download, ExternalLink, QrCode, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ExternalLink, Pencil, QrCode, RefreshCw, Send } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
+import EditTaxInvoiceDialog from "@/components/tax-invoices/EditTaxInvoiceDialog";
 import EInvoiceDetailsDialog from "@/components/tax-invoices/EInvoiceDetailsDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
@@ -52,6 +53,7 @@ export default function TaxInvoiceDetails() {
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [einvoiceOpen, setEinvoiceOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
@@ -125,6 +127,10 @@ export default function TaxInvoiceDetails() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -318,6 +324,13 @@ export default function TaxInvoiceDetails() {
               .finally(() => setEmailHistoryLoading(false));
           }
         }}
+      />
+
+      <EditTaxInvoiceDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        invoice={invoice}
+        onSaved={setInvoice}
       />
 
       <EInvoiceDetailsDialog

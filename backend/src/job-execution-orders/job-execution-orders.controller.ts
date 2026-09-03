@@ -6,8 +6,10 @@ import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
 import { JobExecutionOrdersService } from './job-execution-orders.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
+import { UpdateJeoDto } from './dto/update-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
 import { UpdateProductionChecklistDto } from './dto/update-production-checklist.dto';
+import { SendJeoDto } from './dto/send-jeo.dto';
 import { QueryJeoDto } from './dto/query-jeo.dto';
 
 @ApiTags('job-execution-orders')
@@ -56,10 +58,30 @@ export class JobExecutionOrdersController {
     return this.jobExecutionOrdersService.create(dto, req.user?.name);
   }
 
+  // Edit a JEO's own fields (priority/assignedTo/remarks/Scope of Work) —
+  // added as a bug fix; this module previously had no edit endpoint at
+  // all. Uses the existing JEO:Update permission (there is no separate
+  // JEO:Edit permission seeded) — same permission the status/checklist
+  // routes below already require.
+  @Patch(':id')
+  @RequirePermission('JEO', 'Update')
+  update(@Param('id') id: string, @Body() dto: UpdateJeoDto, @Req() req: any) {
+    return this.jobExecutionOrdersService.update(id, dto, req.user?.name);
+  }
+
   @Patch(':id/status')
   @RequirePermission('JEO', 'Update')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateJeoStatusDto, @Req() req: any) {
     return this.jobExecutionOrdersService.updateStatus(id, dto, req.user?.name);
+  }
+
+  // Explicit (re)send of the factory notification email — added as a bug
+  // fix alongside update() above; previously the only send was an
+  // automatic, non-repeatable one inside create().
+  @Post(':id/send')
+  @RequirePermission('JEO', 'Update')
+  sendFactoryNotification(@Param('id') id: string, @Body() dto: SendJeoDto, @Req() req: any) {
+    return this.jobExecutionOrdersService.sendFactoryNotification(id, dto, req.user?.name);
   }
 
   // Partial update of one or more Production Checklist booleans — the "Start
@@ -80,10 +102,10 @@ export class JobExecutionOrdersController {
     res.send(pdf);
   }
 
-  // No edit/delete endpoint — JobExecutionOrder has no deletedAt column
-  // (per the given field list), so there is no delete capability for this
-  // module at all. No Material Planning/BOM/Dispatch endpoints yet — see
-  // the "Future Ready" comment on the JobExecutionOrder model in
-  // schema.prisma for the intended extension points. Left out deliberately,
-  // per scope.
+  // No delete endpoint — JobExecutionOrder has no deletedAt column (per the
+  // given field list), so there is no delete capability for this module at
+  // all. (Edit now exists — see update() above — but delete remains out of
+  // scope.) No Material Planning/BOM/Dispatch endpoints yet — see the
+  // "Future Ready" comment on the JobExecutionOrder model in schema.prisma
+  // for the intended extension points.
 }

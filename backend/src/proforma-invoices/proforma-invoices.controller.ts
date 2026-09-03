@@ -6,8 +6,10 @@ import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
 import { ProformaInvoicesService } from './proforma-invoices.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
+import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
 import { UpdateProformaInvoiceAdvanceDto } from './dto/update-proforma-invoice-advance.dto';
+import { SendProformaInvoiceDto } from './dto/send-proforma-invoice.dto';
 import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
 
 @ApiTags('proforma-invoices')
@@ -41,10 +43,22 @@ export class ProformaInvoicesController {
     return this.proformaInvoicesService.create(dto, req.user?.name);
   }
 
+  @Patch(':id')
+  @RequirePermission('ProformaInvoice', 'Edit')
+  update(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceDto, @Req() req: any) {
+    return this.proformaInvoicesService.update(id, dto, req.user?.name);
+  }
+
   @Patch(':id/status')
   @RequirePermission('ProformaInvoice', 'Edit')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceStatusDto, @Req() req: any) {
     return this.proformaInvoicesService.updateStatus(id, dto, req.user?.name);
+  }
+
+  @Post(':id/send')
+  @RequirePermission('ProformaInvoice', 'Edit')
+  sendInvoice(@Param('id') id: string, @Body() dto: SendProformaInvoiceDto, @Req() req: any) {
+    return this.proformaInvoicesService.sendInvoice(id, dto, req.user?.name);
   }
 
   @Patch(':id/advance')

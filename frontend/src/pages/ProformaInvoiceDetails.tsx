@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Pencil, RefreshCw, Send } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaInvoiceStatusBadge";
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
+import EditProformaInvoiceDialog from "@/components/proforma-invoices/EditProformaInvoiceDialog";
+import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProformaInvoiceDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -49,9 +51,20 @@ export default function ProformaInvoiceDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
+
+  const refetchEmailHistory = useCallback(() => {
+    if (!id) return;
+    setEmailHistoryLoading(true);
+    getProformaInvoiceEmailHistory(id)
+      .then(setEmailHistory)
+      .catch(() => {})
+      .finally(() => setEmailHistoryLoading(false));
+  }, [id]);
 
   const fetchInvoice = useCallback(async () => {
     if (!id) return;
@@ -73,13 +86,8 @@ export default function ProformaInvoiceDetails() {
   }, [fetchInvoice]);
 
   useEffect(() => {
-    if (!id) return;
-    setEmailHistoryLoading(true);
-    getProformaInvoiceEmailHistory(id)
-      .then(setEmailHistory)
-      .catch(() => {})
-      .finally(() => setEmailHistoryLoading(false));
-  }, [id]);
+    refetchEmailHistory();
+  }, [refetchEmailHistory]);
 
   async function handleStatusConfirm(status: ProformaInvoiceStatus) {
     if (!id) return;
@@ -126,6 +134,10 @@ export default function ProformaInvoiceDetails() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -148,6 +160,12 @@ export default function ProformaInvoiceDetails() {
                     <Download className="mr-2 h-4 w-4" />
                     View PDF
                   </Button>
+                  {invoice.status !== "CANCELLED" && (
+                    <Button onClick={() => setSendOpen(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      {invoice.status === "SENT" ? "Resend to Customer" : "Send to Customer"}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -274,6 +292,23 @@ export default function ProformaInvoiceDetails() {
         onOpenChange={setStatusOpen}
         invoice={invoice}
         onConfirm={handleStatusConfirm}
+      />
+
+      <EditProformaInvoiceDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        invoice={invoice}
+        onSaved={setInvoice}
+      />
+
+      <SendProformaInvoiceDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        invoice={invoice}
+        onSent={() => {
+          fetchInvoice();
+          refetchEmailHistory();
+        }}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { TaxInvoicePdfService } from '../pdf/tax-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
+import { UpdateTaxInvoiceDto } from './dto/update-tax-invoice.dto';
 import { UpdateTaxInvoiceStatusDto } from './dto/update-tax-invoice-status.dto';
 import { QueryTaxInvoiceDto } from './dto/query-tax-invoice.dto';
 import { SendTaxInvoiceDto } from './dto/send-tax-invoice.dto';
@@ -197,6 +198,42 @@ export class TaxInvoicesService {
 
     // Unreachable, but keeps TypeScript satisfied about the return type.
     throw new Error('Failed to generate a unique Tax Invoice number');
+  }
+
+  // Bug-fix requirement: edit a Tax Invoice's printed details even after
+  // it's already been sent — sendInvoice() has never blocked resending, so
+  // "edit, then Resend to Customer" is the intended fix-a-mistake flow. No
+  // status guard here, same as QuotationsService.update().
+  async update(id: string, dto: UpdateTaxInvoiceDto, actorName?: string) {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.taxInvoice.update({
+      where: { id },
+      data: {
+        ...(dto.invoiceDate !== undefined ? { invoiceDate: new Date(dto.invoiceDate) } : {}),
+        ...(dto.buyersOrderNo !== undefined ? { buyersOrderNo: dto.buyersOrderNo } : {}),
+        ...(dto.dispatchedThrough !== undefined ? { dispatchedThrough: dto.dispatchedThrough } : {}),
+        ...(dto.destination !== undefined ? { destination: dto.destination } : {}),
+        ...(dto.termsOfDelivery !== undefined ? { termsOfDelivery: dto.termsOfDelivery } : {}),
+      },
+      include: TAX_INVOICE_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'TaxInvoice',
+        recordId: id,
+        action: 'Edited',
+        actorName,
+        oldValue: {
+          invoiceDate: existing.invoiceDate,
+          buyersOrderNo: existing.buyersOrderNo,
+          dispatchedThrough: existing.dispatchedThrough,
+          destination: existing.destination,
+          termsOfDelivery: existing.termsOfDelivery,
+        },
+        newValue: { ...dto },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
   }
 
   async updateStatus(id: string, dto: UpdateTaxInvoiceStatusDto, actorName?: string) {

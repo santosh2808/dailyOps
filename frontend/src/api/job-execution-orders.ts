@@ -61,6 +61,16 @@ export async function createJobExecutionOrder(payload: JeoPayload) {
   return res.data;
 }
 
+export type UpdateJeoPayload = Partial<Omit<JeoPayload, "salesOrderId">>;
+
+// Bug fix: this module previously had no edit endpoint at all — pair with
+// sendFactoryNotification() below (edit, then resend) as the intended
+// fix-a-mistake flow.
+export async function updateJobExecutionOrder(id: string, payload: UpdateJeoPayload) {
+  const res = await api.patch<JobExecutionOrder>(`/api/v1/job-execution-orders/${id}`, payload);
+  return res.data;
+}
+
 export async function updateJeoStatus(id: string, status: JeoStatus) {
   const res = await api.patch<JobExecutionOrder>(`/api/v1/job-execution-orders/${id}/status`, {
     status,
@@ -88,6 +98,23 @@ export async function getJeoTimeline(id: string) {
 
 export async function getJeoEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/job-execution-orders/${id}/email-history`);
+  return res.data;
+}
+
+export interface SendJeoPayload {
+  recipientEmail?: string;
+  ccEmails?: string;
+}
+
+export interface SendJeoResult extends JobExecutionOrder {
+  emailStatus: "SENT" | "SIMULATED" | "FAILED";
+}
+
+// Bug fix: explicit, on-demand (re)send of the factory notification email —
+// previously the only send was an automatic, non-repeatable one at
+// generation time.
+export async function sendJeoFactoryNotification(id: string, payload: SendJeoPayload) {
+  const res = await api.post<SendJeoResult>(`/api/v1/job-execution-orders/${id}/send`, payload);
   return res.data;
 }
 

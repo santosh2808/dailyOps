@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ExternalLink, PlayCircle, RefreshCw, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Pencil, PlayCircle, RefreshCw, Send, ShieldCheck, Truck } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import JeoStatusBadge from "@/components/job-execution-orders/JeoStatusBadge";
 import JeoPriorityBadge from "@/components/job-execution-orders/JeoPriorityBadge";
 import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
 import ChangeJeoStatusDialog from "@/components/job-execution-orders/ChangeJeoStatusDialog";
+import EditJeoDialog from "@/components/job-execution-orders/EditJeoDialog";
+import SendJeoDialog from "@/components/job-execution-orders/SendJeoDialog";
 import ProductionChecklistCard from "@/components/job-execution-orders/ProductionChecklistCard";
 import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
@@ -63,12 +65,23 @@ export default function JobExecutionOrderDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [timelineSteps, setTimelineSteps] = useState<JeoTimelineStep[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
   const [pdfError, setPdfError] = useState("");
+
+  const refetchEmailHistory = useCallback(() => {
+    if (!id) return;
+    setEmailHistoryLoading(true);
+    getJeoEmailHistory(id)
+      .then(setEmailHistory)
+      .catch(() => {})
+      .finally(() => setEmailHistoryLoading(false));
+  }, [id]);
 
   const fetchJeo = useCallback(async () => {
     if (!id) return;
@@ -107,13 +120,8 @@ export default function JobExecutionOrderDetails() {
   }, [fetchJeo, fetchTimeline]);
 
   useEffect(() => {
-    if (!id) return;
-    setEmailHistoryLoading(true);
-    getJeoEmailHistory(id)
-      .then(setEmailHistory)
-      .catch(() => {})
-      .finally(() => setEmailHistoryLoading(false));
-  }, [id]);
+    refetchEmailHistory();
+  }, [refetchEmailHistory]);
 
   async function handleStatusConfirm(status: JeoStatus) {
     if (!id) return;
@@ -251,6 +259,10 @@ export default function JobExecutionOrderDetails() {
                       Ready For Dispatch
                     </Button>
                   )}
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -272,6 +284,10 @@ export default function JobExecutionOrderDetails() {
                   >
                     <Download className="mr-2 h-4 w-4" />
                     View PDF
+                  </Button>
+                  <Button variant="outline" onClick={() => setSendOpen(true)}>
+                    <Send className="mr-2 h-4 w-4" />
+                    Resend to Factory
                   </Button>
                 </div>
               </div>
@@ -390,6 +406,23 @@ export default function JobExecutionOrderDetails() {
         onOpenChange={setStatusOpen}
         jeo={jeo}
         onConfirm={handleStatusConfirm}
+      />
+
+      <EditJeoDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        jeo={jeo}
+        onSaved={setJeo}
+      />
+
+      <SendJeoDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        jeo={jeo}
+        onSent={() => {
+          fetchJeo();
+          refetchEmailHistory();
+        }}
       />
     </div>
   );

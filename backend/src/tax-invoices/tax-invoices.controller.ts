@@ -6,6 +6,7 @@ import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
 import { TaxInvoicesService } from './tax-invoices.service';
 import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
+import { UpdateTaxInvoiceDto } from './dto/update-tax-invoice.dto';
 import { UpdateTaxInvoiceStatusDto } from './dto/update-tax-invoice-status.dto';
 import { QueryTaxInvoiceDto } from './dto/query-tax-invoice.dto';
 import { SendTaxInvoiceDto } from './dto/send-tax-invoice.dto';
@@ -40,6 +41,12 @@ export class TaxInvoicesController {
   @RequirePermission('TaxInvoice', 'Create')
   create(@Body() dto: CreateTaxInvoiceDto, @Req() req: any) {
     return this.taxInvoicesService.create(dto, req.user?.name);
+  }
+
+  @Patch(':id')
+  @RequirePermission('TaxInvoice', 'Edit')
+  update(@Param('id') id: string, @Body() dto: UpdateTaxInvoiceDto, @Req() req: any) {
+    return this.taxInvoicesService.update(id, dto, req.user?.name);
   }
 
   @Patch(':id/status')
