@@ -101,6 +101,9 @@ export interface Customer {
   phone: string;
   email?: string | null;
   gstNumber?: string | null;
+  // Business rule: GST number is mandatory for GST-registered (B2B)
+  // customers, optional for unregistered/retail (B2C) ones.
+  isGstRegistered: boolean;
   // Additive: Dashboard Redesign v2 — India Sales Map (see INDIA_STATES in
   // @/lib/indiaStates for the exact list this is chosen from).
   state?: string | null;

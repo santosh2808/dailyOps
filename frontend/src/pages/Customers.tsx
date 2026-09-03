@@ -176,7 +176,13 @@ export default function Customers() {
                     </TableCell>
                     <TableCell>{customer.state || "—"}</TableCell>
                     <TableCell>
-                      {customer.gstNumber || <Badge variant="muted">Not provided</Badge>}
+                      {customer.gstNumber ? (
+                        customer.gstNumber
+                      ) : customer.isGstRegistered ? (
+                        <Badge variant="warning">Missing GST number</Badge>
+                      ) : (
+                        <Badge variant="muted">Not applicable</Badge>
+                      )}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">

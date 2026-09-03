@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  ValidateIf,
+} from 'class-validator';
 import { INDIA_STATES } from '../../common/india-states';
 
 export class CreateCustomerDto {
@@ -23,8 +32,18 @@ export class CreateCustomerDto {
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email?: string;
 
-  @ApiPropertyOptional({ example: '27ABCDE1234F1Z5' })
+  // Business rule: GST number is mandatory for GST-registered (B2B)
+  // customers, optional for unregistered/retail (B2C) ones — hence the
+  // `isGstRegistered` flag gating the requirement below rather than making
+  // gstNumber unconditionally required.
+  @ApiPropertyOptional({ example: true, description: 'Whether this customer is GST-registered (B2B)' })
   @IsOptional()
+  @IsBoolean()
+  isGstRegistered?: boolean;
+
+  @ApiPropertyOptional({ example: '27ABCDE1234F1Z5' })
+  @ValidateIf((o) => o.isGstRegistered === true)
+  @IsNotEmpty({ message: 'GST number is required for GST-registered customers' })
   @IsString()
   gstNumber?: string;
 

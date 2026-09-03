@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -59,7 +59,17 @@ export class CustomersService {
   }
 
   async update(id: string, dto: UpdateCustomerDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    // CreateCustomerDto's @ValidateIf-gated gstNumber requirement only fires
+    // when isGstRegistered is present in the same request body — a PATCH
+    // that omits both fields (e.g. only updating phone) would sail through
+    // DTO validation even if it results in a GST-registered customer with no
+    // GST number. Check the merged, final state here instead.
+    const isGstRegistered = dto.isGstRegistered ?? existing.isGstRegistered;
+    const gstNumber = dto.gstNumber !== undefined ? dto.gstNumber : existing.gstNumber;
+    if (isGstRegistered && !gstNumber?.trim()) {
+      throw new BadRequestException('GST number is required for GST-registered customers');
+    }
     return this.prisma.customer.update({ where: { id }, data: dto });
   }
 

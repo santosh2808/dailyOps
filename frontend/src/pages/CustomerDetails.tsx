@@ -221,6 +221,10 @@ export default function CustomerDetails() {
                 <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <Field label="Phone" value={customer.phone} />
                   <Field label="Email" value={customer.email} />
+                  <Field
+                    label="GST Registered"
+                    value={customer.isGstRegistered ? "Yes (B2B)" : "No (B2C)"}
+                  />
                   <Field label="GST Number" value={customer.gstNumber} />
                   <Field label="State" value={customer.state} />
                   <Field label="Status" value={customer.isActive ? "Active" : "Inactive"} />

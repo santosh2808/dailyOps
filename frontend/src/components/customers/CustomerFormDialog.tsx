@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -30,6 +31,7 @@ interface FormState {
   phone: string;
   email: string;
   gstNumber: string;
+  isGstRegistered: boolean;
   state: string;
 }
 
@@ -39,6 +41,7 @@ const emptyForm: FormState = {
   phone: "",
   email: "",
   gstNumber: "",
+  isGstRegistered: false,
   state: "",
 };
 
@@ -67,6 +70,7 @@ export default function CustomerFormDialog({
               phone: customer.phone,
               email: customer.email ?? "",
               gstNumber: customer.gstNumber ?? "",
+              isGstRegistered: customer.isGstRegistered ?? false,
               state: customer.state ?? "",
             }
           : emptyForm
@@ -93,6 +97,11 @@ export default function CustomerFormDialog({
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
       next.email = "Enter a valid email address";
     }
+    // Business rule: GST number is mandatory for GST-registered (B2B)
+    // customers, optional for unregistered/retail (B2C) ones.
+    if (form.isGstRegistered && !form.gstNumber.trim()) {
+      next.gstNumber = "GST number is required for GST-registered customers";
+    }
     // Required — see CreateCustomerDto: every customer needs a state so it
     // always shows up on the Dashboard's India Sales Map.
     if (!form.state) {
@@ -116,6 +125,7 @@ export default function CustomerFormDialog({
         phone: form.phone.trim(),
         email: form.email.trim() || undefined,
         gstNumber: form.gstNumber.trim() || undefined,
+        isGstRegistered: form.isGstRegistered,
         state: form.state,
       });
       toast.success(isEdit ? "Customer updated successfully." : "Customer created successfully.");
@@ -190,14 +200,32 @@ export default function CustomerFormDialog({
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="isGstRegistered"
+              checked={form.isGstRegistered}
+              onChange={(e) =>
+                setForm({ ...form, isGstRegistered: e.target.checked })
+              }
+            />
+            <Label htmlFor="isGstRegistered" className="cursor-pointer font-normal">
+              GST Registered (B2B) customer
+            </Label>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="gstNumber">GST Number</Label>
+              <Label htmlFor="gstNumber">
+                GST Number{form.isGstRegistered ? " *" : ""}
+              </Label>
               <Input
                 id="gstNumber"
                 value={form.gstNumber}
                 onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
               />
+              {errors.gstNumber && (
+                <p className="text-xs text-destructive">{errors.gstNumber}</p>
+              )}
             </div>
 
             <div className="space-y-2">

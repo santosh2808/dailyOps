@@ -13,6 +13,7 @@ export interface CustomerPayload {
   phone: string;
   email?: string;
   gstNumber?: string;
+  isGstRegistered?: boolean;
   state?: string;
 }
 

@@ -46,6 +46,14 @@ export default function CustomerViewDialog({
           <Field label="Contact Person" value={customer.contactPerson} />
           <Field label="Phone" value={customer.phone} />
           <Field label="Email" value={customer.email} />
+          <Field
+            label="GST Registered"
+            value={
+              <Badge variant={customer.isGstRegistered ? "success" : "muted"}>
+                {customer.isGstRegistered ? "Yes (B2B)" : "No (B2C)"}
+              </Badge>
+            }
+          />
           <Field label="GST Number" value={customer.gstNumber} />
           <Field
             label="Status"

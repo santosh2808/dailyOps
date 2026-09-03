@@ -129,6 +129,12 @@ model Customer {
   phone         String
   email         String?
   gstNumber     String?
+  // Business rule: GST number is mandatory for GST-registered (B2B)
+  // customers, optional for unregistered/retail (B2C) ones — enforced at
+  // the CreateCustomerDto/service layer, not here, following the same
+  // "required above, nullable column" pattern as `state` below so existing
+  // customers aren't forced into a backfill.
+  isGstRegistered Boolean @default(false)
   // Dashboard Redesign v2 — India Sales Map. One of the 36 Indian
   // states/UTs (see frontend INDIA_STATES / backend indiaStates.ts for the
   // exact list this is validated against). Required at the
