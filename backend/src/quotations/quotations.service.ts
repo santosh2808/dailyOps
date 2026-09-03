@@ -14,7 +14,7 @@ import { ProformaInvoicesService } from '../proforma-invoices/proforma-invoices.
 import { JobExecutionOrdersService } from '../job-execution-orders/job-execution-orders.service';
 import { ApprovalMatrixService } from '../approval-matrix/approval-matrix.service';
 import { MailerService } from '../mailer/mailer.service';
-import { QuotationPdfService } from '../pdf/quotation-pdf.service';
+import { QuotationPdfService, type QuotationPdfInput } from '../pdf/quotation-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LeadsService } from '../leads/leads.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
@@ -105,6 +105,46 @@ export interface PublicQuotationView {
   acceptedByName: string | null;
   rejectedAt: Date | null;
   rejectionReason: string | null;
+}
+
+// Frozen offer content — everything about WHAT was offered (items, prices,
+// terms, notes, valid-until), as opposed to the live decision state
+// (status/acceptedAt/rejectedAt/etc, which always come from the Quotation
+// row itself, never from here). Stored verbatim in Quotation.sentSnapshot
+// the moment sendQuotation() actually sends an email, and read back by
+// resolveOfferContent() below for both the public link's page and its PDF —
+// so a customer always sees exactly what was emailed, never a live edit
+// made afterward. Quotations sent before this field existed have no
+// snapshot; resolveOfferContent() falls back to reconstructing this same
+// shape from live data for those, matching this feature's pre-snapshot
+// behavior exactly.
+interface QuotationSentSnapshot {
+  quotationNumber: string;
+  createdAt: string;
+  validUntil: string | null;
+  customerName: string;
+  customerCompany: string;
+  customer: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null } | null;
+  lead: { companyName?: string | null; contactPerson?: string | null; phone?: string | null; email?: string | null } | null;
+  items: {
+    productName: string;
+    productDescription?: string | null;
+    applicableTo?: string | null;
+    technicalSpec?: unknown;
+    description: string | null;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
+  subtotal: number;
+  gstPercent: number;
+  gstAmount: number;
+  installationCharge: number;
+  transportationCharge: number;
+  grandTotal: number;
+  notes: string | null;
+  terms: string | null;
+  commercialTerms: unknown;
 }
 
 // A handful of very lightweight, in-memory, per-process rate limits on the
@@ -471,9 +511,50 @@ export class QuotationsService {
       return { ...quotation, salesOrder };
     }
 
+    // Staff manually moving a quotation's status around (as opposed to the
+    // customer deciding via the public link, or the ACCEPTED branch above)
+    // must not leave stale, contradictory data behind. Two related risks:
+    //
+    // 1. Leaving a prior ACCEPTED/REJECTED decision's fields in place after
+    //    moving to a different status — a quotation could otherwise end up
+    //    simultaneously "accepted on 1st" and "rejected on 3rd" once staff
+    //    later force it back to ACCEPTED/REJECTED again, or just carry
+    //    stale rejectionReason text around forever.
+    // 2. Leaving the OLD public link valid after this change — a customer
+    //    who already decided (or whose link expired) could reopen that
+    //    exact same link later and make a second, conflicting decision,
+    //    since the token itself was never invalidated.
+    //
+    // Fix: whenever staff move a quotation to DRAFT/READY/EXPIRED, or move
+    // it AWAY from ACCEPTED/REJECTED to anything else, clear any prior
+    // decision fields and null out the public link entirely. Staff use
+    // Send Quotation again afterward, which issues a fresh token and a
+    // fresh sentSnapshot together — never a bare reactivation of the old
+    // one.
+    const linkInvalidatingTargets: string[] = ['DRAFT', 'READY', 'EXPIRED'];
+    const leavingADecision =
+      (existing.status === 'ACCEPTED' || existing.status === 'REJECTED') && dto.status !== existing.status;
+    const shouldResetLink = linkInvalidatingTargets.includes(dto.status) || leavingADecision;
+
     const quotation = await this.prisma.quotation.update({
       where: { id },
-      data: { status: dto.status },
+      data: {
+        status: dto.status,
+        ...(shouldResetLink
+          ? { publicToken: null, tokenExpiresAt: null }
+          : {}),
+        ...(leavingADecision
+          ? {
+              acceptedAt: null,
+              acceptedByName: null,
+              acceptedByDesignation: null,
+              acceptanceComment: null,
+              rejectedAt: null,
+              rejectionReason: null,
+              rejectionComment: null,
+            }
+          : {}),
+      },
       include: QUOTATION_DETAIL_INCLUDE,
     });
     await this.auditLogService
@@ -483,7 +564,11 @@ export class QuotationsService {
         action: 'Status Changed',
         actorName: actor.name,
         oldValue: { status: existing.status },
-        newValue: { status: dto.status },
+        newValue: {
+          status: dto.status,
+          ...(shouldResetLink ? { publicLinkInvalidated: true } : {}),
+          ...(leavingADecision ? { priorDecisionCleared: true } : {}),
+        },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
@@ -740,6 +825,14 @@ export class QuotationsService {
     const to = dto.recipientEmail?.trim() || recipientEmail || undefined;
     const pdf = await this.quotationPdfService.render(quotation);
 
+    // Freeze exactly what's being sent right now — resolveOfferContent()
+    // falls back to reconstructing from live fields since this quotation
+    // has no snapshot yet (or has a stale one from a prior send), so this
+    // captures the same data the PDF above was just rendered from. Stored
+    // below alongside the fresh token, so the public link and its PDF
+    // always match this email, even if the quotation is edited afterward.
+    const sentSnapshot = this.resolveOfferContent(quotation);
+
     // Customer Quotation Acceptance workflow (requirement #2) — a fresh
     // token every time this quotation is (re)sent, rather than reusing one
     // that already exists: resending implies a fresh 30-day (configurable)
@@ -787,6 +880,7 @@ export class QuotationsService {
         sentToEmail: to,
         publicToken,
         tokenExpiresAt,
+        sentSnapshot: sentSnapshot as unknown as Prisma.InputJsonValue,
       },
       include: QUOTATION_DETAIL_INCLUDE,
     });
@@ -857,28 +951,112 @@ export class QuotationsService {
     // A malformed/unknown token gets exactly the same NotFoundException as
     // a well-formed-but-nonexistent one (requirement #11: "Prevent token
     // enumeration") — no distinction in the response that would help an
-    // attacker learn anything about which tokens are real.
+    // attacker learn anything about which tokens are real. A soft-deleted
+    // quotation's token is treated exactly the same way — once staff have
+    // deleted a quotation, its public link stops working entirely (no page,
+    // no PDF, no accept/reject), same as if the token never existed.
     const quotation = await this.prisma.quotation.findUnique({
       where: { publicToken: token },
       include: QUOTATION_DETAIL_INCLUDE,
     });
-    if (!quotation) {
+    if (!quotation || quotation.deletedAt) {
       throw new NotFoundException('This quotation link is invalid.');
     }
     return quotation;
   }
 
-  private toPublicView(
+  // True once either the link's own expiry (tokenExpiresAt) or the offer's
+  // own validity date (validUntil — the date shown to the customer as
+  // "Valid Until") has passed. Previously only tokenExpiresAt was checked,
+  // which let a link stay "acceptable" well past the offer's stated
+  // validity as long as the (much longer, configurable) link-expiry window
+  // hadn't elapsed yet.
+  private isPastValidity(quotation: { tokenExpiresAt: Date | null; validUntil: Date | null }): boolean {
+    const now = Date.now();
+    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < now) return true;
+    if (quotation.validUntil && quotation.validUntil.getTime() < now) return true;
+    return false;
+  }
+
+  // Auto-expires a SENT/VIEWED quotation whose link or offer validity has
+  // now passed, persisting the status change so the sales-side Quotation
+  // Details page reflects reality too — not just a check made in passing on
+  // the public side. Every public endpoint below calls this immediately
+  // after resolving the token, before deciding whether a decision/PDF/view
+  // is still allowed.
+  private async autoExpireIfNeeded(
     quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
-  ): PublicQuotationView {
+  ): Promise<Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>> {
+    if ((quotation.status === 'SENT' || quotation.status === 'VIEWED') && this.isPastValidity(quotation)) {
+      return this.prisma.quotation.update({
+        where: { id: quotation.id },
+        data: { status: 'EXPIRED' },
+        include: QUOTATION_DETAIL_INCLUDE,
+      });
+    }
+    return quotation;
+  }
+
+  // Only a still-open offer (SENT or VIEWED) can be accepted/rejected —
+  // called by both acceptViaPublicLink() and rejectViaPublicLink() right
+  // after autoExpireIfNeeded(), so an EXPIRED offer is refused with its own
+  // clear message rather than the generic "already decided" one, and
+  // (defensively — shouldn't be reachable once a decided/expired
+  // quotation's link is invalidated by updateStatus(), but this is the
+  // last line of defense) any other status is refused too.
+  private assertDecidable(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): void {
+    if (quotation.status === 'SENT' || quotation.status === 'VIEWED') return;
+    if (quotation.status === 'EXPIRED') {
+      throw new BadRequestException('This quotation link has expired.');
+    }
+    if (quotation.status === 'ACCEPTED' || quotation.status === 'REJECTED') {
+      throw new ConflictException(`This quotation has already been ${quotation.status.toLowerCase()}.`);
+    }
+    throw new ConflictException('This quotation is not currently available for review.');
+  }
+
+  // Offer content (what was quoted) as opposed to decision state (whether
+  // it's been accepted/rejected, which always comes straight off the live
+  // Quotation row — see toPublicView() below). Prefers the frozen
+  // Quotation.sentSnapshot written by sendQuotation(); falls back to
+  // reconstructing the identical shape from live fields for a quotation
+  // sent before this field existed, so nothing breaks for older records —
+  // it just behaves like it did before snapshots existed (live-editable).
+  private resolveOfferContent(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): QuotationSentSnapshot {
+    const snapshot = quotation.sentSnapshot as unknown as QuotationSentSnapshot | null;
+    if (snapshot) return snapshot;
+
     return {
       quotationNumber: quotation.quotationNumber,
-      quotationDate: quotation.createdAt,
-      validUntil: quotation.validUntil,
+      createdAt: quotation.createdAt.toISOString(),
+      validUntil: quotation.validUntil ? quotation.validUntil.toISOString() : null,
       customerName: quotation.customer?.contactPerson ?? quotation.lead?.contactPerson ?? 'Customer',
       customerCompany: quotation.customer?.companyName ?? quotation.lead?.companyName ?? '',
+      customer: quotation.customer
+        ? {
+            companyName: quotation.customer.companyName,
+            contactPerson: quotation.customer.contactPerson,
+            phone: quotation.customer.phone,
+            email: quotation.customer.email,
+          }
+        : null,
+      lead: quotation.lead
+        ? {
+            companyName: quotation.lead.companyName,
+            contactPerson: quotation.lead.contactPerson,
+            phone: quotation.lead.phone,
+            email: quotation.lead.email,
+          }
+        : null,
       items: quotation.items.map((item) => ({
         productName: item.product?.name ?? 'Product',
+        productDescription: item.product?.description ?? null,
+        applicableTo: item.product?.applicableTo ?? null,
+        technicalSpec: item.product?.technicalSpec ?? null,
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -890,10 +1068,75 @@ export class QuotationsService {
       installationCharge: quotation.installationCharge,
       transportationCharge: quotation.transportationCharge,
       grandTotal: quotation.grandTotal,
-      paymentTerms: (quotation.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
-      deliveryTerms: (quotation.commercialTerms as Prisma.JsonObject | null)?.delivery as string | null ?? null,
       notes: quotation.notes,
       terms: quotation.terms,
+      commercialTerms: quotation.commercialTerms,
+    };
+  }
+
+  // Converts frozen (or live-fallback) offer content into the shape
+  // QuotationPdfService.render() needs — used by getPublicPdf() so the
+  // link's "View/Download PDF" always matches the PDF that was actually
+  // emailed, never a live-edited version.
+  private toPdfInput(content: QuotationSentSnapshot): QuotationPdfInput {
+    return {
+      quotationNumber: content.quotationNumber,
+      createdAt: new Date(content.createdAt),
+      gstPercent: content.gstPercent,
+      gstAmount: content.gstAmount,
+      subtotal: content.subtotal,
+      installationCharge: content.installationCharge,
+      transportationCharge: content.transportationCharge,
+      grandTotal: content.grandTotal,
+      notes: content.notes,
+      commercialTerms: content.commercialTerms,
+      customer: content.customer,
+      lead: content.lead,
+      items: content.items.map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+        description: item.description,
+        product: {
+          name: item.productName,
+          description: item.productDescription,
+          applicableTo: item.applicableTo,
+          technicalSpec: item.technicalSpec,
+        },
+      })),
+    };
+  }
+
+  private toPublicView(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): PublicQuotationView {
+    const content = this.resolveOfferContent(quotation);
+    return {
+      quotationNumber: content.quotationNumber,
+      quotationDate: new Date(content.createdAt),
+      validUntil: content.validUntil ? new Date(content.validUntil) : null,
+      customerName: content.customerName,
+      customerCompany: content.customerCompany,
+      items: content.items.map((item) => ({
+        productName: item.productName,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      })),
+      subtotal: content.subtotal,
+      gstPercent: content.gstPercent,
+      gstAmount: content.gstAmount,
+      installationCharge: content.installationCharge,
+      transportationCharge: content.transportationCharge,
+      grandTotal: content.grandTotal,
+      paymentTerms: (content.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
+      deliveryTerms: (content.commercialTerms as Prisma.JsonObject | null)?.delivery as string | null ?? null,
+      notes: content.notes,
+      terms: content.terms,
+      // Decision state is always live — never part of the frozen snapshot,
+      // since accepting/rejecting is exactly the one thing that's allowed
+      // to change after the offer itself was sent.
       status: quotation.status,
       acceptedAt: quotation.acceptedAt,
       acceptedByName: quotation.acceptedByName,
@@ -932,9 +1175,16 @@ export class QuotationsService {
       throw new BadRequestException('Too many requests. Please try again in a moment.');
     }
 
-    const quotation = await this.findByPublicToken(token);
+    let quotation = await this.findByPublicToken(token);
+    // Auto-expire on EITHER the link's own expiry OR the offer's stated
+    // "Valid Until" date having passed — previously only the (much longer,
+    // configurable) link expiry was checked here, which let a quotation
+    // stay openly acceptable well past the date shown to the customer as
+    // its own validity cutoff. Persisted so Quotation Details reflects it
+    // too, not just this read.
+    quotation = await this.autoExpireIfNeeded(quotation);
 
-    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+    if (quotation.status === 'EXPIRED') {
       return { expired: true, quotationNumber: quotation.quotationNumber };
     }
 
@@ -976,11 +1226,15 @@ export class QuotationsService {
     if (!this.viewRateLimiter.check(`view:${clientKey}`)) {
       throw new BadRequestException('Too many requests. Please try again in a moment.');
     }
-    const quotation = await this.findByPublicToken(token);
-    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
+    let quotation = await this.findByPublicToken(token);
+    quotation = await this.autoExpireIfNeeded(quotation);
+    if (quotation.status === 'EXPIRED') {
       throw new BadRequestException('This quotation link has expired.');
     }
-    return this.quotationPdfService.render(quotation);
+    // Rendered from the frozen offer snapshot (or its live-fallback for a
+    // pre-snapshot quotation), never live fields directly — this is what
+    // guarantees the link's PDF always matches the one actually emailed.
+    return this.quotationPdfService.render(this.toPdfInput(this.resolveOfferContent(quotation)));
   }
 
   // POST /api/v1/public/quotations/:token/accept (requirement #4). Per the
@@ -997,17 +1251,15 @@ export class QuotationsService {
       throw new BadRequestException('Too many requests. Please try again in a moment.');
     }
 
-    const quotation = await this.findByPublicToken(token);
-
-    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('This quotation link has expired.');
-    }
+    let quotation = await this.findByPublicToken(token);
+    quotation = await this.autoExpireIfNeeded(quotation);
     // Requirement #4.8/#11 — prevent duplicate acceptance, and prevent
     // "accepting" something already rejected (or vice versa, in
-    // rejectViaPublicLink() below) from a stale open tab.
-    if (quotation.status === 'ACCEPTED' || quotation.status === 'REJECTED') {
-      throw new ConflictException(`This quotation has already been ${quotation.status.toLowerCase()}.`);
-    }
+    // rejectViaPublicLink() below) from a stale open tab. Only a still-open
+    // offer (SENT/VIEWED) is decidable — an explicit whitelist rather than
+    // just "not already ACCEPTED/REJECTED", so an expired offer is refused
+    // too, not just a second decision on one already decided.
+    this.assertDecidable(quotation);
 
     const name = this.sanitizeText(dto.name, 150) ?? 'Customer';
     const designation = this.sanitizeText(dto.designation, 150);
@@ -1058,14 +1310,9 @@ export class QuotationsService {
       throw new BadRequestException('Too many requests. Please try again in a moment.');
     }
 
-    const quotation = await this.findByPublicToken(token);
-
-    if (quotation.tokenExpiresAt && quotation.tokenExpiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('This quotation link has expired.');
-    }
-    if (quotation.status === 'ACCEPTED' || quotation.status === 'REJECTED') {
-      throw new ConflictException(`This quotation has already been ${quotation.status.toLowerCase()}.`);
-    }
+    let quotation = await this.findByPublicToken(token);
+    quotation = await this.autoExpireIfNeeded(quotation);
+    this.assertDecidable(quotation);
 
     const comment = this.sanitizeText(dto.comment, 1000);
     const rejectedAt = new Date();

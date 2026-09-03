@@ -501,6 +501,16 @@ model Quotation {
   // quotation's own database id.
   publicToken     String?         @unique
   tokenExpiresAt  DateTime?
+  // Additive: frozen copy of the offer (items/prices/terms/notes/valid
+  // until) as of the moment sendQuotation() actually sent it — so the
+  // customer's public link and its PDF always show exactly what was
+  // emailed, even if the quotation is edited internally afterward. Written
+  // fresh on every send (including resend), which is also how a customer
+  // gets an updated offer: staff resend, producing a new snapshot and a
+  // new publicToken together. Nullable: quotations sent before this field
+  // existed have none — QuotationsService falls back to live data for
+  // those (see resolveOfferContent()).
+  sentSnapshot    Json?
   // View tracking (requirement #7) — updated by
   // QuotationsService.recordPublicView() on every GET of the public link,
   // regardless of how many times it's opened.

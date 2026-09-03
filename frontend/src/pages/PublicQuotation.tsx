@@ -85,6 +85,7 @@ export default function PublicQuotation() {
   const { token = "" } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [expiredNumber, setExpiredNumber] = useState<string | null>(null);
   const [quotation, setQuotation] = useState<PublicQuotationView | null>(null);
   const [acceptOpen, setAcceptOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function PublicQuotation() {
   const fetchQuotation = useCallback(async () => {
     setLoading(true);
     setNotFound(false);
+    setLoadError(false);
     setExpiredNumber(null);
     try {
       const result = await getPublicQuotation(token);
@@ -101,11 +103,20 @@ export default function PublicQuotation() {
       } else {
         setQuotation(result.quotation);
       }
-    } catch {
-      // Requirement #11 — an invalid/unknown token gets exactly this
-      // generic message, never a distinguishable "not found" vs. "bad
-      // format" response that would help someone enumerate tokens.
-      setNotFound(true);
+    } catch (err: any) {
+      // A genuinely invalid/unknown token gets a 404 — requirement #11
+      // says that always gets exactly this generic message, never a
+      // distinguishable "not found" vs. "bad format" response that would
+      // help someone enumerate tokens. Anything else (no response at all,
+      // or a 5xx) is a transient failure on OUR end, not a sign the link is
+      // wrong — telling the customer their perfectly good link is "invalid"
+      // during a deploy or an outage just makes them give up or call in, so
+      // that gets its own retryable message instead.
+      if (err?.response?.status === 404) {
+        setNotFound(true);
+      } else {
+        setLoadError(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -116,17 +127,32 @@ export default function PublicQuotation() {
   }, [fetchQuotation]);
 
   async function handleAccept(payload: { name: string; designation?: string; comment?: string }) {
-    const result = await acceptPublicQuotation(token, { ...payload, confirm: true });
-    setAcceptOpen(false);
-    toast.success(`Your quotation ${result.quotationNumber} has been accepted.`);
-    await fetchQuotation();
+    try {
+      const result = await acceptPublicQuotation(token, { ...payload, confirm: true });
+      setAcceptOpen(false);
+      toast.success(`Your quotation ${result.quotationNumber} has been accepted.`);
+      await fetchQuotation();
+    } catch (err) {
+      // A stale tab can fail here for a real reason (someone already
+      // decided elsewhere, or the offer expired while this tab sat open) —
+      // refresh so the page reflects that immediately instead of leaving
+      // Accept/Reject visible for another doomed attempt, then let the
+      // dialog's own catch show the actual error message.
+      await fetchQuotation();
+      throw err;
+    }
   }
 
   async function handleReject(payload: { reason: string; comment?: string }) {
-    const result = await rejectPublicQuotation(token, payload);
-    setRejectOpen(false);
-    toast.success(`Your response for quotation ${result.quotationNumber} has been recorded.`);
-    await fetchQuotation();
+    try {
+      const result = await rejectPublicQuotation(token, payload);
+      setRejectOpen(false);
+      toast.success(`Your response for quotation ${result.quotationNumber} has been recorded.`);
+      await fetchQuotation();
+    } catch (err) {
+      await fetchQuotation();
+      throw err;
+    }
   }
 
   if (loading) {
@@ -145,6 +171,27 @@ export default function PublicQuotation() {
         description="This quotation link is invalid. Please check the link or contact Smart Rotamach for assistance."
         icon={<XCircle className="h-10 w-10 text-destructive" />}
       />
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        <BrandHeader />
+        <div className="flex flex-1 items-center justify-center px-4">
+          <Card className="max-w-md text-center">
+            <CardContent className="flex flex-col items-center gap-3 py-10">
+              <XCircle className="h-10 w-10 text-amber-500" />
+              <h1 className="text-lg font-semibold text-slate-900">Something Went Wrong</h1>
+              <p className="text-sm text-muted-foreground">
+                We couldn't load this quotation right now. Your link is fine — please try again in a
+                moment.
+              </p>
+              <Button onClick={() => fetchQuotation()}>Try Again</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     );
   }
 

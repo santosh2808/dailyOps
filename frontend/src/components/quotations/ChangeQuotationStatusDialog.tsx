@@ -134,6 +134,17 @@ export default function ChangeQuotationStatusDialog({
     : STATUS_OPTIONS.filter((s) => s.value !== "ACCEPTED")
   ).filter((s) => s.value !== "VIEWED");
 
+  // Mirrors QuotationsService.updateStatus()'s own rule: moving to
+  // DRAFT/READY/EXPIRED, or away from an already-decided ACCEPTED/REJECTED
+  // status, invalidates the existing public link (and clears the prior
+  // decision, if any) server-side. Shown here so staff aren't surprised by
+  // it after the fact.
+  const statusChangeInvalidatesLink =
+    status !== quotation.status &&
+    (["DRAFT", "READY", "EXPIRED"].includes(status) ||
+      quotation.status === "ACCEPTED" ||
+      quotation.status === "REJECTED");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onClose={() => onOpenChange(false)}>
@@ -161,6 +172,14 @@ export default function ChangeQuotationStatusDialog({
                 ))}
               </Select>
             </div>
+
+            {statusChangeInvalidatesLink && (
+              <p className="mt-2 text-xs text-amber-700">
+                {quotation.status === "ACCEPTED" || quotation.status === "REJECTED"
+                  ? "This quotation was already decided by the customer — changing its status will clear that decision and disable its public link. Use Send Quotation afterward to issue a fresh one."
+                  : "This will disable the quotation's existing public link. Use Send Quotation afterward to issue a fresh one."}
+              </p>
+            )}
 
             {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
