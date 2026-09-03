@@ -105,23 +105,39 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
   }
 
   function renderRowsTable(rows: LeadImportRowResult[]) {
+    // Multi-sheet imports (one tab per state) only show the extra Sheet
+    // column when the file actually had more than one distinct tab —
+    // a single-sheet import looks exactly like it always has.
+    const distinctSheets = new Set(rows.map((r) => r.sheet).filter(Boolean));
+    const showSheetColumn = distinctSheets.size > 1;
+
     return (
       <div className="max-h-72 overflow-y-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Row</TableHead>
+              {showSheetColumn && <TableHead>Sheet</TableHead>}
               <TableHead>Company</TableHead>
+              <TableHead>State</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Result</TableHead>
               <TableHead>Details</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.row}>
+            {rows.map((row, index) => (
+              // Row numbers are globally sequential across the whole file
+              // (see LeadsService.parseImportFile), so `row.row` alone is
+              // already collision-free — the array index is just an extra
+              // safety net.
+              <TableRow key={`${index}-${row.row}`}>
                 <TableCell>{row.row}</TableCell>
+                {showSheetColumn && (
+                  <TableCell className="text-xs text-muted-foreground">{row.sheet || "—"}</TableCell>
+                )}
                 <TableCell>{row.companyName || "—"}</TableCell>
+                <TableCell>{row.state || "—"}</TableCell>
                 <TableCell>{row.email || "—"}</TableCell>
                 <TableCell>{resultBadge(row.result)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
@@ -142,7 +158,7 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
           <DialogTitle>Import Leads</DialogTitle>
           <DialogDescription>
             {step === "upload" &&
-              "Upload an .xlsx or .csv file using the Download Template column layout: Company Name, Contact Person, Email, Phone, City, State, Industry, Lead Source, Status, Remarks. No column is required — any of them can be blank or left out of the file entirely."}
+              "Upload an .xlsx or .csv file using the Download Template column layout: Company Name, Contact Person, Email, Phone, City, State, Industry, Lead Source, Status, Remarks. No column is required — any of them can be blank or left out of the file entirely. If your workbook has separate tabs per state (e.g. \"Telangana\", \"Maharashtra\"), every tab is read, and leads on a state-named tab are automatically assigned that state."}
             {step === "preview" &&
               "Review the rows below. Only Valid rows will be imported — Invalid and Duplicate rows are skipped."}
             {step === "summary" && "Import complete."}

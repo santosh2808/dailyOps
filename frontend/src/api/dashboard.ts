@@ -13,16 +13,20 @@ import type {
   TopProductEntry,
 } from "@/types";
 
-export async function getDashboardStats() {
-  const res = await api.get<DashboardStats>("/api/v1/dashboard/stats");
+// `state`: Global Filters state, same as the other Dashboard Redesign v2
+// endpoints below (DashboardFilters). Pass-through via `params` — a missing/
+// undefined value is simply omitted from the query string, matching every
+// other optional filter in this file.
+export async function getDashboardStats(state?: string) {
+  const res = await api.get<DashboardStats>("/api/v1/dashboard/stats", { params: { state } });
   return res.data;
 }
 
 // Additive: Dashboard Redesign client functions — each backs one new
 // GET /api/v1/dashboard/* endpoint added in dashboard.controller.ts.
 
-export async function getDashboardFunnel() {
-  const res = await api.get<FunnelStage[]>("/api/v1/dashboard/funnel");
+export async function getDashboardFunnel(state?: string) {
+  const res = await api.get<FunnelStage[]>("/api/v1/dashboard/funnel", { params: { state } });
   return res.data;
 }
 
@@ -45,8 +49,8 @@ export async function getDashboardExecutives(filters: DashboardFilters = {}) {
   return res.data;
 }
 
-export async function getDashboardCharts() {
-  const res = await api.get<DashboardCharts>("/api/v1/dashboard/charts");
+export async function getDashboardCharts(state?: string) {
+  const res = await api.get<DashboardCharts>("/api/v1/dashboard/charts", { params: { state } });
   return res.data;
 }
 
@@ -66,12 +70,12 @@ export async function getDashboardTopProducts(filters: DashboardFilters = {}) {
   return res.data;
 }
 
-export async function getDashboardRecentActivities() {
-  const res = await api.get<RecentActivityEntry[]>("/api/v1/dashboard/recent-activities");
+export async function getDashboardRecentActivities(state?: string) {
+  const res = await api.get<RecentActivityEntry[]>("/api/v1/dashboard/recent-activities", { params: { state } });
   return res.data;
 }
 
-export async function getDashboardTodaysFollowUps() {
-  const res = await api.get<TodaysFollowUpEntry[]>("/api/v1/dashboard/todays-followups");
+export async function getDashboardTodaysFollowUps(state?: string) {
+  const res = await api.get<TodaysFollowUpEntry[]>("/api/v1/dashboard/todays-followups", { params: { state } });
   return res.data;
 }

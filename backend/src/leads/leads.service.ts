@@ -16,6 +16,7 @@ import { QueryLeadDto } from './dto/query-lead.dto';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
+import { INDIA_STATES } from '../common/india-states';
 
 const LEAD_NUMBER_PREFIX = 'LD-';
 const LEAD_NUMBER_PAD = 6;
@@ -95,6 +96,12 @@ interface LeadImportRowInput {
   source?: string;
   status?: string;
   remarks?: string;
+  // Multi-sheet import (see parseImportFile): the workbook tab this row
+  // came from, always set for display/traceability. When the tab's own
+  // name matches a recognized state, `state` above is overwritten with it
+  // (tab wins over any "State" column value on the row) — see
+  // resolveSheetState().
+  sheet?: string;
 }
 
 // Exported: this shape is threaded through the public return types of
@@ -113,6 +120,7 @@ export interface LeadImportRowResult {
   source: LeadSource;
   status: LeadStatus;
   remarks?: string;
+  sheet?: string;
   result: 'valid' | 'invalid' | 'duplicate' | 'created';
   errors?: string[];
   duplicateReason?: string;
@@ -856,6 +864,7 @@ export class LeadsService {
             source: input.source,
             status: input.status,
             remarks: input.remarks,
+            sheet: input.sheet,
           },
           input.row ?? i + 2,
           { insert: true },
@@ -865,48 +874,85 @@ export class LeadsService {
     return this.summarizeImportRows(rows);
   }
 
+  // Case-insensitive, whitespace-trimmed match of a workbook tab's own name
+  // against INDIA_STATES (the same list Customer.state/Lead.state are
+  // validated against elsewhere) — e.g. a tab literally named "telangana"
+  // or " Telangana " still resolves. A tab whose name doesn't match any
+  // recognized state (the default "Leads"/"Sheet1", a region name, a typo,
+  // ...) returns undefined and that sheet's rows keep whatever their own
+  // State column says, exactly like a single-sheet import always has.
+  private resolveSheetState(sheetName: string): string | undefined {
+    const normalized = sheetName.trim().toLowerCase();
+    return INDIA_STATES.find((s) => s.toLowerCase() === normalized);
+  }
+
+  // Multi-sheet import: sales teams keep one tab per state in the same
+  // workbook, so every sheet is read (not just the first), and a sheet
+  // whose tab name matches a recognized state stamps that state onto every
+  // row on it — overriding any "State" column value the row might also
+  // have, since the tab is the more deliberate, physically-organized
+  // signal here. Row numbers (used for traceability in the Preview/Summary
+  // tables) stay globally sequential across the whole file, continuing
+  // across sheet boundaries, which is also what keeps them collision-free
+  // as a React list key on the frontend — see previewLeadImport()/
+  // importLeads(), which still just do `rawRows[i]` / `i + 2` over the
+  // flattened array this returns.
   private parseImportFile(buffer: Buffer): LeadImportRowInput[] {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) {
+    if (workbook.SheetNames.length === 0) {
       throw new BadRequestException('The uploaded file has no worksheets');
     }
-    const sheet = workbook.Sheets[sheetName];
-    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-    if (rawRows.length === 0) {
+
+    const allRows: LeadImportRowInput[] = [];
+
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const sheetState = this.resolveSheetState(sheetName);
+
+      for (const raw of rawRows) {
+        const mapped: LeadImportRowInput = { sheet: sheetName };
+        const phoneCandidates: Record<string, string> = {};
+
+        for (const [key, value] of Object.entries(raw)) {
+          const normalizedKey = key.trim().toLowerCase();
+          const stringValue = String(value ?? '').trim();
+
+          if (LEAD_IMPORT_PHONE_HEADER_PRIORITY.includes(normalizedKey)) {
+            phoneCandidates[normalizedKey] = stringValue;
+            continue;
+          }
+
+          const mappedKey = LEAD_IMPORT_COLUMN_MAP[normalizedKey];
+          if (mappedKey) {
+            (mapped as Record<string, string>)[mappedKey] = stringValue;
+          }
+        }
+
+        // First non-empty value, scanned in priority order — see the comment
+        // on LEAD_IMPORT_PHONE_HEADER_PRIORITY above.
+        for (const header of LEAD_IMPORT_PHONE_HEADER_PRIORITY) {
+          if (phoneCandidates[header]) {
+            mapped.phone = phoneCandidates[header];
+            break;
+          }
+        }
+
+        // Tab name wins over any State column value on this row — see this
+        // method's own comment above.
+        if (sheetState) {
+          mapped.state = sheetState;
+        }
+
+        allRows.push(mapped);
+      }
+    }
+
+    if (allRows.length === 0) {
       throw new BadRequestException('The uploaded file has no data rows');
     }
 
-    return rawRows.map((raw) => {
-      const mapped: LeadImportRowInput = {};
-      const phoneCandidates: Record<string, string> = {};
-
-      for (const [key, value] of Object.entries(raw)) {
-        const normalizedKey = key.trim().toLowerCase();
-        const stringValue = String(value ?? '').trim();
-
-        if (LEAD_IMPORT_PHONE_HEADER_PRIORITY.includes(normalizedKey)) {
-          phoneCandidates[normalizedKey] = stringValue;
-          continue;
-        }
-
-        const mappedKey = LEAD_IMPORT_COLUMN_MAP[normalizedKey];
-        if (mappedKey) {
-          (mapped as Record<string, string>)[mappedKey] = stringValue;
-        }
-      }
-
-      // First non-empty value, scanned in priority order — see the comment
-      // on LEAD_IMPORT_PHONE_HEADER_PRIORITY above.
-      for (const header of LEAD_IMPORT_PHONE_HEADER_PRIORITY) {
-        if (phoneCandidates[header]) {
-          mapped.phone = phoneCandidates[header];
-          break;
-        }
-      }
-
-      return mapped;
-    });
+    return allRows;
   }
 
   // Shared by both the Preview step (insert: false, read-only) and the
@@ -1000,6 +1046,7 @@ export class LeadsService {
       source,
       status,
       remarks,
+      sheet: raw.sheet,
     };
 
     if (errors.length > 0) {

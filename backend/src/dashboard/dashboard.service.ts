@@ -242,7 +242,45 @@ export class DashboardService {
     return where;
   }
 
-  async getStats(): Promise<DashboardStats> {
+  // Additive: Global Filters "state" reaching getStats/getFunnel/getCharts/
+  // getRecentActivities/getTodaysFollowUps too (previously only the four
+  // SalesOrder-derived widgets above supported it — see
+  // buildSalesOrderWhere). One small where-fragment builder per entity that
+  // has a real state relationship, either directly (Lead) or through its
+  // Customer (Quotation/SalesOrder/ProformaInvoice/TaxInvoice/JEO) or
+  // Customer-via-SalesOrder (Complaint). Entities with no state concept at
+  // all (Product, Material, Supplier, User, Role, ...) intentionally have no
+  // equivalent helper — see getStats()'s own comments on which counts stay
+  // company-wide even when a state is selected.
+  private leadStateWhere(state?: string): Prisma.LeadWhereInput {
+    return state ? { state } : {};
+  }
+
+  private quotationStateWhere(state?: string): Prisma.QuotationWhereInput {
+    return state ? { OR: [{ customer: { state } }, { lead: { state } }] } : {};
+  }
+
+  private salesOrderStateWhere(state?: string): Prisma.SalesOrderWhereInput {
+    return state ? { customer: { state } } : {};
+  }
+
+  private proformaInvoiceStateWhere(state?: string): Prisma.ProformaInvoiceWhereInput {
+    return state ? { customer: { state } } : {};
+  }
+
+  private jeoStateWhere(state?: string): Prisma.JobExecutionOrderWhereInput {
+    return state ? { customer: { state } } : {};
+  }
+
+  private complaintStateWhere(state?: string): Prisma.ComplaintWhereInput {
+    return state ? { salesOrder: { customer: { state } } } : {};
+  }
+
+  private quotationApprovalStateWhere(state?: string): Prisma.QuotationApprovalRequestWhereInput {
+    return state ? { quotation: this.quotationStateWhere(state) } : {};
+  }
+
+  async getStats(state?: string): Promise<DashboardStats> {
     // Local day boundaries (server time) — "Today" for follow-ups means the
     // calendar day this request lands on, not a rolling 24h window.
     const startOfToday = new Date();
@@ -293,22 +331,29 @@ export class DashboardService {
       pendingApprovalsCount,
       openComplaintsCount,
     ] = await Promise.all([
-      this.prisma.customer.count({ where: { isActive: true } }),
+      // customers is filtered directly by Customer.state; products/
+      // materialsCount/outOfStockCount/lowStockCandidates/suppliers below
+      // stay company-wide even when `state` is set — none of those are
+      // regional entities (a Product/Material/Supplier isn't "in" a state),
+      // so there's no sensible way to narrow them by one.
+      this.prisma.customer.count({ where: { isActive: true, ...(state ? { state } : {}) } }),
       this.prisma.product.count({ where: { isActive: true } }),
       // Lead, Quotation, and SalesOrder all use deletedAt (not isActive) for
       // soft delete, matching the convention in their own findAll() methods.
       // Excludes soft-deleted rows so these counts stay in sync with their
       // respective list pages.
-      this.prisma.lead.count({ where: { deletedAt: null } }),
-      this.prisma.quotation.count({ where: { deletedAt: null } }),
-      this.prisma.salesOrder.count({ where: { deletedAt: null } }),
+      this.prisma.lead.count({ where: { deletedAt: null, ...this.leadStateWhere(state) } }),
+      this.prisma.quotation.count({ where: { deletedAt: null, ...this.quotationStateWhere(state) } }),
+      this.prisma.salesOrder.count({ where: { deletedAt: null, ...this.salesOrderStateWhere(state) } }),
       // ProformaInvoice has no deletedAt/isActive column (see schema.prisma
       // comment) — CANCELLED is its equivalent "no longer active" state, so
       // this excludes cancelled invoices instead.
-      this.prisma.proformaInvoice.count({ where: { status: { not: 'CANCELLED' } } }),
+      this.prisma.proformaInvoice.count({
+        where: { status: { not: 'CANCELLED' }, ...this.proformaInvoiceStateWhere(state) },
+      }),
       // "JEO Pending Count" per scope — literally status === PENDING (JEOs
       // that haven't started production at all yet), not "not completed".
-      this.prisma.jobExecutionOrder.count({ where: { status: 'PENDING' } }),
+      this.prisma.jobExecutionOrder.count({ where: { status: 'PENDING', ...this.jeoStateWhere(state) } }),
       this.prisma.material.count({ where: { isActive: true } }),
       // Out Of Stock: currentStock <= 0 — a single-column comparison, so a
       // direct count works.
@@ -328,51 +373,57 @@ export class DashboardService {
       this.prisma.supplier.count({ where: { deletedAt: null } }),
       // Today's Follow-ups: nextFollowUp falls within [startOfToday, startOfTomorrow).
       this.prisma.lead.count({
-        where: { ...openLeadWhere, nextFollowUp: { gte: startOfToday, lt: startOfTomorrow } },
+        where: { ...openLeadWhere, ...this.leadStateWhere(state), nextFollowUp: { gte: startOfToday, lt: startOfTomorrow } },
       }),
       // Overdue Follow-ups: nextFollowUp was before today and still hasn't
       // been actioned (lead is still open).
       this.prisma.lead.count({
-        where: { ...openLeadWhere, nextFollowUp: { lt: startOfToday } },
+        where: { ...openLeadWhere, ...this.leadStateWhere(state), nextFollowUp: { lt: startOfToday } },
       }),
       // Lead Source Summary: distribution of every non-deleted lead by
       // source, regardless of status (closed leads still count toward
       // "where did our leads come from").
       this.prisma.lead.groupBy({
         by: ['source'],
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...this.leadStateWhere(state) },
         _count: { _all: true },
       }),
       // Upcoming Follow-ups: the 7 days strictly after today.
       this.prisma.lead.count({
-        where: { ...openLeadWhere, nextFollowUp: { gte: startOfTomorrow, lt: startOfUpcomingWindowEnd } },
+        where: { ...openLeadWhere, ...this.leadStateWhere(state), nextFollowUp: { gte: startOfTomorrow, lt: startOfUpcomingWindowEnd } },
       }),
       // Pending Quotations: drafted/reviewed but not yet sent to the
       // customer (DRAFT or READY).
-      this.prisma.quotation.count({ where: { deletedAt: null, status: { in: ['DRAFT', 'READY'] } } }),
-      this.prisma.quotation.count({ where: { deletedAt: null, status: 'SENT' } }),
-      this.prisma.quotation.count({ where: { deletedAt: null, status: 'ACCEPTED' } }),
+      this.prisma.quotation.count({
+        where: { deletedAt: null, status: { in: ['DRAFT', 'READY'] }, ...this.quotationStateWhere(state) },
+      }),
+      this.prisma.quotation.count({ where: { deletedAt: null, status: 'SENT', ...this.quotationStateWhere(state) } }),
+      this.prisma.quotation.count({ where: { deletedAt: null, status: 'ACCEPTED', ...this.quotationStateWhere(state) } }),
       // Orders Awaiting Production: confirmed but production hasn't
       // started yet.
-      this.prisma.salesOrder.count({ where: { deletedAt: null, status: 'CONFIRMED' } }),
-      this.prisma.salesOrder.count({ where: { deletedAt: null, status: 'PRODUCTION_STARTED' } }),
+      this.prisma.salesOrder.count({
+        where: { deletedAt: null, status: 'CONFIRMED', ...this.salesOrderStateWhere(state) },
+      }),
+      this.prisma.salesOrder.count({
+        where: { deletedAt: null, status: 'PRODUCTION_STARTED', ...this.salesOrderStateWhere(state) },
+      }),
       // Sales by Executive: grouped in memory (not groupBy()) — see the
       // JEO Production Dashboard comment on why this codebase avoids
       // Prisma's groupBy() for aggregation; the Sales Order table is small
       // enough that this is a non-issue.
       this.prisma.salesOrder.findMany({
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...this.salesOrderStateWhere(state) },
         select: { createdBy: true, grandTotal: true },
       }),
       // Dispatch KPI — see the DashboardStats.dispatchCount field comment
       // on why this is exactly status = DISPATCHED, not a cumulative range.
       this.prisma.salesOrder.count({
-        where: { deletedAt: null, status: 'DISPATCHED' as SalesOrderStatus },
+        where: { deletedAt: null, status: 'DISPATCHED' as SalesOrderStatus, ...this.salesOrderStateWhere(state) },
       }),
       // Ready for Dispatch KPI — see the DashboardStats.readyForDispatchCount
       // field comment.
       this.prisma.salesOrder.count({
-        where: { deletedAt: null, status: 'READY_FOR_DISPATCH' as SalesOrderStatus },
+        where: { deletedAt: null, status: 'READY_FOR_DISPATCH' as SalesOrderStatus, ...this.salesOrderStateWhere(state) },
       }),
       // Delayed Orders — still open, past their promised deliveryDate.
       this.prisma.salesOrder.count({
@@ -380,12 +431,15 @@ export class DashboardService {
           deletedAt: null,
           status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
           deliveryDate: { lt: startOfToday },
+          ...this.salesOrderStateWhere(state),
         },
       }),
-      this.prisma.quotationApprovalRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.quotationApprovalRequest.count({
+        where: { status: 'PENDING', ...this.quotationApprovalStateWhere(state) },
+      }),
       // Additive: Complaints module — see DashboardStats.openComplaintsCount.
       this.prisma.complaint.count({
-        where: { deletedAt: null, status: { in: [...OPEN_COMPLAINT_STATUSES] } },
+        where: { deletedAt: null, status: { in: [...OPEN_COMPLAINT_STATUSES] }, ...this.complaintStateWhere(state) },
       }),
     ]);
 
@@ -445,7 +499,7 @@ export class DashboardService {
   }
 
   // Additive: Dashboard Redesign — Sales Funnel (requirement #2).
-  async getFunnel(): Promise<FunnelStage[]> {
+  async getFunnel(state?: string): Promise<FunnelStage[]> {
     // LeadStatus's own declared progression order (WON is the terminal
     // "reached everything" state; LOST is excluded — a lost lead didn't
     // reach Qualified/Quotation/Won just because it's no longer open).
@@ -460,17 +514,21 @@ export class DashboardService {
       productionOnwards,
       dispatchOnwards,
     ] = await Promise.all([
-      this.prisma.lead.count({ where: { deletedAt: null } }),
-      this.prisma.lead.count({ where: { deletedAt: null, status: { in: qualifiedOnwards } } }),
-      this.prisma.quotation.count({ where: { deletedAt: null } }),
+      this.prisma.lead.count({ where: { deletedAt: null, ...this.leadStateWhere(state) } }),
+      this.prisma.lead.count({
+        where: { deletedAt: null, status: { in: qualifiedOnwards }, ...this.leadStateWhere(state) },
+      }),
+      this.prisma.quotation.count({ where: { deletedAt: null, ...this.quotationStateWhere(state) } }),
       // "Won" sits between Quotation and Sales Order in this funnel — a
       // Sales Order can only be created from an ACCEPTED Quotation (see
       // SalesOrder's own schema comment), so ACCEPTED is the "won the deal"
       // milestone, not Lead.status = WON (that's a Lead-side label, applied
       // later when the lead itself is closed out).
-      this.prisma.quotation.count({ where: { deletedAt: null, status: 'ACCEPTED' } }),
+      this.prisma.quotation.count({
+        where: { deletedAt: null, status: 'ACCEPTED', ...this.quotationStateWhere(state) },
+      }),
       this.prisma.salesOrder.count({
-        where: { deletedAt: null, status: { not: 'CANCELLED' as SalesOrderStatus } },
+        where: { deletedAt: null, status: { not: 'CANCELLED' as SalesOrderStatus }, ...this.salesOrderStateWhere(state) },
       }),
       this.prisma.salesOrder.count({
         where: {
@@ -478,12 +536,14 @@ export class DashboardService {
           status: {
             in: ['PRODUCTION_STARTED', 'READY_FOR_DISPATCH', 'DISPATCHED', 'COMPLETED'] as SalesOrderStatus[],
           },
+          ...this.salesOrderStateWhere(state),
         },
       }),
       this.prisma.salesOrder.count({
         where: {
           deletedAt: null,
           status: { in: ['READY_FOR_DISPATCH', 'DISPATCHED', 'COMPLETED'] as SalesOrderStatus[] },
+          ...this.salesOrderStateWhere(state),
         },
       }),
     ]);
@@ -658,11 +718,27 @@ export class DashboardService {
   // Additive: Dashboard Redesign — donut charts (requirement #3). Lead
   // Sources reuses the existing leadSourceSummary groupBy (see getStats());
   // this method covers the other three donuts.
-  async getCharts(): Promise<DashboardCharts> {
+  // `state` narrows leadStatus/quotationStatus/productionStatus (all have a
+  // real state relationship — see the per-entity where-helpers above);
+  // inventoryStatus stays company-wide, same reasoning as getStats()'s
+  // materialsCount/lowStockCount/outOfStockCount.
+  async getCharts(state?: string): Promise<DashboardCharts> {
     const [leadStatusGroups, quotationStatusGroups, jeoStatusGroups, materials] = await Promise.all([
-      this.prisma.lead.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
-      this.prisma.quotation.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
-      this.prisma.jobExecutionOrder.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.lead.groupBy({
+        by: ['status'],
+        where: { deletedAt: null, ...this.leadStateWhere(state) },
+        _count: { _all: true },
+      }),
+      this.prisma.quotation.groupBy({
+        by: ['status'],
+        where: { deletedAt: null, ...this.quotationStateWhere(state) },
+        _count: { _all: true },
+      }),
+      this.prisma.jobExecutionOrder.groupBy({
+        by: ['status'],
+        where: this.jeoStateWhere(state),
+        _count: { _all: true },
+      }),
       this.prisma.material.findMany({
         where: { isActive: true },
         select: { currentStock: true, minimumStock: true, reorderLevel: true },
@@ -783,19 +859,120 @@ export class DashboardService {
 
   // Additive: Dashboard Redesign v2 — Recent Activities timeline
   // (requirement #10). Straight read of the existing AuditLog table.
-  async getRecentActivities(limit = 20): Promise<RecentActivityEntry[]> {
+  async getRecentActivities(limit = 20, state?: string): Promise<RecentActivityEntry[]> {
+    if (!state) {
+      const rows = await this.prisma.auditLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, module: true, action: true, actorName: true, remarks: true, createdAt: true },
+      });
+      return rows;
+    }
+
+    // AuditLog is deliberately not foreign-keyed to any one table (see its
+    // own schema comment — `module` + `recordId` is a descriptive pair, not
+    // a real relation), so there's no direct way to filter it by state in
+    // SQL. Instead: scan a larger recent window, resolve each row's state
+    // via a handful of batched lookups (see resolveAuditLogStates below),
+    // then filter down to `limit`. Modules with no state concept at all
+    // (User, Role, Department, ...) are dropped whenever a state filter is
+    // active, since they can never belong to one.
+    const RECENT_ACTIVITY_SCAN_LIMIT = 300;
     const rows = await this.prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: { id: true, module: true, action: true, actorName: true, remarks: true, createdAt: true },
+      take: RECENT_ACTIVITY_SCAN_LIMIT,
+      select: { id: true, module: true, recordId: true, action: true, actorName: true, remarks: true, createdAt: true },
     });
-    return rows;
+
+    const stateByKey = await this.resolveAuditLogStates(rows);
+
+    return rows
+      .filter((row) => row.recordId && stateByKey.get(`${row.module}:${row.recordId}`) === state)
+      .slice(0, limit)
+      .map(({ id, module, action, actorName, remarks, createdAt }) => ({ id, module, action, actorName, remarks, createdAt }));
+  }
+
+  // Batched per-module state lookups for getRecentActivities()'s state
+  // filter. Only the modules that actually call AuditLogService.log() with
+  // a real recordId and have a state relationship are handled below (see
+  // the grep-confirmed module list: SalesOrder, Quotation, ProformaInvoice,
+  // TaxInvoice, JEO, Complaint — Lead has its own separate LeadHistory
+  // table and never writes to AuditLog). Anything else (a module string not
+  // in this list, or a row with no recordId) simply has no entry in the
+  // returned map, so the caller's `=== state` filter drops it.
+  private async resolveAuditLogStates(
+    rows: { module: string; recordId: string | null }[],
+  ): Promise<Map<string, string | null>> {
+    const idsByModule = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!row.recordId) continue;
+      if (!idsByModule.has(row.module)) idsByModule.set(row.module, new Set());
+      idsByModule.get(row.module)!.add(row.recordId);
+    }
+
+    const result = new Map<string, string | null>();
+
+    const salesOrderIds = [...(idsByModule.get('SalesOrder') ?? [])];
+    if (salesOrderIds.length) {
+      const found = await this.prisma.salesOrder.findMany({
+        where: { id: { in: salesOrderIds } },
+        select: { id: true, customer: { select: { state: true } } },
+      });
+      for (const r of found) result.set(`SalesOrder:${r.id}`, r.customer.state);
+    }
+
+    const quotationIds = [...(idsByModule.get('Quotation') ?? [])];
+    if (quotationIds.length) {
+      const found = await this.prisma.quotation.findMany({
+        where: { id: { in: quotationIds } },
+        select: { id: true, customer: { select: { state: true } }, lead: { select: { state: true } } },
+      });
+      for (const r of found) result.set(`Quotation:${r.id}`, r.customer?.state ?? r.lead?.state ?? null);
+    }
+
+    const proformaInvoiceIds = [...(idsByModule.get('ProformaInvoice') ?? [])];
+    if (proformaInvoiceIds.length) {
+      const found = await this.prisma.proformaInvoice.findMany({
+        where: { id: { in: proformaInvoiceIds } },
+        select: { id: true, customer: { select: { state: true } } },
+      });
+      for (const r of found) result.set(`ProformaInvoice:${r.id}`, r.customer.state);
+    }
+
+    const taxInvoiceIds = [...(idsByModule.get('TaxInvoice') ?? [])];
+    if (taxInvoiceIds.length) {
+      const found = await this.prisma.taxInvoice.findMany({
+        where: { id: { in: taxInvoiceIds } },
+        select: { id: true, customer: { select: { state: true } } },
+      });
+      for (const r of found) result.set(`TaxInvoice:${r.id}`, r.customer.state);
+    }
+
+    const jeoIds = [...(idsByModule.get('JEO') ?? [])];
+    if (jeoIds.length) {
+      const found = await this.prisma.jobExecutionOrder.findMany({
+        where: { id: { in: jeoIds } },
+        select: { id: true, customer: { select: { state: true } } },
+      });
+      for (const r of found) result.set(`JEO:${r.id}`, r.customer.state);
+    }
+
+    const complaintIds = [...(idsByModule.get('Complaint') ?? [])];
+    if (complaintIds.length) {
+      const found = await this.prisma.complaint.findMany({
+        where: { id: { in: complaintIds } },
+        select: { id: true, salesOrder: { select: { customer: { select: { state: true } } } } },
+      });
+      for (const r of found) result.set(`Complaint:${r.id}`, r.salesOrder.customer.state);
+    }
+
+    return result;
   }
 
   // Additive: Dashboard Redesign v2 — Today's Follow-ups list (requirement
   // #11). Same open-lead/date-window definition as
   // getStats().todaysFollowUpsCount, just returning rows instead of a count.
-  async getTodaysFollowUps(): Promise<TodaysFollowUpEntry[]> {
+  async getTodaysFollowUps(state?: string): Promise<TodaysFollowUpEntry[]> {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const startOfTomorrow = new Date(startOfToday);
@@ -806,6 +983,7 @@ export class DashboardService {
         deletedAt: null,
         status: { notIn: ['WON', 'LOST'] as LeadStatus[] },
         nextFollowUp: { gte: startOfToday, lt: startOfTomorrow },
+        ...this.leadStateWhere(state),
       },
       orderBy: { nextFollowUp: 'asc' },
       select: {

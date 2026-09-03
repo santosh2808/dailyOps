@@ -63,4 +63,9 @@ export class ImportLeadRowDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @ApiPropertyOptional({ example: 'Telangana', description: 'Workbook tab this row came from, for traceability in multi-sheet imports' })
+  @IsOptional()
+  @IsString()
+  sheet?: string;
 }

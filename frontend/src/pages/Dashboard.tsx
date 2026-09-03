@@ -465,14 +465,18 @@ export default function Dashboard() {
   const [revenueSeries, setRevenueSeries] = useState<RevenuePoint[]>([]);
   const [revenueLoading, setRevenueLoading] = useState(true);
 
+  // Re-runs whenever the Global Filters state changes (see filters.state
+  // dependency below) — same as fetchFiltered/fetchRevenue, so picking a
+  // state narrows the KPI cards, funnel-derived charts, and Today's
+  // Follow-ups too, not just the map/executives/top-products/revenue.
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const [statsData, chartsData, followUps] = await Promise.all([
-        getDashboardStats(),
-        getDashboardCharts(),
-        getDashboardTodaysFollowUps(),
+        getDashboardStats(filters.state),
+        getDashboardCharts(filters.state),
+        getDashboardTodaysFollowUps(filters.state),
       ]);
       setStats(statsData);
       setCharts(chartsData);
@@ -483,8 +487,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filters.state]);
 
   useEffect(() => {
     fetchDashboard();

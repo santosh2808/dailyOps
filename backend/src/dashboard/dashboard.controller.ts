@@ -12,17 +12,25 @@ import { QueryDashboardFiltersDto } from './dto/query-dashboard-filters.dto';
 export class DashboardController {
   constructor(private dashboardService: DashboardService) {}
 
+  // `state` (from QueryDashboardFiltersDto, same Global Filters shape used
+  // below) narrows every count/breakdown that has a real state relationship
+  // (Lead directly; Quotation/SalesOrder/ProformaInvoice/TaxInvoice/JEO via
+  // their Customer; Complaint via its SalesOrder's Customer). Counts with no
+  // state concept at all (Products, Materials, Suppliers — company-wide
+  // master data, not tied to any customer) are deliberately left unfiltered
+  // even when a state is selected; see getStats()'s own comments for which
+  // fields those are.
   @Get('stats')
-  getStats() {
-    return this.dashboardService.getStats();
+  getStats(@Query() query: QueryDashboardFiltersDto) {
+    return this.dashboardService.getStats(query.state);
   }
 
   // Additive: Dashboard Redesign endpoints below — all read-only reporting,
   // no existing endpoint's behavior changed.
 
   @Get('funnel')
-  getFunnel() {
-    return this.dashboardService.getFunnel();
+  getFunnel(@Query() query: QueryDashboardFiltersDto) {
+    return this.dashboardService.getFunnel(query.state);
   }
 
   // Revenue keeps its own period/month/year (bucketing) separate from the
@@ -40,8 +48,8 @@ export class DashboardController {
   }
 
   @Get('charts')
-  getCharts() {
-    return this.dashboardService.getCharts();
+  getCharts(@Query() query: QueryDashboardFiltersDto) {
+    return this.dashboardService.getCharts(query.state);
   }
 
   // Additive: Dashboard Redesign v2 endpoints below.
@@ -57,12 +65,12 @@ export class DashboardController {
   }
 
   @Get('recent-activities')
-  getRecentActivities() {
-    return this.dashboardService.getRecentActivities();
+  getRecentActivities(@Query() query: QueryDashboardFiltersDto) {
+    return this.dashboardService.getRecentActivities(20, query.state);
   }
 
   @Get('todays-followups')
-  getTodaysFollowUps() {
-    return this.dashboardService.getTodaysFollowUps();
+  getTodaysFollowUps(@Query() query: QueryDashboardFiltersDto) {
+    return this.dashboardService.getTodaysFollowUps(query.state);
   }
 }

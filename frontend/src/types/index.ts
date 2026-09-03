@@ -930,6 +930,10 @@ export interface LeadImportRowResult {
   source: LeadSource;
   status: LeadStatus;
   remarks?: string;
+  // Workbook tab this row came from (multi-sheet imports — e.g. one tab
+  // per state). When the tab's own name matches a recognized state, it
+  // sets this row's `state` above too, overriding any State column value.
+  sheet?: string;
   result: "valid" | "invalid" | "duplicate" | "created";
   errors?: string[];
   duplicateReason?: string;
