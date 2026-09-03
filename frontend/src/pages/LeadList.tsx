@@ -28,6 +28,7 @@ import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog"
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
@@ -349,7 +350,14 @@ export default function LeadList() {
                     <TableCell>
                       <TruncatedText text={lead.email || "-"} />
                     </TableCell>
-                    <TableCell>{sourceLabel(lead.source)}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5">
+                        {sourceLabel(lead.source)}
+                        {lead.source === "WEBSITE" && lead.sourceWebsiteId && (
+                          <Badge variant="info">Website</Badge>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell>{lead.state || "—"}</TableCell>
                     {/* Full name only — never the role — with an explicit
                         "Unassigned" label (not a bare dash) when no user is

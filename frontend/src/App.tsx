@@ -41,6 +41,7 @@ import Permissions from "@/pages/Permissions";
 import Departments from "@/pages/Departments";
 import StateSeriesCodes from "@/pages/StateSeriesCodes";
 import PublicQuotation from "@/pages/PublicQuotation";
+import FormConfigurationPage from "@/pages/FormConfigurationPage";
 
 export default function App() {
   return (
@@ -394,6 +395,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StateSeriesCodes />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/administration/web-form-config"
+            element={
+              <ProtectedRoute>
+                <FormConfigurationPage />
               </ProtectedRoute>
             }
           />

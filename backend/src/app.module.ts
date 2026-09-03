@@ -27,6 +27,8 @@ import { MailerModule } from './mailer/mailer.module';
 import { PdfModule } from './pdf/pdf.module';
 import { ComplaintsModule } from './complaints/complaints.module';
 import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.module';
+import { FormConfigurationModule } from './form-configuration/form-configuration.module';
+import { PublicFormsModule } from './public-forms/public-forms.module';
 
 @Module({
   imports: [
@@ -59,6 +61,9 @@ import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.
     MailerModule,
     PdfModule,
     ComplaintsModule,
+    // Website Enquiries -> Lead/Complaint refactor — additive.
+    FormConfigurationModule,
+    PublicFormsModule,
   ],
 })
 export class AppModule {}

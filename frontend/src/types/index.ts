@@ -381,6 +381,16 @@ export interface Lead {
   // one already exists for this lead, and avoid ever creating duplicates.
   // Most recent first.
   quotations?: { id: string; quotationNumber: string; status: QuotationStatus; createdAt: string }[];
+  // Additive: Website Enquiries -> Lead/Complaint refactor. Set only for a
+  // Lead created from a public web form submission.
+  sourceWebsiteId?: string | null;
+  sourceWebsite?: { id: string; code: string; name: string } | null;
+  sourceSubjectCode?: string | null;
+  webFormIntakeId?: string | null;
+  webFormIntake?: WebFormIntakeSummary | null;
+  // Additive: Lead <-> Complaint conversion — set once this lead has been
+  // converted into a Complaint (never both this and isConverted at once).
+  convertedToComplaintId?: string | null;
 }
 
 // Lead History / Notes — additive. QUOTATION_CREATED entries are
@@ -759,6 +769,27 @@ export interface TaxInvoice {
   eInvoiceUpdatedAt?: string | null;
 }
 
+// Additive: Website Enquiries -> Lead/Complaint refactor. Immutable
+// line-item snapshot for a TaxInvoice, copied from SalesOrder.items at
+// generation time — also the target a web-originated warranty Complaint's
+// taxInvoiceItemId points at once staff verifies which line item the claim
+// concerns (see the Invoice Verification section on Complaint Details).
+export interface TaxInvoiceItem {
+  id: string;
+  taxInvoiceId: string;
+  productId: string;
+  product?: Product;
+  productName: string;
+  productSku?: string | null;
+  productDescription?: string | null;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  tax: number;
+  lineTotal: number;
+  createdAt: string;
+}
+
 export const JEO_STATUSES = [
   "PENDING",
   "MATERIAL_READY",
@@ -1018,7 +1049,11 @@ export type ComplaintStatus = (typeof COMPLAINT_STATUSES)[number];
 export interface Complaint {
   id: string;
   complaintNumber: string;
-  salesOrderId: string;
+  // Optional as of the Website Enquiries -> Lead/Complaint refactor — a
+  // web-originated complaint (source WEB_FORM) can exist before any Sales
+  // Order is matched. Manual staff creation (ComplaintForm.tsx) still always
+  // requires one (enforced client-side, unchanged).
+  salesOrderId?: string | null;
   salesOrder?: {
     id: string;
     salesOrderNumber: string;
@@ -1046,4 +1081,183 @@ export interface Complaint {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+  // Additive: Website Enquiries -> Lead/Complaint refactor. `source`
+  // distinguishes a complaint logged directly by staff (INTERNAL) from one
+  // that originated as a public web form submission (WEB_FORM) or arrived
+  // via a Lead<->Complaint conversion (CONVERTED_FROM_LEAD).
+  source: ComplaintSource;
+  sourceWebsiteId?: string | null;
+  sourceWebsite?: { id: string; code: string; name: string } | null;
+  sourceSubjectCode?: string | null;
+  webFormIntakeId?: string | null;
+  webFormIntake?: WebFormIntakeSummary | null;
+  // Reporter contact details as submitted on the public form — populated
+  // whenever source !== 'INTERNAL'.
+  reporterName?: string | null;
+  reporterEmail?: string | null;
+  reporterPhone?: string | null;
+  // The invoice number the reporter typed in, unverified until staff runs
+  // the invoice lookup (see the Invoice Verification section on Complaint
+  // Details).
+  claimedInvoiceNumber?: string | null;
+  taxInvoiceId?: string | null;
+  taxInvoice?: { id: string; invoiceNumber: string } | null;
+  taxInvoiceItemId?: string | null;
+  taxInvoiceItem?: { id: string; productName: string; productSku?: string | null } | null;
+  warrantyVerificationStatus: WarrantyVerificationStatus;
+  // Additive: Complaint <-> Lead conversion.
+  convertedToLeadId?: string | null;
+}
+
+// Additive: Website Enquiries -> Lead/Complaint refactor.
+export const COMPLAINT_SOURCES = ["INTERNAL", "WEB_FORM", "CONVERTED_FROM_LEAD"] as const;
+export type ComplaintSource = (typeof COMPLAINT_SOURCES)[number];
+
+export const WARRANTY_VERIFICATION_STATUSES = ["UNVERIFIED", "VERIFIED", "NOT_FOUND"] as const;
+export type WarrantyVerificationStatus = (typeof WARRANTY_VERIFICATION_STATUSES)[number];
+
+// Additive: Website Form Configuration module (Website Enquiries ->
+// Lead/Complaint refactor). A FormWebsite is an external marketing/product
+// website (e.g. SPYRO) whose contact/enquiry forms feed into DailyOps as
+// ordinary Leads/Complaints (see WebFormIntake below) — deliberately its own
+// concept from Product above (not a catalog item). Mirrors
+// backend/prisma/schema.prisma's FormWebsite/FormDefinition/FormVersion/
+// FormWebsiteProduct/FormSubjectRoute/WebFormIntake models field-by-field.
+export const FORM_WEBSITE_STATUSES = ["ACTIVE", "INACTIVE"] as const;
+export type FormWebsiteStatus = (typeof FORM_WEBSITE_STATUSES)[number];
+
+export interface FormFieldSchemaOption {
+  value: string;
+  label: string;
+}
+
+export interface FormFieldSchema {
+  type: "string" | "number" | "boolean";
+  required?: boolean;
+  label?: string;
+  options?: FormFieldSchemaOption[];
+}
+
+export interface FormVersion {
+  id: string;
+  formDefinitionId: string;
+  version: number;
+  schema: { fields: Record<string, FormFieldSchema> };
+  publishedAt?: string | null;
+  createdAt: string;
+}
+
+export interface FormDefinition {
+  id: string;
+  formWebsiteId: string;
+  code: string;
+  name: string;
+  publicFormKey: string;
+  enabled: boolean;
+  supportEmail?: string | null;
+  configuration?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  versions?: FormVersion[];
+  routes?: FormSubjectRoute[];
+}
+
+export interface FormWebsite {
+  id: string;
+  code: string;
+  name: string;
+  status: FormWebsiteStatus;
+  supportEmail?: string | null;
+  // Per-website CORS allow-list for the public submission endpoint.
+  allowedOrigins: string[];
+  configuration?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  forms?: FormDefinition[];
+  products?: FormWebsiteProduct[];
+}
+
+// Maps an external website's own product codes/labels onto the canonical
+// Product catalog — Product remains the single source of truth; this is a
+// per-website presentation + selection layer.
+export interface FormWebsiteProduct {
+  id: string;
+  formWebsiteId: string;
+  productId: string;
+  product?: Product;
+  publicCode: string;
+  label: string;
+  enabled: boolean;
+  displayOrder: number;
+  fieldConfig?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const FORM_DESTINATION_TYPES = ["LEAD", "COMPLAINT"] as const;
+export type FormDestinationType = (typeof FORM_DESTINATION_TYPES)[number];
+
+// Explicit, stable-subject-code routing configuration — resolves "this
+// subject, optionally this product, on this form" to a destination type
+// plus an optional default responsible department/user. subjectCode is a
+// plain string (not restricted to a fixed enum) so a website can introduce
+// its own code without a schema migration; see CANONICAL_SUBJECT_CODES in
+// @/lib (or wherever declared) for the UI's own convenience default list.
+export interface FormSubjectRoute {
+  id: string;
+  formDefinitionId: string;
+  subjectCode: string;
+  subjectLabel: string;
+  destinationType: FormDestinationType;
+  productId?: string | null;
+  product?: Product | null;
+  departmentId?: string | null;
+  department?: Department | null;
+  assignedUserId?: string | null;
+  assignedUser?: { id: string; name: string; email?: string | null } | null;
+  priority: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const WEB_FORM_INTAKE_STATUSES = ["RECEIVED", "PROCESSED", "FAILED"] as const;
+export type WebFormIntakeStatus = (typeof WEB_FORM_INTAKE_STATUSES)[number];
+
+// Immutable intake/audit record for a public form submission — exists for
+// traceability, not as an operational workflow (that lives entirely in the
+// resulting Lead or Complaint). Lead/Complaint detail responses embed a
+// narrower summary of this (id/referenceNumber/subjectLabel/submittedData/
+// createdAt) under `webFormIntake` — see leads.service.ts/
+// complaints.service.ts LEAD_DETAIL_INCLUDE/COMPLAINT_DETAIL_INCLUDE.
+export interface WebFormIntake {
+  id: string;
+  referenceNumber: string;
+  formWebsiteId: string;
+  formDefinitionId: string;
+  formVersionId: string;
+  subjectCode: string;
+  subjectLabel: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  message: string;
+  submittedData: Record<string, unknown>;
+  classification: FormDestinationType;
+  leadId?: string | null;
+  complaintId?: string | null;
+  status: WebFormIntakeStatus;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+// The narrower shape actually embedded on Lead/Complaint detail responses
+// (see the comment on WebFormIntake above).
+export interface WebFormIntakeSummary {
+  id: string;
+  referenceNumber: string;
+  subjectLabel: string;
+  submittedData: Record<string, unknown>;
+  createdAt: string;
 }

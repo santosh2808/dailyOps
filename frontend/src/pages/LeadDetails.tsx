@@ -11,9 +11,12 @@ import { nextActionFor, sourceLabel } from "@/components/leads/leadOptions";
 import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
+import ConvertToComplaintDialog from "@/components/leads/ConvertToComplaintDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import { Spinner } from "@/components/ui/spinner";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/toast";
+import { useAuth } from "@/context/AuthContext";
 import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
 import { generateQuotationFromLead } from "@/api/quotations";
 import type { Lead, LeadStatus } from "@/types";
@@ -53,6 +56,7 @@ type TabKey = (typeof TABS)[number]["key"];
 export default function LeadDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +64,7 @@ export default function LeadDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  const [convertToComplaintOpen, setConvertToComplaintOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -201,6 +206,14 @@ export default function LeadDetails() {
                       Convert to Customer
                     </Button>
                   )}
+                  {!lead.convertedToComplaintId &&
+                    hasPermission("Lead", "Edit") &&
+                    hasPermission("Complaint", "Create") && (
+                      <Button variant="outline" onClick={() => setConvertToComplaintOpen(true)}>
+                        <ArrowRightCircle className="mr-2 h-4 w-4" />
+                        Convert to Complaint
+                      </Button>
+                    )}
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -214,6 +227,23 @@ export default function LeadDetails() {
                   </Button>
                 </div>
               </div>
+
+              {lead.convertedToComplaintId && (
+                <Card>
+                  <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="warning">Converted to Complaint</Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/complaints/${lead.convertedToComplaintId}`)}
+                    >
+                      View Complaint
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Lead Management Phase 1 (requirement #12) — always show the
                   next available action so nobody has to wonder what to do. */}
@@ -319,6 +349,38 @@ export default function LeadDetails() {
                       <Field label="Industry" value={lead.industry} />
                     </CardContent>
                   </Card>
+
+                  {lead.sourceWebsiteId && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Website Submission</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                          <Field label="Website" value={lead.sourceWebsite?.name} />
+                          <Field label="Subject" value={lead.webFormIntake?.subjectLabel || lead.sourceSubjectCode} />
+                          <Field label="Reference No." value={lead.webFormIntake?.referenceNumber} />
+                          <Field label="Submitted On" value={formatDate(lead.webFormIntake?.createdAt)} />
+                        </div>
+                        {lead.webFormIntake?.submittedData &&
+                          Object.keys(lead.webFormIntake.submittedData).length > 0 && (
+                            <div>
+                              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Submitted Fields
+                              </p>
+                              <div className="space-y-1 rounded-md border p-3 text-sm">
+                                {Object.entries(lead.webFormIntake.submittedData).map(([key, value]) => (
+                                  <div key={key} className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">{key}</span>
+                                    <span className="text-right text-slate-900">{String(value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card>
                     <CardHeader>
@@ -434,6 +496,7 @@ export default function LeadDetails() {
         lead={lead}
         onConfirm={handleConvertConfirm}
       />
+      <ConvertToComplaintDialog open={convertToComplaintOpen} onOpenChange={setConvertToComplaintOpen} lead={lead} />
     </div>
   );
 }

@@ -48,7 +48,7 @@ export default function ComplaintForm() {
         if (cancelled) return;
         setComplaintNumber(complaint.complaintNumber);
         setForm({
-          salesOrderId: complaint.salesOrderId,
+          salesOrderId: complaint.salesOrderId ?? "",
           subject: complaint.subject,
           description: complaint.description ?? "",
         });

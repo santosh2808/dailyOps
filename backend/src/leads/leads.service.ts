@@ -5,10 +5,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { LeadHistoryAction, LeadSource, LeadStatus, Prisma } from '@prisma/client';
+import { LeadHistoryAction, LeadPriority, LeadSource, LeadStatus, Prisma } from '@prisma/client';
 import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
@@ -20,6 +21,16 @@ import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 const LEAD_NUMBER_PREFIX = 'LD-';
 const LEAD_NUMBER_PAD = 6;
 const MAX_LEAD_NUMBER_ATTEMPTS = 5;
+
+// Additive: Website Enquiries -> Lead/Complaint refactor. Lead <-> Complaint
+// conversion shares this module's own CMP- numbering convention rather than
+// importing ComplaintsService (which would create a circular module
+// dependency — ComplaintsService.convertToLead() needs to create a Lead the
+// same way, so each side stays self-contained and duplicates only this
+// small numbering constant/helper, not any business logic).
+const CONVERSION_COMPLAINT_NUMBER_PREFIX = 'CMP-';
+const CONVERSION_COMPLAINT_NUMBER_PAD = 6;
+const MAX_CONVERSION_NUMBER_ATTEMPTS = 5;
 
 // Lead Import: maps the human-readable template headers (case-insensitive)
 // to the row shape used internally. Any column in the uploaded file that
@@ -148,13 +159,52 @@ const LEAD_DETAIL_INCLUDE = {
     select: { id: true, quotationNumber: true, status: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   },
+  // Additive (Website Enquiries -> Lead/Complaint refactor, frontend Stage
+  // 3): lets Lead Details render a "Website Submission" card without a
+  // second round-trip — website name/code for display, and the originating
+  // intake's reference number/subject label/submitted payload/timestamp.
+  sourceWebsite: { select: { id: true, code: true, name: true } },
+  webFormIntake: {
+    select: { id: true, referenceNumber: true, subjectLabel: true, submittedData: true, createdAt: true },
+  },
 } satisfies Prisma.LeadInclude;
 
 @Injectable()
 export class LeadsService {
   private readonly logger = new Logger(LeadsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mailerService: MailerService,
+  ) {}
+
+  // Notifies a user directly when a Lead is assigned to them — manual
+  // creation/reassignment by staff (see create()/update() below); the
+  // web-form-routing equivalent is PublicFormsService's own
+  // WEB_SUBMISSION_ASSIGNED send, since that path never goes through here.
+  // Never throws (MailerService itself doesn't); silently no-ops if the
+  // user has no email on file rather than guessing a recipient.
+  private async notifyLeadAssigned(
+    userId: string,
+    lead: { id: string; leadNumber: string; title: string; companyName: string },
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+    if (!user?.email) return;
+    await this.mailerService.send({
+      templateKey: 'LEAD_ASSIGNED',
+      fallbackSubject: `Lead ${lead.leadNumber} assigned to you`,
+      fallbackBodyHtml:
+        '<p>Hi {{assigneeName}},</p><p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>',
+      vars: {
+        assigneeName: user.name,
+        leadNumber: lead.leadNumber,
+        title: lead.title,
+        companyName: lead.companyName,
+      },
+      to: user.email,
+      link: { module: 'Lead', leadId: lead.id },
+    });
+  }
 
   async findAll(query: QueryLeadDto) {
     const page = query.page ?? 1;
@@ -237,8 +287,8 @@ export class LeadsService {
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
       try {
-        return await this.prisma.$transaction(async (tx) => {
-          const lead = await tx.lead.create({
+        const lead = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.lead.create({
             data: {
               ...leadData,
               leadNumber,
@@ -248,9 +298,13 @@ export class LeadsService {
             },
             include: LEAD_DETAIL_INCLUDE,
           });
-          await this.logHistory(tx, lead.id, 'CREATED', `Lead ${lead.leadNumber} created`, actorName);
-          return lead;
+          await this.logHistory(tx, created.id, 'CREATED', `Lead ${created.leadNumber} created`, actorName);
+          return created;
         });
+        if (lead.assignedToUserId) {
+          await this.notifyLeadAssigned(lead.assignedToUserId, lead);
+        }
+        return lead;
       } catch (error) {
         if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) {
           continue; // Another request took this number first — retry with a fresh one.
@@ -267,7 +321,7 @@ export class LeadsService {
     const existing = await this.findOne(id);
     const { products, expectedCloseDate, nextFollowUp, assignedToUserId, ...leadData } = dto;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (products) {
         await tx.leadProduct.deleteMany({ where: { leadId: id } });
       }
@@ -363,6 +417,16 @@ export class LeadsService {
 
       return updated;
     });
+
+    if (
+      assignedToUserId !== undefined &&
+      assignedToUserId &&
+      assignedToUserId !== existing.assignedToUserId
+    ) {
+      await this.notifyLeadAssigned(assignedToUserId, updated);
+    }
+
+    return updated;
   }
 
   async updateStatus(id: string, dto: UpdateLeadStatusDto, actorName?: string) {
@@ -491,6 +555,196 @@ export class LeadsService {
 
       return { lead: updatedLead, customer };
     });
+  }
+
+  // Additive: Website Enquiries -> Lead/Complaint refactor. Called only from
+  // PublicFormsService, inside its own `$transaction` alongside the
+  // WebFormIntake row it just created — takes that transaction's client so
+  // the intake row, the lead, and the LeadHistory entry all commit or fail
+  // together. Not exposed via its own controller route: there is no public
+  // DTO wrapping this — a web-originated Lead is only ever created as a side
+  // effect of a public form submission.
+  //
+  // Field-mapping decisions (documented per the plan's request):
+  //  - companyName: falls back to the contact person's name when the form
+  //    didn't collect a company (e.g. an individual homeowner) — Lead.companyName
+  //    is a required non-null column, and fabricating a placeholder like
+  //    "N/A" would be worse than just using the one real name we do have.
+  //  - contactPerson/email/phone/description: taken verbatim from the
+  //    submitted contact fields (phone falls back to '' only if the form's
+  //    schema didn't actually require it — every seeded form does).
+  //  - title: the resolved FormSubjectRoute's subjectLabel (there is no
+  //    other natural "opportunity title" for a web enquiry).
+  //  - assignedToUserId: the route's own assignedUserId, or null — never
+  //    defaulted to any other user.
+  //  - priority: always MEDIUM — FormSubjectRoute carries no priority
+  //    column in this schema.
+  async createFromWebFormIntake(
+    input: {
+      formWebsiteId: string;
+      webFormIntakeId: string;
+      subjectCode: string;
+      subjectLabel: string;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      company?: string | null;
+      message?: string | null;
+      assignedToUserId?: string | null;
+      productId?: string | null;
+      quantity?: number | null;
+    },
+    tx: Prisma.TransactionClient,
+  ) {
+    const leadNumber = await this.generateLeadNumber();
+    const companyName = input.company?.trim() || input.name.trim();
+
+    const lead = await tx.lead.create({
+      data: {
+        leadNumber,
+        companyName,
+        contactPerson: input.name,
+        email: input.email || undefined,
+        phone: input.phone || '',
+        title: input.subjectLabel,
+        description: input.message || undefined,
+        remarks: input.message || undefined,
+        source: LeadSource.WEBSITE,
+        priority: LeadPriority.MEDIUM,
+        sourceWebsiteId: input.formWebsiteId,
+        sourceSubjectCode: input.subjectCode,
+        webFormIntakeId: input.webFormIntakeId,
+        assignedToUserId: input.assignedToUserId ?? undefined,
+        products:
+          input.productId
+            ? {
+                create: [
+                  {
+                    productId: input.productId,
+                    quantity:
+                      typeof input.quantity === 'number' && input.quantity > 0
+                        ? Math.floor(input.quantity)
+                        : 1,
+                  },
+                ],
+              }
+            : undefined,
+      },
+      include: LEAD_DETAIL_INCLUDE,
+    });
+
+    await this.logHistory(
+      tx,
+      lead.id,
+      'CREATED',
+      `Lead ${lead.leadNumber} created from website submission (${input.subjectLabel})`,
+    );
+
+    return lead;
+  }
+
+  // Additive: Lead <-> Complaint conversion (Website Enquiries -> Lead/Complaint
+  // refactor). Requires the caller to hold BOTH Lead.Edit and Complaint.Create
+  // (see LeadsController — @RequireAllPermissions). Idempotent guard mirrors
+  // convertToCustomer()'s isConverted check via convertedToComplaintId.
+  async convertToComplaint(
+    id: string,
+    actorName?: string,
+    dto?: { reason?: string },
+  ) {
+    const lead = await this.findOne(id);
+    if (lead.convertedToComplaintId) {
+      throw new ConflictException('This lead has already been converted to a complaint');
+    }
+
+    for (let attempt = 1; attempt <= MAX_CONVERSION_NUMBER_ATTEMPTS; attempt++) {
+      const complaintNumber = await this.generateConversionComplaintNumber();
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const complaint = await tx.complaint.create({
+            data: {
+              complaintNumber,
+              source: 'CONVERTED_FROM_LEAD',
+              salesOrderId: null,
+              subject: lead.title,
+              description: lead.description ?? undefined,
+              sourceWebsiteId: lead.sourceWebsiteId,
+              sourceSubjectCode: lead.sourceSubjectCode,
+              webFormIntakeId: lead.webFormIntakeId,
+              reporterName: lead.contactPerson,
+              reporterEmail: lead.email,
+              reporterPhone: lead.phone,
+              assignedToUserId: lead.assignedToUserId,
+              createdBy: actorName,
+            },
+          });
+
+          await tx.lead.update({
+            where: { id },
+            data: { deletedAt: new Date(), convertedToComplaintId: complaint.id },
+          });
+
+          await tx.leadComplaintConversion.create({
+            data: {
+              direction: 'LEAD_TO_COMPLAINT',
+              sourceLeadId: id,
+              targetComplaintId: complaint.id,
+              convertedBy: actorName,
+              reason: dto?.reason,
+            },
+          });
+
+          // LeadHistoryAction has no dedicated "converted to complaint"
+          // value (only CUSTOMER_CONVERTED exists for the Lead->Customer
+          // path) — EDITED is the closest existing enum value, with the
+          // description carrying the real meaning.
+          await this.logHistory(
+            tx,
+            id,
+            'EDITED',
+            `Converted to Complaint ${complaint.complaintNumber}`,
+            actorName,
+          );
+          await tx.complaintHistory.create({
+            data: {
+              complaintId: complaint.id,
+              action: 'CONVERTED_FROM_LEAD',
+              description: `Converted from Lead ${lead.leadNumber}`,
+              performedBy: actorName,
+            },
+          });
+
+          return { id: complaint.id, complaintNumber: complaint.complaintNumber };
+        });
+      } catch (error) {
+        if (this.isConversionComplaintNumberConflict(error) && attempt < MAX_CONVERSION_NUMBER_ATTEMPTS) {
+          continue; // Another request took this number first — retry with a fresh one.
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('Failed to generate a unique complaint number');
+  }
+
+  private async generateConversionComplaintNumber(): Promise<string> {
+    const last = await this.prisma.complaint.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { complaintNumber: true },
+    });
+    const lastSeq = last
+      ? parseInt(last.complaintNumber.replace(CONVERSION_COMPLAINT_NUMBER_PREFIX, ''), 10) || 0
+      : 0;
+    return `${CONVERSION_COMPLAINT_NUMBER_PREFIX}${String(lastSeq + 1).padStart(CONVERSION_COMPLAINT_NUMBER_PAD, '0')}`;
+  }
+
+  private isConversionComplaintNumberConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      (error.meta?.target as string[]).includes('complaintNumber')
+    );
   }
 
   // Lead Management Phase 1 (requirement #8) — gates the "Generate

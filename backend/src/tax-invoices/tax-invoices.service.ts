@@ -24,13 +24,17 @@ const MAX_INVOICE_NUMBER_ATTEMPTS = 5;
 // an arbitrary/unindexed or sensitive column.
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'invoiceNumber', 'grandTotal', 'invoiceDate', 'status'] as const;
 
-// No TaxInvoiceItem table exists (same convention as ProformaInvoice) — line
-// items are read live through the linked Sales Order for display.
+// Additive: Website Enquiries -> Lead/Complaint refactor. TaxInvoiceItem is
+// an immutable line-item snapshot copied from SalesOrder.items at generation
+// time (see create() below) — a Tax Invoice's own line items must never
+// drift if the originating SalesOrder's items are edited afterward. The
+// `salesOrder` relation is still included for everything else that reads
+// from it (customer address fields, payment terms, etc.) — only the line
+// items themselves now come from `items`, not `salesOrder.items`.
 const TAX_INVOICE_DETAIL_INCLUDE = {
   customer: true,
-  salesOrder: {
-    include: { items: { include: { product: true } } },
-  },
+  items: { include: { product: true } },
+  salesOrder: true,
 } satisfies Prisma.TaxInvoiceInclude;
 
 const TAX_INVOICE_LIST_INCLUDE = {
@@ -122,7 +126,10 @@ export class TaxInvoicesService {
   // since a Tax Invoice can in principle be generated before a dispatch
   // status change is attempted.
   async create(dto: CreateTaxInvoiceDto, actorName?: string) {
-    const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: dto.salesOrderId },
+      include: { items: { include: { product: true } } },
+    });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
     }
@@ -151,25 +158,48 @@ export class TaxInvoicesService {
         dto.invoiceDate ? new Date(dto.invoiceDate) : new Date(),
       );
       try {
-        const created = await this.prisma.taxInvoice.create({
-          data: {
-            invoiceNumber,
-            fiscalYear,
-            sequenceNumber,
-            salesOrderId: salesOrder.id,
-            customerId: salesOrder.customerId,
-            invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : undefined,
-            buyersOrderNo: dto.buyersOrderNo,
-            dispatchedThrough: dto.dispatchedThrough,
-            destination: dto.destination,
-            termsOfDelivery: dto.termsOfDelivery,
-            subtotal: salesOrder.subtotal,
-            discount: salesOrder.discount,
-            tax: salesOrder.tax,
-            grandTotal: salesOrder.grandTotal,
-            createdBy: actorName,
-          },
-          include: TAX_INVOICE_DETAIL_INCLUDE,
+        const created = await this.prisma.$transaction(async (tx) => {
+          const invoice = await tx.taxInvoice.create({
+            data: {
+              invoiceNumber,
+              fiscalYear,
+              sequenceNumber,
+              salesOrderId: salesOrder.id,
+              customerId: salesOrder.customerId,
+              invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : undefined,
+              buyersOrderNo: dto.buyersOrderNo,
+              dispatchedThrough: dto.dispatchedThrough,
+              destination: dto.destination,
+              termsOfDelivery: dto.termsOfDelivery,
+              subtotal: salesOrder.subtotal,
+              discount: salesOrder.discount,
+              tax: salesOrder.tax,
+              grandTotal: salesOrder.grandTotal,
+              createdBy: actorName,
+            },
+          });
+
+          // Immutable line-item snapshot — copied once here, from the Sales
+          // Order's items at exactly this moment (see TAX_INVOICE_DETAIL_INCLUDE
+          // comment above).
+          if (salesOrder.items.length > 0) {
+            await tx.taxInvoiceItem.createMany({
+              data: salesOrder.items.map((item) => ({
+                taxInvoiceId: invoice.id,
+                productId: item.productId,
+                productName: item.product.name,
+                productSku: item.product.sku,
+                productDescription: item.product.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                discount: item.discount,
+                tax: item.tax,
+                lineTotal: item.lineTotal,
+              })),
+            });
+          }
+
+          return tx.taxInvoice.findUniqueOrThrow({ where: { id: invoice.id }, include: TAX_INVOICE_DETAIL_INCLUDE });
         });
 
         await this.auditLogService
@@ -284,14 +314,18 @@ export class TaxInvoicesService {
       destination: invoice.destination,
       termsOfDelivery: invoice.termsOfDelivery,
       paymentTerms: invoice.salesOrder.paymentTerms,
-      items: invoice.salesOrder.items.map((item) => ({
+      items: invoice.items.map((item) => ({
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         discount: item.discount,
         tax: item.tax,
         lineTotal: item.lineTotal,
-        description: item.description,
-        product: { name: item.product.name },
+        // TaxInvoiceItem snapshots productDescription (not a per-line
+        // order description — TaxInvoiceItem has no such column); productName
+        // is the immutable snapshot, preferred over the live product.name so
+        // the PDF never drifts from what was true at generation time.
+        description: item.productDescription,
+        product: { name: item.productName },
       })),
       subtotal: invoice.subtotal,
       tax: invoice.tax,

@@ -130,6 +130,15 @@ export async function convertLeadToCustomer(id: string) {
   return res.data;
 }
 
+// Additive: Lead <-> Complaint conversion (Website Enquiries -> Lead/
+// Complaint refactor). Requires both Lead.Edit and Complaint.Create.
+export async function convertLeadToComplaint(id: string, reason?: string) {
+  const res = await api.post<{ id: string; complaintNumber: string }>(`/api/v1/leads/${id}/convert-to-complaint`, {
+    reason,
+  });
+  return res.data;
+}
+
 export async function downloadLeadImportTemplate() {
   const res = await api.get("/api/v1/leads/import/template", { responseType: "blob" });
   const url = window.URL.createObjectURL(new Blob([res.data]));
