@@ -878,6 +878,21 @@ enum JeoStatus {
   COMPLETED
 }
 
+// Scope of Work — how the fan is physically hung at the customer's site.
+// Site-specific (varies order to order, sometimes fan to fan on the same
+// order), so this lives on JobExecutionOrder, not on Product.technicalSpec
+// (that model already has its own free-text `hangingStructure` field, but
+// that's a per-fan-model description used on the Quotation/JEO Annexure-I
+// spec sheet — a generic construction note, not a site decision). Fixed to
+// these three values (the only ones this business actually uses) rather
+// than free text, same "small fixed vocabulary -> real enum" convention as
+// JeoPriority/JeoStatus above.
+enum HangingStructureType {
+  HIGH_BEAM
+  RCC_SLAB_BEAM
+  PIPE_TRUSS
+}
+
 // A Job Execution Order (JEO) is always machine-generated from an existing
 // SalesOrder (JobExecutionOrdersService.create()) — never created by typing
 // customer/product/quotation details by hand. customerId, quotationId, and
@@ -910,6 +925,16 @@ model JobExecutionOrder {
   // and SalesOrder.createdBy; no user-management module exists yet.
   assignedTo   String?
   remarks      String?
+  // Scope of Work customization — collected once at JEO generation time
+  // (GenerateJeoDialog), alongside priority/assignedTo/remarks above. Like
+  // those fields, there is no edit endpoint for a JEO (see the controller's
+  // own comment), so these are set-once-at-creation.
+  pipeLength           String?
+  hangingStructureType HangingStructureType?
+  // Defaults to Aluminium (the company's standard fan finish) rather than
+  // being left unrecorded — still fully overridable per JEO for a
+  // customer-requested custom colour.
+  color                String                @default("Aluminium")
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 

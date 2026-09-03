@@ -1,5 +1,5 @@
 import type { BadgeProps } from "@/components/ui/badge";
-import type { JeoPriority, JeoStatus } from "@/types";
+import type { HangingStructureType, JeoPriority, JeoStatus } from "@/types";
 
 // Central place for JEO status/priority -> label/color mapping, mirroring
 // leadOptions.ts / quotationOptions.ts / salesOrderOptions.ts / proformaInvoiceOptions.ts.
@@ -34,4 +34,15 @@ export function priorityLabel(priority: JeoPriority) {
 
 export function priorityBadgeVariant(priority: JeoPriority): BadgeProps["variant"] {
   return PRIORITY_OPTIONS.find((p) => p.value === priority)?.badge ?? "default";
+}
+
+export const HANGING_STRUCTURE_OPTIONS: { value: HangingStructureType; label: string }[] = [
+  { value: "HIGH_BEAM", label: "High Beam" },
+  { value: "RCC_SLAB_BEAM", label: "RCC Slab Beam" },
+  { value: "PIPE_TRUSS", label: "Pipe Truss" },
+];
+
+export function hangingStructureLabel(type?: HangingStructureType | null) {
+  if (!type) return "—";
+  return HANGING_STRUCTURE_OPTIONS.find((h) => h.value === type)?.label ?? type;
 }

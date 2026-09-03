@@ -1,6 +1,7 @@
 import api from "@/lib/api";
 import type {
   EmailHistoryEntry,
+  HangingStructureType,
   JeoDashboardResponse,
   JeoPriority,
   JeoStatus,
@@ -28,6 +29,9 @@ export interface JeoPayload {
   priority?: JeoPriority;
   assignedTo?: string;
   remarks?: string;
+  pipeLength?: string;
+  hangingStructureType?: HangingStructureType;
+  color?: string;
 }
 
 export interface ProductionChecklistPayload {

@@ -776,6 +776,12 @@ export type JeoStatus = (typeof JEO_STATUSES)[number];
 export const JEO_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type JeoPriority = (typeof JEO_PRIORITIES)[number];
 
+// Scope of Work — how the fan is hung at the customer's site (mirrors the
+// backend's HangingStructureType enum). Fixed to these three values, the
+// only ones this business actually uses.
+export const HANGING_STRUCTURE_TYPES = ["HIGH_BEAM", "RCC_SLAB_BEAM", "PIPE_TRUSS"] as const;
+export type HangingStructureType = (typeof HANGING_STRUCTURE_TYPES)[number];
+
 export interface ProductionChecklist {
   id: string;
   jeoId: string;
@@ -806,6 +812,12 @@ export interface JobExecutionOrder {
   status: JeoStatus;
   assignedTo?: string | null;
   remarks?: string | null;
+  // Scope of Work customization — see backend schema comment. `color`
+  // always has a value (defaults to "Aluminium"); the other two are only
+  // set when the generator actually filled them in.
+  pipeLength?: string | null;
+  hangingStructureType?: HangingStructureType | null;
+  color: string;
   createdAt: string;
   updatedAt: string;
   checklist?: ProductionChecklist;

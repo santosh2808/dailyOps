@@ -1,5 +1,5 @@
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
-import { JeoPriority } from '@prisma/client';
+import { HangingStructureType, JeoPriority } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateJeoDto {
@@ -21,4 +21,22 @@ export class CreateJeoDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  // Scope of Work — see the JobExecutionOrder.pipeLength/hangingStructureType/
+  // color schema comments. All optional/site-specific, collected once here
+  // at generation time (no edit endpoint exists for a JEO afterward).
+  @ApiPropertyOptional({ example: '12 ft', description: 'Pipe length used to hang the fan at site' })
+  @IsOptional()
+  @IsString()
+  pipeLength?: string;
+
+  @ApiPropertyOptional({ enum: HangingStructureType, description: 'How the fan is hung at site' })
+  @IsOptional()
+  @IsEnum(HangingStructureType)
+  hangingStructureType?: HangingStructureType;
+
+  @ApiPropertyOptional({ example: 'Aluminium', description: 'Fan colour/finish — defaults to Aluminium when left blank' })
+  @IsOptional()
+  @IsString()
+  color?: string;
 }

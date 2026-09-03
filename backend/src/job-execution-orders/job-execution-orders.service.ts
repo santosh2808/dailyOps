@@ -230,6 +230,15 @@ export class JobExecutionOrdersService {
             priority: dto.priority,
             assignedTo: dto.assignedTo,
             remarks: dto.remarks,
+            // Scope of Work — pipeLength/hangingStructureType are left
+            // undefined (null) when not provided; color's `undefined` lets
+            // the schema's @default("Aluminium") apply instead of writing
+            // an empty string, both for the manual dialog and the fully
+            // automatic createFromSalesOrder() cascade (which never sets
+            // any of these three).
+            pipeLength: dto.pipeLength?.trim() || undefined,
+            hangingStructureType: dto.hangingStructureType,
+            color: dto.color?.trim() || undefined,
             // Created together with its JEO, all steps unchecked — never
             // created standalone (see schema.prisma comment).
             checklist: { create: {} },
@@ -365,6 +374,9 @@ export class JobExecutionOrdersService {
         product: { name: item.product.name, technicalSpec: item.product.technicalSpec },
       })),
       generatedBy,
+      pipeLength: jeo.pipeLength,
+      hangingStructureType: jeo.hangingStructureType,
+      color: jeo.color,
     };
   }
 

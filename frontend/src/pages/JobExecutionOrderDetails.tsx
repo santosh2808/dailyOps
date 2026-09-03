@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import JeoStatusBadge from "@/components/job-execution-orders/JeoStatusBadge";
 import JeoPriorityBadge from "@/components/job-execution-orders/JeoPriorityBadge";
+import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
 import ChangeJeoStatusDialog from "@/components/job-execution-orders/ChangeJeoStatusDialog";
 import ProductionChecklistCard from "@/components/job-execution-orders/ProductionChecklistCard";
 import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
@@ -337,6 +338,20 @@ export default function JobExecutionOrderDetails() {
                     Products are shown live from the linked sales order — this JEO doesn't duplicate
                     them into its own record.
                   </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Scope of Work</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <Field label="Pipe Length" value={jeo.pipeLength} />
+                  <Field
+                    label="Hanging Structure"
+                    value={hangingStructureLabel(jeo.hangingStructureType)}
+                  />
+                  <Field label="Fan Colour" value={jeo.color} />
                 </CardContent>
               </Card>
 

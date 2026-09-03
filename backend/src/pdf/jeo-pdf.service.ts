@@ -3,7 +3,18 @@ import * as path from 'path';
 import * as fs from 'fs';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import PDFDocument = require('pdfkit');
+import type { HangingStructureType } from '@prisma/client';
 import type { ProductTechnicalSpec } from '../products/dto/create-product.dto';
+
+// Display labels for HangingStructureType — mirrors
+// frontend/src/components/job-execution-orders/jeoOptions.ts's
+// HANGING_STRUCTURE_OPTIONS (kept in sync by hand, same "no cross-file
+// coupling" convention already used throughout this file).
+const HANGING_STRUCTURE_LABELS: Record<HangingStructureType, string> = {
+  HIGH_BEAM: 'High Beam',
+  RCC_SLAB_BEAM: 'RCC Slab Beam',
+  PIPE_TRUSS: 'Pipe Truss',
+};
 
 // Branded "Internal Job Execution Order" PDF — an exact reproduction of the
 // customer-supplied reference template ("JEO 5478.doc"): a cover letter to
@@ -40,6 +51,16 @@ export interface JeoPdfInput {
   // line. Never hardcoded to one person's name (this app has no fixed
   // "who signs JEOs" concept), same convention as Quotation's `sentBy`.
   generatedBy?: string | null;
+  // Scope of Work (site-specific — see JobExecutionOrder schema comments):
+  // rendered as its own block in the cover letter, distinct from the
+  // per-product Annexure-I spec table below (which still shows Product.
+  // technicalSpec.hangingStructure, a generic per-model construction note).
+  pipeLength?: string | null;
+  hangingStructureType?: HangingStructureType | null;
+  // Always populated (schema default "Aluminium") — never actually null in
+  // practice, but optional here to keep this interface duck-typeable
+  // without forcing every caller to pass it.
+  color?: string | null;
 }
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
@@ -238,6 +259,29 @@ export class JeoPdfService {
     doc.text(`DELIVERY TARGET : ${deliveryTarget}`, contentLeft, doc.y, { width: contentWidth });
     doc.moveDown(0.8);
 
+    // Scope of Work — site-specific hanging structure/pipe length/colour
+    // (see JobExecutionOrder schema comments). Colour always has a value
+    // (schema default "Aluminium"); Pipe Length / Hanging Structure are
+    // only shown when actually set, same "blank rather than a dash for an
+    // unset optional row" convention as the rest of this cover letter.
+    {
+      const scopeLines = [
+        jeo.pipeLength?.trim() ? `Pipe Length : ${jeo.pipeLength.trim()}` : null,
+        jeo.hangingStructureType
+          ? `Hanging Structure : ${HANGING_STRUCTURE_LABELS[jeo.hangingStructureType]}`
+          : null,
+        `Fan Colour : ${jeo.color?.trim() || 'Aluminium'}`,
+      ].filter((line): line is string => !!line);
+
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('black');
+      doc.text('SCOPE OF WORK', contentLeft, doc.y, { width: contentWidth });
+      doc.font('Helvetica').fontSize(10.5);
+      for (const line of scopeLines) {
+        doc.text(line, contentLeft, doc.y, { width: contentWidth });
+      }
+      doc.moveDown(0.8);
+    }
+
     // Billing / Site address table.
     const billingLines = (jeo.billingAddress ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
     const shippingLines = (jeo.shippingAddress ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
@@ -304,9 +348,11 @@ export class JeoPdfService {
       return `${item.quantity} No. ${size} dia HVLS ${model}${blades ? ` (all ${blades} Wings)` : ''}`;
     });
 
+    const colour = jeo.color?.trim() || 'Aluminium';
+
     return (
       `We have received an order from ${customerLine} for their requirement of ` +
-      `${itemDescriptions.join('; ')} with standard aluminium colour Fans.`
+      `${itemDescriptions.join('; ')} with standard ${colour} colour Fans.`
     );
   }
 

@@ -14,9 +14,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { PRIORITY_OPTIONS } from "./jeoOptions";
+import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
-import type { JeoPriority, SalesOrder } from "@/types";
+import type { HangingStructureType, JeoPriority, SalesOrder } from "@/types";
 
 interface GenerateJeoDialogProps {
   open: boolean;
@@ -29,12 +29,18 @@ interface FormState {
   priority: JeoPriority;
   assignedTo: string;
   remarks: string;
+  pipeLength: string;
+  hangingStructureType: HangingStructureType | "";
+  color: string;
 }
 
 const emptyForm: FormState = {
   priority: "MEDIUM",
   assignedTo: "",
   remarks: "",
+  pipeLength: "",
+  hangingStructureType: "",
+  color: "Aluminium",
 };
 
 // Generates a JEO from an existing Sales Order. Customer, Quotation
@@ -72,6 +78,9 @@ export default function GenerateJeoDialog({
         priority: form.priority,
         assignedTo: form.assignedTo.trim() || undefined,
         remarks: form.remarks.trim() || undefined,
+        pipeLength: form.pipeLength.trim() || undefined,
+        hangingStructureType: form.hangingStructureType || undefined,
+        color: form.color.trim() || undefined,
       });
       onOpenChange(false);
     } catch {
@@ -118,6 +127,41 @@ export default function GenerateJeoDialog({
               value={form.assignedTo}
               onChange={(e) => update("assignedTo", e.target.value)}
               placeholder="e.g. Rahul (Production)"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pipeLength">Pipe Length</Label>
+            <Input
+              id="pipeLength"
+              value={form.pipeLength}
+              onChange={(e) => update("pipeLength", e.target.value)}
+              placeholder="e.g. 12 ft"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hangingStructureType">Hanging Structure</Label>
+            <Select
+              id="hangingStructureType"
+              value={form.hangingStructureType}
+              onChange={(e) =>
+                update("hangingStructureType", e.target.value as HangingStructureType | "")
+              }
+            >
+              <option value="">Select...</option>
+              {HANGING_STRUCTURE_OPTIONS.map((h) => (
+                <option key={h.value} value={h.value}>
+                  {h.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="color">Fan Colour</Label>
+            <Input
+              id="color"
+              value={form.color}
+              onChange={(e) => update("color", e.target.value)}
+              placeholder="Aluminium"
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
