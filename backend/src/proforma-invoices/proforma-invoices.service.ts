@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { mergeCc } from '../mailer/default-cc-emails';
 import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
@@ -392,7 +393,7 @@ export class ProformaInvoicesService {
       to: overrides?.to ?? invoice.customer.email,
       // "CC Finance" (requirement #12) — env-configurable so this isn't a
       // hardcoded address; unset simply means no CC is added.
-      cc: overrides?.cc ?? (process.env.FINANCE_TEAM_EMAIL || undefined),
+      cc: mergeCc(overrides?.cc ?? (process.env.FINANCE_TEAM_EMAIL || undefined)),
       attachments: [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdf }],
       actorName,
       link: { module: 'ProformaInvoice', proformaInvoiceId: invoice.id },

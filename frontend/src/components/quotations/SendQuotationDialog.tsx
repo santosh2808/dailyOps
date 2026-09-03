@@ -121,6 +121,10 @@ export default function SendQuotationDialog({
               onChange={(e) => setCcEmails(e.target.value)}
               placeholder="sales.manager@company.com"
             />
+            <p className="text-xs text-muted-foreground">
+              admin@smartrotamac.com, santosh.c@smartrotamac.com and amar@smartrotamac.com are
+              always CC'd automatically — no need to add them here.
+            </p>
           </div>
         </div>
 

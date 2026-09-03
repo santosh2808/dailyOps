@@ -14,6 +14,7 @@ import { ProformaInvoicesService } from '../proforma-invoices/proforma-invoices.
 import { JobExecutionOrdersService } from '../job-execution-orders/job-execution-orders.service';
 import { ApprovalMatrixService } from '../approval-matrix/approval-matrix.service';
 import { MailerService } from '../mailer/mailer.service';
+import { mergeCc } from '../mailer/default-cc-emails';
 import { QuotationPdfService, type QuotationPdfInput } from '../pdf/quotation-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LeadsService } from '../leads/leads.service';
@@ -865,7 +866,7 @@ export class QuotationsService {
         salespersonName: actor.name || 'Smart Rotamac Sales Team',
       },
       to,
-      cc: dto.ccEmails,
+      cc: mergeCc(dto.ccEmails),
       // Pipes in "SR|SPYRO|QTN|108|2026" are not safe filename characters on
       // every platform — sanitize for the attachment name only; the
       // quotationNumber displayed on the PDF itself/on-screen is untouched.

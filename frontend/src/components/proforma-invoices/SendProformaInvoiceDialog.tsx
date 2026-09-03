@@ -107,6 +107,10 @@ export default function SendProformaInvoiceDialog({
               onChange={(e) => setCcEmails(e.target.value)}
               placeholder="finance@smartrotamac.com"
             />
+            <p className="text-xs text-muted-foreground">
+              admin@smartrotamac.com, santosh.c@smartrotamac.com and amar@smartrotamac.com are
+              always CC'd automatically — no need to add them here.
+            </p>
           </div>
         </div>
 

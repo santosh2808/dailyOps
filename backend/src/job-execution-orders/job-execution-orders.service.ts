@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { mergeCc } from '../mailer/default-cc-emails';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
 import { StateSeriesCodesService } from '../state-series-codes/state-series-codes.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -460,7 +461,7 @@ export class JobExecutionOrdersService {
       // (logged as FAILED "no recipient" in EmailHistory, exactly like any
       // other missing-recipient case).
       to: overrides?.to ?? process.env.FACTORY_NOTIFICATION_EMAIL,
-      cc: overrides?.cc,
+      cc: mergeCc(overrides?.cc),
       attachments: [{ filename: `${jeo.jeoNumber}.pdf`, content: pdf }],
       actorName,
       link: { module: 'JEO', jobExecutionOrderId: jeo.id },

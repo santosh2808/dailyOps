@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { mergeCc } from '../mailer/default-cc-emails';
 import { TaxInvoicePdfService } from '../pdf/tax-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateTaxInvoiceDto } from './dto/create-tax-invoice.dto';
@@ -369,7 +370,7 @@ export class TaxInvoicesService {
         grandTotal: invoice.grandTotal.toFixed(2),
       },
       to,
-      cc: dto.ccEmails || process.env.FINANCE_TEAM_EMAIL || undefined,
+      cc: mergeCc(dto.ccEmails || process.env.FINANCE_TEAM_EMAIL || undefined),
       attachments: [{ filename: `${invoice.invoiceNumber.replace(/\//g, '-')}.pdf`, content: pdf }],
       actorName,
       link: { module: 'TaxInvoice', taxInvoiceId: invoice.id },

@@ -96,6 +96,10 @@ export default function SendJeoDialog({ open, onOpenChange, jeo, onSent }: SendJ
               value={ccEmails}
               onChange={(e) => setCcEmails(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              admin@smartrotamac.com, santosh.c@smartrotamac.com and amar@smartrotamac.com are
+              always CC'd automatically — no need to add them here.
+            </p>
           </div>
         </div>
 
