@@ -1307,9 +1307,9 @@ export class QuotationsService {
     };
   }
 
-  // POST /api/v1/public/quotations/:token/reject (requirement #5).
-  // Deliberately does not touch Lead status at all — see
-  // LeadsService.recordQuotationRejected()'s own comment.
+  // POST /api/v1/public/quotations/:token/reject (requirement #5). When the
+  // quotation is lead-originated, advances the Lead to LOST — see
+  // LeadsService.recordQuotationRejected().
   async rejectViaPublicLink(token: string, dto: RejectPublicQuotationDto, clientKey: string) {
     if (!this.decisionRateLimiter.check(`decide:${clientKey}`)) {
       throw new BadRequestException('Too many requests. Please try again in a moment.');

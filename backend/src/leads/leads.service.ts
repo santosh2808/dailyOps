@@ -605,11 +605,12 @@ export class LeadsService {
     });
   }
 
-  // Called by QuotationsService.rejectViaPublicLink(). Unlike acceptance,
-  // a rejection deliberately does NOT change the Lead's status — Sales may
-  // still want to follow up, revise pricing, or reassign rather than
-  // treating this as an automatic dead end, so this only ever logs the
-  // Timeline entry.
+  // Called by QuotationsService.rejectViaPublicLink() when the rejected
+  // quotation is lead-originated. Mirrors recordQuotationAccepted()'s
+  // structure — LOST is the terminal outcome this records. Idempotent: a
+  // lead already WON or LOST is left untouched (a lead that already won on
+  // a different/earlier quotation should never be dragged back to LOST by
+  // an unrelated rejection), so a second call is a safe no-op regardless.
   async recordQuotationRejected(
     leadId: string,
     quotationNumber: string,
@@ -617,16 +618,28 @@ export class LeadsService {
     actorName?: string,
   ) {
     const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
-    if (!lead) {
+    if (!lead || (['WON', 'LOST'] as string[]).includes(lead.status)) {
       return;
     }
-    await this.prisma.leadHistory.create({
-      data: {
-        leadId,
-        action: 'QUOTATION_REJECTED',
-        description: `Quotation ${quotationNumber} rejected by customer — ${reason}`,
-        performedBy: actorName,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.lead.update({ where: { id: leadId }, data: { status: 'LOST' } });
+      await tx.leadStatusHistory.create({
+        data: {
+          leadId,
+          oldStatus: lead.status,
+          newStatus: 'LOST',
+          remarks: `Automatically advanced — customer rejected Quotation ${quotationNumber} via the public quotation link (${reason})`,
+          changedBy: actorName,
+        },
+      });
+      await tx.leadHistory.create({
+        data: {
+          leadId,
+          action: 'QUOTATION_REJECTED',
+          description: `Quotation ${quotationNumber} rejected by customer — ${reason}`,
+          performedBy: actorName,
+        },
+      });
     });
   }
 
