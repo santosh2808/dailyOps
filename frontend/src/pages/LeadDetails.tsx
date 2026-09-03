@@ -11,6 +11,7 @@ import { nextActionFor, sourceLabel } from "@/components/leads/leadOptions";
 import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
+import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -60,6 +61,7 @@ export default function LeadDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  const [confirmQuoteOpen, setConfirmQuoteOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -142,7 +144,9 @@ export default function LeadDetails() {
   function handleNextActionClick() {
     if (!nextAction) return;
     if (nextAction.label === "Generate Quotation") {
-      handleGenerateQuotation();
+      // Soft reminder, not a gate — see ConfirmQuotationDialog for why this
+      // isn't enforced against lead status/history.
+      setConfirmQuoteOpen(true);
     } else if (nextAction.label === "Send Quotation" || nextAction.label === "View Quotation") {
       if (latestQuotation) navigate(`/quotations/${latestQuotation.id}`);
     } else if (nextAction.label === "Convert to Customer") {
@@ -433,6 +437,12 @@ export default function LeadDetails() {
         onOpenChange={setConvertOpen}
         lead={lead}
         onConfirm={handleConvertConfirm}
+      />
+      <ConfirmQuotationDialog
+        open={confirmQuoteOpen}
+        onOpenChange={setConfirmQuoteOpen}
+        lead={lead}
+        onConfirm={handleGenerateQuotation}
       />
     </div>
   );
