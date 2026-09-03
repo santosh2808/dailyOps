@@ -10,6 +10,7 @@ import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInv
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
 import EditTaxInvoiceDialog from "@/components/tax-invoices/EditTaxInvoiceDialog";
 import EInvoiceDetailsDialog from "@/components/tax-invoices/EInvoiceDetailsDialog";
+import ConfirmSendMissingQrDialog from "@/components/tax-invoices/ConfirmSendMissingQrDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -55,6 +56,7 @@ export default function TaxInvoiceDetails() {
   const [sendOpen, setSendOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [einvoiceOpen, setEinvoiceOpen] = useState(false);
+  const [confirmMissingQrOpen, setConfirmMissingQrOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
@@ -151,7 +153,21 @@ export default function TaxInvoiceDetails() {
                     View PDF
                   </Button>
                   {invoice.status !== "CANCELLED" && (
-                    <Button onClick={() => setSendOpen(true)}>
+                    <Button
+                      onClick={() => {
+                        // Soft reminder, not a gate — see
+                        // ConfirmSendMissingQrDialog for why this isn't
+                        // enforced. Only nudge when the customer is
+                        // GST-registered and nothing's been added yet.
+                        const missingQr =
+                          !!invoice.customer?.gstNumber?.trim() && !invoice.qrCodeImage;
+                        if (missingQr) {
+                          setConfirmMissingQrOpen(true);
+                        } else {
+                          setSendOpen(true);
+                        }
+                      }}
+                    >
                       <Send className="mr-2 h-4 w-4" />
                       {invoice.status === "SENT" ? "Resend to Customer" : "Send to Customer"}
                     </Button>
@@ -338,6 +354,12 @@ export default function TaxInvoiceDetails() {
         onOpenChange={setEinvoiceOpen}
         invoice={invoice}
         onSaved={setInvoice}
+      />
+      <ConfirmSendMissingQrDialog
+        open={confirmMissingQrOpen}
+        onOpenChange={setConfirmMissingQrOpen}
+        invoice={invoice}
+        onContinue={() => setSendOpen(true)}
       />
     </div>
   );
