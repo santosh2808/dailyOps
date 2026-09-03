@@ -386,29 +386,10 @@ export class JeoPdfService {
     return raw as ProductTechnicalSpec;
   }
 
-  // A product only has a technicalSpec blob once someone has filled in the
-  // fan-spec section in Add/Edit Product (Advanced, collapsed by default —
-  // see ProductFormDialog.tsx). Without this gate, a JEO for a product with
-  // no spec filled in renders all ~30 rows below as em-dashes, which reads
-  // as "empty"/broken rather than "not configured yet". Same gate as
-  // quotation-pdf.service.ts's hasPopulatedSpec() — kept in sync by hand.
-  private hasPopulatedSpec(item: JeoPdfItem): boolean {
-    const spec = this.getTechnicalSpec(item);
-    return !!spec && Object.keys(spec).length > 0;
-  }
-
   private buildSpecRows(item: JeoPdfItem): SpecRow[] {
+    const spec = this.getTechnicalSpec(item) ?? {};
     const dash = (v?: string) => (v && v.trim() ? v.trim() : '—');
 
-    if (!this.hasPopulatedSpec(item)) {
-      return [
-        { label: 'Manufacturer (Make)', value: COMPANY_NAME },
-        { label: 'Product', value: item.product.name },
-        { label: 'Quantity', value: `${item.quantity} No.` },
-      ];
-    }
-
-    const spec = this.getTechnicalSpec(item) ?? {};
     return [
       { label: 'Manufacturer (Make)', value: COMPANY_NAME },
       { label: 'Model No.', value: dash(spec.modelNo) },
