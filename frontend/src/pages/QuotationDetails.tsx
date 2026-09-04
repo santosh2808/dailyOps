@@ -7,6 +7,7 @@ import {
   Eye,
   FileDown,
   Mail,
+  MoreVertical,
   Pencil,
   RefreshCw,
   Send,
@@ -18,6 +19,7 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import ChangeQuotationStatusDialog from "@/components/quotations/ChangeQuotationStatusDialog";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
@@ -204,14 +206,21 @@ export default function QuotationDetails() {
             </div>
           ) : (
             <div className="mx-auto max-w-4xl space-y-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">{quotation.quotationNumber}</h2>
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate text-xl font-semibold text-slate-900">{quotation.quotationNumber}</h2>
+                    <QuotationStatusBadge status={quotation.status} />
+                  </div>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {quotation.customer?.companyName ?? quotation.lead?.companyName ?? "Unknown customer"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {/* One primary action (when there's something to drive
+                    forward) plus a single "More actions" menu — keeps this
+                    row to at most two controls at any width instead of up
+                    to six buttons that wrap unpredictably. */}
+                <div className="flex flex-shrink-0 items-center gap-2">
                   {/* Lead Management Phase 1 boundary (requirement #14): a
                       lead-sourced quotation (no customerId) can never reach
                       ACCEPTED — see QuotationsService.updateStatus() — so
@@ -220,6 +229,7 @@ export default function QuotationDetails() {
                     quotation.customerId &&
                     (existingSalesOrderId ? (
                       <Button variant="outline" onClick={() => navigate(`/sales-orders/${existingSalesOrderId}`)}>
+                        <ArrowRightCircle className="mr-2 h-4 w-4" />
                         View Sales Order
                       </Button>
                     ) : (
@@ -228,50 +238,55 @@ export default function QuotationDetails() {
                         Create Sales Order
                       </Button>
                     ))}
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      openQuotationPdf(quotation.id).catch(() => {
-                        setPdfError("Could not load the PDF. Please try again.");
-                        toast.error("Could not load the PDF. Please try again.");
-                      })
+                  <DropdownMenu
+                    trigger={
+                      <Button variant="outline" size="icon" aria-label="More actions">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
                     }
                   >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    View PDF
-                  </Button>
-                  {(quotation.status === "DRAFT" || quotation.status === "READY") && (
-                    <Button variant="outline" onClick={() => setSendOpen(true)}>
-                      <Send className="mr-2 h-4 w-4" />
-                      Send Quotation
-                    </Button>
-                  )}
-                  {/* Customer Quotation Acceptance workflow — "Resend
-                      Quotation" once already sent (SENT/VIEWED). Covers a
-                      customer who lost the email, and fixing/retrying after
-                      an Email Template edit (e.g. the QUOTATION template
-                      missing {{quotationLink}} on an older database). The
-                      backend already allows this for any non-terminal
-                      status — see QuotationsService.sendQuotation() — this
-                      just surfaces it once the quotation is no longer
-                      Draft/Ready. */}
-                  {(quotation.status === "SENT" || quotation.status === "VIEWED") && (
-                    <Button variant="outline" onClick={() => setSendOpen(true)}>
-                      <Send className="mr-2 h-4 w-4" />
-                      Resend Quotation
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={() => setStatusOpen(true)}>
-                    Change Status
-                  </Button>
-                  <Button variant="outline" onClick={() => navigate(`/quotations/${quotation.id}/edit`)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
+                    <DropdownMenuItem
+                      icon={FileDown}
+                      onSelect={() =>
+                        openQuotationPdf(quotation.id).catch(() => {
+                          setPdfError("Could not load the PDF. Please try again.");
+                          toast.error("Could not load the PDF. Please try again.");
+                        })
+                      }
+                    >
+                      View PDF
+                    </DropdownMenuItem>
+                    {(quotation.status === "DRAFT" || quotation.status === "READY") && (
+                      <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
+                        Send Quotation
+                      </DropdownMenuItem>
+                    )}
+                    {/* Customer Quotation Acceptance workflow — "Resend
+                        Quotation" once already sent (SENT/VIEWED). Covers a
+                        customer who lost the email, and fixing/retrying
+                        after an Email Template edit (e.g. the QUOTATION
+                        template missing {{quotationLink}} on an older
+                        database). The backend already allows this for any
+                        non-terminal status — see
+                        QuotationsService.sendQuotation() — this just
+                        surfaces it once the quotation is no longer
+                        Draft/Ready. */}
+                    {(quotation.status === "SENT" || quotation.status === "VIEWED") && (
+                      <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
+                        Resend Quotation
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                      Change Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/quotations/${quotation.id}/edit`)}>
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem icon={Trash2} destructive onSelect={() => setDeleteOpen(true)}>
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenu>
                 </div>
               </div>
 
