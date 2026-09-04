@@ -10,6 +10,11 @@ export interface MailerLink {
   proformaInvoiceId?: string;
   jobExecutionOrderId?: string;
   taxInvoiceId?: string;
+  // Additive: Website Enquiries -> Lead/Complaint refactor — web-originated
+  // Lead/Complaint acknowledgement and internal-notification emails sent by
+  // PublicFormsService, threaded through to EmailHistory.leadId/complaintId.
+  leadId?: string;
+  complaintId?: string;
 }
 
 export interface MailerSendOptions {
@@ -137,6 +142,8 @@ export class MailerService {
         proformaInvoiceId: options.link.proformaInvoiceId,
         jobExecutionOrderId: options.link.jobExecutionOrderId,
         taxInvoiceId: options.link.taxInvoiceId,
+        leadId: options.link.leadId,
+        complaintId: options.link.complaintId,
         templateKey: options.templateKey,
         subject,
         recipientEmail: to || '(none)',

@@ -22,6 +22,7 @@ import {
   Mail,
   AlertCircle,
   Hash,
+  Globe,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,12 @@ interface NavItem {
   // hasPermission(module, action) is true — nothing in this file hardcodes
   // which roles see which item; visibility is entirely permission-driven.
   permission?: { module: string; action: string };
+  // NavLink's default matching treats `to` as a prefix (active for any
+  // nested path too), which is wrong whenever a sibling item's `to` is a
+  // child path of this one (e.g. "/admin" vs "/admin/users") — both would
+  // otherwise show active at once. Set true for an item whose `to` is also
+  // the parent segment of other items in the same group.
+  end?: boolean;
 }
 
 const topNavItems: NavItem[] = [
@@ -163,6 +170,12 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Hash,
         permission: { module: "StateSeriesCode", action: "View" },
       },
+      {
+        label: "Web Form Configuration",
+        to: "/administration/web-form-config",
+        icon: Globe,
+        permission: { module: "FormConfiguration", action: "View" },
+      },
     ],
   },
 ];
@@ -230,8 +243,8 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
-        {visibleTopNavItems.map(({ label, to, icon: Icon }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => navLinkClasses(isActive)}>
+        {visibleTopNavItems.map(({ label, to, icon: Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
             <Icon className="h-4 w-4" />
             {label}
           </NavLink>
@@ -254,8 +267,8 @@ export default function Sidebar() {
 
             {openGroups[group.key] && (
               <div className="mt-1 space-y-1 pl-6">
-                {group.items.map(({ label, to, icon: Icon }) => (
-                  <NavLink key={to} to={to} className={({ isActive }) => navLinkClasses(isActive)}>
+                {group.items.map(({ label, to, icon: Icon, end }) => (
+                  <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
                     <Icon className="h-4 w-4" />
                     {label}
                   </NavLink>
@@ -265,8 +278,8 @@ export default function Sidebar() {
           </div>
         ))}
 
-        {visibleBottomNavItems.map(({ label, to, icon: Icon }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => navLinkClasses(isActive)}>
+        {visibleBottomNavItems.map(({ label, to, icon: Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
             <Icon className="h-4 w-4" />
             {label}
           </NavLink>

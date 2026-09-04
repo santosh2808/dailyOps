@@ -46,6 +46,14 @@ model User {
   // Back-relation for Lead.assignedToUserId below — a User can have many
   // Leads assigned to them.
   assignedLeads Lead[]
+
+  // Additive: web-originated Complaint assignment — back-relation for
+  // Complaint.assignedToUserId below, same pattern as assignedLeads.
+  assignedComplaints Complaint[]
+
+  // Back-relation for FormSubjectRoute.assignedUserId below (routing default
+  // assignee, optional).
+  formSubjectRoutes FormSubjectRoute[]
 }
 
 // Enterprise RBAC — additive models only; nothing above this comment was
@@ -63,6 +71,11 @@ model Department {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   users       User[]
+
+  // Additive: web-originated Complaint routing default department, and
+  // FormSubjectRoute's optional default department.
+  complaints        Complaint[]
+  formSubjectRoutes FormSubjectRoute[]
 }
 
 model Role {
@@ -151,13 +164,13 @@ model Customer {
   // SalesOrder.customer, ProformaInvoice.customer, and
   // JobExecutionOrder.customer. Additive only — no existing Customer fields,
   // validation, or behavior changed.
-  quotations          Quotation[]
-  salesOrders         SalesOrder[]
-  proformaInvoices    ProformaInvoice[]
-  jobExecutionOrders  JobExecutionOrder[]
+  quotations         Quotation[]
+  salesOrders        SalesOrder[]
+  proformaInvoices   ProformaInvoice[]
+  jobExecutionOrders JobExecutionOrder[]
 
   // Additive: automated GST Tax Invoice (see TaxInvoice below).
-  taxInvoices         TaxInvoice[]
+  taxInvoices TaxInvoice[]
 }
 
 model Product {
@@ -203,14 +216,20 @@ model Product {
   //   controlPanelDrive, controlPanelEnclosure, bmsCompatibility,
   //   safetyCertification, boltedJoints, warrantyMotor, warrantyDrive,
   //   warrantyOther, scopeOfSupply: { item: string; quantityPerFan: string }[]
-  technicalSpec      Json?
+  technicalSpec Json?
 
   // Back-relations required by Prisma for LeadProduct.product,
   // QuotationItem.product, and SalesOrderItem.product. Additive only — no
   // existing Product fields, validation, or behavior changed.
-  leadProducts     LeadProduct[]
-  quotationItems   QuotationItem[]
-  salesOrderItems  SalesOrderItem[]
+  leadProducts    LeadProduct[]
+  quotationItems  QuotationItem[]
+  salesOrderItems SalesOrderItem[]
+
+  // Back-relations required by Prisma for FormWebsiteProduct.product,
+  // FormSubjectRoute.product, and TaxInvoiceItem.product. Additive only.
+  formWebsiteProducts FormWebsiteProduct[]
+  formSubjectRoutes   FormSubjectRoute[]
+  taxInvoiceItems     TaxInvoiceItem[]
 }
 
 // Lead Management Phase 1 — replaced wholesale per the new required
@@ -250,8 +269,8 @@ enum LeadSource {
 }
 
 model Lead {
-  id                String       @id @default(uuid())
-  leadNumber        String       @unique
+  id                String        @id @default(uuid())
+  leadNumber        String        @unique
   // Set only by LeadsService.convertToCustomer() when a WON lead is
   // converted. Plain scalar (no Customer relation) — consistent with how
   // this schema avoids cross-module FKs unless Prisma requires one.
@@ -264,9 +283,9 @@ model Lead {
   alternatePhone    String?
   title             String
   description       String?
-  status            LeadStatus   @default(NEW)
-  priority          LeadPriority @default(MEDIUM)
-  source            LeadSource   @default(OTHER)
+  status            LeadStatus    @default(NEW)
+  priority          LeadPriority  @default(MEDIUM)
+  source            LeadSource    @default(OTHER)
   estimatedValue    Float?
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
@@ -284,7 +303,7 @@ model Lead {
   // CreateLeadDto layer (every new lead must be assigned to someone); the
   // column stays String? because onDelete: SetNull requires a nullable FK.
   assignedToUserId  String?
-  assignedToUser    User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedToUser    User?         @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
   city              String?
   // Required at the CreateLeadDto layer — validated against INDIA_STATES so
   // it always carries through to Customer.state on conversion (see
@@ -300,12 +319,48 @@ model Lead {
   // works unchanged without it).
   industry          String?
   remarks           String?
-  isConverted       Boolean      @default(false)
+  isConverted       Boolean       @default(false)
   convertedAt       DateTime?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
   deletedAt         DateTime?
   products          LeadProduct[]
+
+  // Additive: web-originated Lead traceability (Website Enquiries ->
+  // Lead/Complaint refactor). A Lead created from a public form submission
+  // carries the exact WebFormIntake it came from (1:1 — a given intake
+  // produces at most one Lead), plus the originating website/subject code
+  // for display, same plain-scalar-alongside-a-real-FK convention used
+  // elsewhere in this schema (e.g. Lead.assignedToUser).
+  webFormIntakeId   String?        @unique
+  webFormIntake     WebFormIntake?
+  sourceWebsiteId   String?
+  sourceWebsite     FormWebsite?   @relation(fields: [sourceWebsiteId], references: [id], onDelete: SetNull)
+  sourceSubjectCode String?
+
+  // Additive: Lead <-> Complaint conversion. Two independent 1:1-optional
+  // relations (each direction has its own physical FK column, so each gets
+  // its own relation name — Prisma doesn't allow both sides of one named
+  // relation to own a `fields`/`references` FK): `convertedToComplaint` is
+  // this Lead's own FK to the Complaint it was converted into;
+  // `convertedFromComplaint` is the virtual back-relation for the opposite
+  // direction (Complaint.convertedToLeadId pointing at this Lead). Named
+  // explicitly so Prisma doesn't ambiguously auto-match either against the
+  // LeadComplaintConversion history relations.
+  convertedToComplaintId String?    @unique
+  convertedToComplaint   Complaint? @relation("LeadConvertedToComplaint", fields: [convertedToComplaintId], references: [id], onDelete: SetNull)
+  convertedFromComplaint Complaint? @relation("ComplaintConvertedToLead")
+
+  // Additive: relational conversion-history (LeadComplaintConversion) — a
+  // Lead can appear as the source or target of more than one conversion
+  // attempt over its lifetime (e.g. converted away, then a later Complaint
+  // is converted back into a new Lead), hence arrays rather than 1:1s.
+  conversionsAsSourceLead LeadComplaintConversion[] @relation("ConversionSourceLead")
+  conversionsAsTargetLead LeadComplaintConversion[] @relation("ConversionTargetLead")
+
+  // Additive: Sales Automation Email History, extended to cover web-lead
+  // acknowledgement/notification emails.
+  emailHistory EmailHistory[]
 
   // Additive: Lead History/Notes/Assignment/Status audit trail. Every row
   // is append-only (created, never updated/deleted) and cascades away if
@@ -327,6 +382,8 @@ model Lead {
   @@index([source])
   @@index([assignedToUserId])
   @@index([deletedAt])
+  @@index([sourceWebsiteId])
+  @@index([webFormIntakeId])
 }
 
 // Tracks every action listed in the Lead History requirement. "Quotation
@@ -405,14 +462,14 @@ model LeadAssignmentHistory {
 }
 
 model LeadStatusHistory {
-  id        String     @id @default(uuid())
+  id        String      @id @default(uuid())
   leadId    String
-  lead      Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead      Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
   oldStatus LeadStatus?
   newStatus LeadStatus
   remarks   String?
   changedBy String?
-  createdAt DateTime   @default(now())
+  createdAt DateTime    @default(now())
 
   @@index([leadId])
 }
@@ -451,8 +508,8 @@ enum QuotationStatus {
 }
 
 model Quotation {
-  id              String          @id @default(uuid())
-  quotationNumber String          @unique
+  id                    String          @id @default(uuid())
+  quotationNumber       String          @unique
   // Lead Management Phase 1 (requirement #8/#9): a Quotation can now be
   // generated directly from a QUALIFIED Lead, before any Customer exists —
   // "Generate Quotation" must NOT trigger Customer conversion this phase.
@@ -461,14 +518,14 @@ model Quotation {
   // When Phase 2's Customer Acceptance eventually converts the lead, that
   // step is expected to backfill customerId onto any of its quotations —
   // leadId is never cleared, so the originating lead stays traceable.
-  customerId      String?
-  customer        Customer?       @relation(fields: [customerId], references: [id])
-  leadId          String?
-  lead            Lead?           @relation(fields: [leadId], references: [id])
-  status          QuotationStatus @default(DRAFT)
-  subtotal        Float           @default(0)
-  gstPercent      Float           @default(18)
-  gstAmount       Float           @default(0)
+  customerId            String?
+  customer              Customer?       @relation(fields: [customerId], references: [id])
+  leadId                String?
+  lead                  Lead?           @relation(fields: [leadId], references: [id])
+  status                QuotationStatus @default(DRAFT)
+  subtotal              Float           @default(0)
+  gstPercent            Float           @default(18)
+  gstAmount             Float           @default(0)
   // Additive: real currency amounts (not just Annexure-II descriptive text)
   // that feed into grandTotal. installationCharge defaults to Rs.8,000 per
   // fan (auto-computed from item quantities at create/update time) unless a
@@ -477,9 +534,9 @@ model Quotation {
   // quotation, defaulting to 0 until set. GST is charged on
   // subtotal + installationCharge + transportationCharge (see
   // QuotationsService.computeTotals()).
-  installationCharge   Float @default(0)
-  transportationCharge Float @default(0)
-  grandTotal      Float           @default(0)
+  installationCharge    Float           @default(0)
+  transportationCharge  Float           @default(0)
+  grandTotal            Float           @default(0)
   // Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms
   // (price basis, GST Included/Extra wording, transportation, payment,
   // delivery, offer validity, optional unloading/installation-schedule
@@ -488,18 +545,18 @@ model Quotation {
   // fixed boilerplate — see QuotationPdfService's QuotationCommercialTerms.
   // Optional: a quotation with this unset just renders the PDF with the
   // service's sensible defaults, exactly like Product.technicalSpec.
-  commercialTerms Json?
-  validUntil      DateTime?
-  notes           String?
-  terms           String?
+  commercialTerms       Json?
+  validUntil            DateTime?
+  notes                 String?
+  terms                 String?
   // Additive: Send Quotation (requirement #6). Populated by
   // QuotationsService.sendQuotation() the moment an email actually goes
   // out (or is at least attempted) — never set any other way, and never
   // cleared once set (a quotation can be re-sent, which just overwrites
   // these with the latest send).
-  sentAt          DateTime?
-  sentBy          String?
-  sentToEmail     String?
+  sentAt                DateTime?
+  sentBy                String?
+  sentToEmail           String?
   // Additive: Customer Quotation Acceptance workflow — the secure public
   // link is /quote/{publicToken}, generated fresh every time
   // sendQuotation() runs (see QuotationsService). Nullable: a quotation
@@ -520,27 +577,27 @@ model Quotation {
   // View tracking (requirement #7) — updated by
   // QuotationsService.recordPublicView() on every GET of the public link,
   // regardless of how many times it's opened.
-  firstViewedAt   DateTime?
-  lastViewedAt    DateTime?
-  viewCount       Int             @default(0)
+  firstViewedAt         DateTime?
+  lastViewedAt          DateTime?
+  viewCount             Int             @default(0)
   // Customer Acceptance (requirement #4) — set together, exactly once, by
   // QuotationsService.acceptViaPublicLink(). "Customer" is always the
   // recorded actor for the accompanying AuditLog/QuotationHistory entry,
   // not a User — there is deliberately no login for the customer side of
   // this workflow.
-  acceptedAt              DateTime?
-  acceptedByName          String?
-  acceptedByDesignation   String?
-  acceptanceComment       String?
+  acceptedAt            DateTime?
+  acceptedByName        String?
+  acceptedByDesignation String?
+  acceptanceComment     String?
   // Customer Rejection (requirement #5) — set together, exactly once, by
   // QuotationsService.rejectViaPublicLink().
-  rejectedAt              DateTime?
-  rejectionReason         String?
-  rejectionComment        String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  deletedAt       DateTime?
-  items           QuotationItem[]
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  rejectionComment      String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  items                 QuotationItem[]
 
   // Back-relation required by Prisma for SalesOrder.quotation. Additive
   // only — a Quotation doesn't otherwise know about the Sales Order module.
@@ -552,8 +609,8 @@ model Quotation {
 
   // Additive: Sales Automation — Email History (requirement #7/#12) and the
   // Price Validation / Approval Matrix escalation flow (requirements #8/#9).
-  emailHistory      EmailHistory[]
-  approvalRequests  QuotationApprovalRequest[]
+  emailHistory     EmailHistory[]
+  approvalRequests QuotationApprovalRequest[]
 
   @@index([status])
   @@index([customerId])
@@ -569,8 +626,8 @@ model QuotationItem {
   product     Product   @relation(fields: [productId], references: [id])
   description String?
   quantity    Int       @default(1)
-  unitPrice   Float      @default(0)
-  lineTotal   Float      @default(0)
+  unitPrice   Float     @default(0)
+  lineTotal   Float     @default(0)
   createdAt   DateTime  @default(now())
 
   @@index([quotationId])
@@ -649,21 +706,21 @@ model SalesOrder {
   // Back-relations required by Prisma for ProformaInvoice.salesOrder and
   // JobExecutionOrder.salesOrder. Additive only — no existing SalesOrder
   // fields, validation, or behavior changed.
-  proformaInvoices    ProformaInvoice[]
-  jobExecutionOrders  JobExecutionOrder[]
+  proformaInvoices   ProformaInvoice[]
+  jobExecutionOrders JobExecutionOrder[]
 
   // Additive: automated GST Tax Invoice (see TaxInvoice below).
-  taxInvoices         TaxInvoice[]
+  taxInvoices TaxInvoice[]
 
   // Additive: Sales Automation Email History (Order Confirmation / Dispatch
   // notifications sent from this Sales Order — see SalesOrdersService).
-  emailHistory        EmailHistory[]
+  emailHistory EmailHistory[]
 
   // Additive: Complaints module. A Complaint links to the Sales Order (not
   // directly to Customer) so the customer and any generated Proforma
   // Invoice are both reached through this one relation — see Complaint's
   // own comment.
-  complaints          Complaint[]
+  complaints Complaint[]
 
   @@index([status])
   @@index([customerId])
@@ -714,18 +771,18 @@ enum ProformaInvoiceStatus {
 // details, plus salesOrder.items for line items) and feeds it into a PDF
 // templating step — added later without touching this model.
 model ProformaInvoice {
-  id            String                @id @default(uuid())
-  invoiceNumber String                @unique
-  salesOrderId  String
-  salesOrder    SalesOrder            @relation(fields: [salesOrderId], references: [id])
-  customerId    String
-  customer      Customer              @relation(fields: [customerId], references: [id])
-  invoiceDate   DateTime              @default(now())
-  validUntil    DateTime?
-  subtotal      Float                 @default(0)
-  discount      Float                 @default(0)
-  tax           Float                 @default(0)
-  grandTotal    Float                 @default(0)
+  id              String                @id @default(uuid())
+  invoiceNumber   String                @unique
+  salesOrderId    String
+  salesOrder      SalesOrder            @relation(fields: [salesOrderId], references: [id])
+  customerId      String
+  customer        Customer              @relation(fields: [customerId], references: [id])
+  invoiceDate     DateTime              @default(now())
+  validUntil      DateTime?
+  subtotal        Float                 @default(0)
+  discount        Float                 @default(0)
+  tax             Float                 @default(0)
+  grandTotal      Float                 @default(0)
   // Additive: PDF generation (Proforma Invoice layout) — the "Advance
   // received" / "Receivable" rows on the printed invoice. Actual amount
   // received against this invoice, entered by whoever generates it (there
@@ -733,20 +790,20 @@ model ProformaInvoice {
   // from); "Receivable" itself is never stored — it's always computed as
   // grandTotal - advanceReceived at render/read time, same convention as
   // every other derived total in this schema.
-  advanceReceived Float               @default(0)
-  paymentTerms  String?
-  bankName      String?
-  accountNumber String?
-  ifscCode      String?
-  branch        String?
-  notes         String?
-  status        ProformaInvoiceStatus @default(DRAFT)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  advanceReceived Float                 @default(0)
+  paymentTerms    String?
+  bankName        String?
+  accountNumber   String?
+  ifscCode        String?
+  branch          String?
+  notes           String?
+  status          ProformaInvoiceStatus @default(DRAFT)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   // Additive: Sales Automation Email History (requirement #12 — Proforma
   // Invoice is emailed to the customer, CC Finance, on generation).
-  emailHistory  EmailHistory[]
+  emailHistory EmailHistory[]
 
   @@index([status])
   @@index([salesOrderId])
@@ -777,39 +834,39 @@ enum TaxInvoiceStatus {
 // NOT zero-padded (matching the reference template's "134", not "000134"),
 // so sorting the invoiceNumber string itself would give the wrong order.
 model TaxInvoice {
-  id             String           @id @default(uuid())
-  invoiceNumber  String           @unique
-  fiscalYear     String
-  sequenceNumber Int
-  salesOrderId   String
-  salesOrder     SalesOrder       @relation(fields: [salesOrderId], references: [id])
-  customerId     String
-  customer       Customer         @relation(fields: [customerId], references: [id])
-  invoiceDate    DateTime         @default(now())
+  id                String           @id @default(uuid())
+  invoiceNumber     String           @unique
+  fiscalYear        String
+  sequenceNumber    Int
+  salesOrderId      String
+  salesOrder        SalesOrder       @relation(fields: [salesOrderId], references: [id])
+  customerId        String
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  invoiceDate       DateTime         @default(now())
   // Tally-style dispatch metadata block ("Dispatch Doc No.", "Dispatched
   // through", "Destination", "Terms of Delivery") — free-text, entered once
   // at generation time (there's no separate Dispatch/Logistics module this
   // could be sourced from yet).
   dispatchedThrough String?
   destination       String?
-  termsOfDelivery    String?
-  buyersOrderNo      String?
-  subtotal       Float            @default(0)
-  discount       Float            @default(0)
-  tax            Float            @default(0)
-  grandTotal     Float            @default(0)
-  status         TaxInvoiceStatus @default(DRAFT)
-  createdBy      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  termsOfDelivery   String?
+  buyersOrderNo     String?
+  subtotal          Float            @default(0)
+  discount          Float            @default(0)
+  tax               Float            @default(0)
+  grandTotal        Float            @default(0)
+  status            TaxInvoiceStatus @default(DRAFT)
+  createdBy         String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   // Review-then-send flow (mirrors Quotation's sendQuotation()): generating
   // a Tax Invoice no longer emails it automatically — status starts DRAFT
   // and stays there until an explicit Send action moves it to SENT and
   // stamps who/when/which address it went to.
-  sentAt         DateTime?
-  sentBy         String?
-  sentToEmail    String?
+  sentAt      DateTime?
+  sentBy      String?
+  sentToEmail String?
 
   // GST e-invoicing (IRN + QR code): mandatory only for GST-registered
   // (B2B) customers — see customer.gstNumber — and only issued by the
@@ -819,15 +876,27 @@ model TaxInvoice {
   // TaxInvoicesService.updateEInvoiceDetails()). qrCodeImage stores the
   // government-issued QR as a base64 PNG/JPEG data string so it can be
   // embedded on the printed Tax Invoice PDF unmodified.
-  irn            String?
-  ackNumber      String?
-  ackDate        DateTime?
-  qrCodeImage    String?
+  irn               String?
+  ackNumber         String?
+  ackDate           DateTime?
+  qrCodeImage       String?
   eInvoiceUpdatedBy String?
   eInvoiceUpdatedAt DateTime?
 
   // Additive: emailed to the customer once explicitly sent (see sentAt above).
-  emailHistory   EmailHistory[]
+  emailHistory EmailHistory[]
+
+  // Additive: Website Enquiries -> Lead/Complaint refactor. Immutable
+  // line-item snapshot, replacing the previous "read live through
+  // salesOrder.items" convention for TaxInvoice specifically — a Tax
+  // Invoice's own line items must never drift if the originating
+  // SalesOrder's items are edited afterward. Backfilled for pre-existing
+  // invoices by the migration that introduces this table.
+  items TaxInvoiceItem[]
+
+  // Additive: Complaint.taxInvoiceId — a complaint linked (or looked up
+  // against) this invoice for warranty verification.
+  complaints Complaint[]
 
   @@index([status])
   @@index([salesOrderId])
@@ -835,17 +904,54 @@ model TaxInvoice {
   @@index([fiscalYear])
 }
 
-// Additive: Complaints module. Links to SalesOrder rather than Customer
-// directly — the customer is reached via salesOrder.customer, and any
-// generated Proforma Invoice via salesOrder.proformaInvoices, so there's
-// exactly one place a complaint is anchored to instead of two relations
-// that could disagree. A complaint about a customer with no Sales Order
-// yet isn't representable by design; log it once an order exists.
+// Additive: Website Enquiries -> Lead/Complaint refactor. Immutable
+// line-item snapshot for a TaxInvoice — copied from SalesOrder.items at the
+// moment the invoice is generated (see TaxInvoicesService.create() in a
+// later stage), so the invoice's printed/reported line items never change
+// even if the underlying SalesOrderItem rows are edited afterward. Also the
+// target a web-originated warranty Complaint's `taxInvoiceItemId` points at
+// once staff verifies which line item the claim concerns.
+model TaxInvoiceItem {
+  id                 String     @id @default(uuid())
+  taxInvoiceId       String
+  taxInvoice         TaxInvoice @relation(fields: [taxInvoiceId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product    @relation(fields: [productId], references: [id])
+  productName        String
+  productSku         String?
+  productDescription String?
+  quantity           Int        @default(1)
+  unitPrice          Float      @default(0)
+  discount           Float      @default(0)
+  tax                Float      @default(0)
+  lineTotal          Float      @default(0)
+  createdAt          DateTime   @default(now())
+
+  // Additive: Complaint.taxInvoiceItemId — a complaint's claimed line item,
+  // once verified.
+  complaints Complaint[]
+
+  @@index([taxInvoiceId])
+  @@index([productId])
+}
+
+// Additive: Complaints module. Originally anchored exclusively to a
+// SalesOrder (customer reached via salesOrder.customer, any generated
+// Proforma Invoice via salesOrder.proformaInvoices) so there was exactly one
+// place a complaint was anchored to instead of two relations that could
+// disagree. Website Enquiries -> Lead/Complaint refactor: `salesOrderId` is
+// now optional — a web-originated warranty/service complaint (`source:
+// WEB_FORM`) can exist before any Sales Order is matched, using the
+// reporter's own contact details and claimed invoice number instead; staff
+// can look up and link the real SalesOrder/TaxInvoice afterward once
+// verified (see taxInvoiceId/taxInvoiceItemId/warrantyVerificationStatus
+// below). Manual staff-created complaints are unaffected and still always
+// carry a salesOrderId (enforced at the CreateComplaintDto layer, not here).
 model Complaint {
   id              String          @id @default(uuid())
   complaintNumber String          @unique
-  salesOrderId    String
-  salesOrder      SalesOrder      @relation(fields: [salesOrderId], references: [id])
+  salesOrderId    String?
+  salesOrder      SalesOrder?     @relation(fields: [salesOrderId], references: [id])
   subject         String
   description     String?
   status          ComplaintStatus @default(OPEN)
@@ -859,9 +965,84 @@ model Complaint {
   updatedAt       DateTime        @updatedAt
   deletedAt       DateTime?
 
+  // Additive: Website Enquiries -> Lead/Complaint refactor. `source`
+  // distinguishes a complaint logged directly by staff (INTERNAL, the only
+  // kind that existed before this) from one that originated as a public web
+  // form submission (WEB_FORM) or that arrived via a Lead<->Complaint
+  // conversion (CONVERTED_FROM_LEAD).
+  source ComplaintSource @default(INTERNAL)
+
+  // 1:1 back-relation to WebFormIntake.complaintId — the immutable
+  // audit/traceability record this complaint was created from, when
+  // source is WEB_FORM.
+  webFormIntakeId String?        @unique
+  webFormIntake   WebFormIntake?
+
+  sourceWebsiteId   String?
+  sourceWebsite     FormWebsite? @relation(fields: [sourceWebsiteId], references: [id], onDelete: SetNull)
+  sourceSubjectCode String?
+
+  // Reporter contact details as submitted on the public form — captured
+  // directly rather than only through Customer/SalesOrder, since a
+  // web-originated complaint may not have either verified yet.
+  reporterName  String?
+  reporterEmail String?
+  reporterPhone String?
+
+  // The invoice number the reporter typed in on the public form —
+  // unverified until staff runs the invoice lookup (see
+  // ComplaintsService.findByInvoiceNumber() in a later stage), which sets
+  // taxInvoiceId/taxInvoiceItemId/warrantyVerificationStatus below. Never
+  // used directly to look up a SalesOrder without that explicit lookup step.
+  claimedInvoiceNumber String?
+
+  taxInvoiceId     String?
+  taxInvoice       TaxInvoice?     @relation(fields: [taxInvoiceId], references: [id], onDelete: SetNull)
+  taxInvoiceItemId String?
+  taxInvoiceItem   TaxInvoiceItem? @relation(fields: [taxInvoiceItemId], references: [id], onDelete: SetNull)
+
+  assignedToUserId String?
+  assignedToUser   User?       @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  departmentId     String?
+  department       Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // Full validated payload as submitted (minus the fields promoted to named
+  // columns above) — same flexible-JSON rationale as Product.technicalSpec.
+  submittedData Json?
+
+  warrantyVerificationStatus WarrantyVerificationStatus @default(UNVERIFIED)
+
+  // Additive: Complaint <-> Lead conversion — the opposite-direction
+  // counterpart of Lead.convertedToComplaintId above. `convertedToLead` is
+  // this Complaint's own FK to the Lead it was converted into (its own
+  // relation name, since it's a distinct physical FK column);
+  // `convertedFromLead` is the virtual back-relation for
+  // Lead.convertedToComplaintId pointing at this Complaint.
+  convertedToLeadId String? @unique
+  convertedToLead   Lead?   @relation("ComplaintConvertedToLead", fields: [convertedToLeadId], references: [id], onDelete: SetNull)
+  convertedFromLead Lead?   @relation("LeadConvertedToComplaint")
+
+  // Additive: ComplaintHistory audit trail, mirroring LeadHistory exactly —
+  // see that model's own comment.
+  history ComplaintHistory[]
+
+  // Additive: relational conversion-history (LeadComplaintConversion) — see
+  // Lead.conversionsAsSourceLead/conversionsAsTargetLead above.
+  conversionsAsSourceComplaint LeadComplaintConversion[] @relation("ConversionSourceComplaint")
+  conversionsAsTargetComplaint LeadComplaintConversion[] @relation("ConversionTargetComplaint")
+
+  // Additive: Sales Automation Email History, extended to cover
+  // web-complaint acknowledgement/notification emails.
+  emailHistory EmailHistory[]
+
   @@index([status])
   @@index([salesOrderId])
   @@index([deletedAt])
+  @@index([source])
+  @@index([sourceWebsiteId])
+  @@index([assignedToUserId])
+  @@index([departmentId])
+  @@index([taxInvoiceId])
 }
 
 enum ComplaintStatus {
@@ -869,6 +1050,309 @@ enum ComplaintStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+// Additive: Website Enquiries -> Lead/Complaint refactor.
+enum ComplaintSource {
+  INTERNAL
+  WEB_FORM
+  CONVERTED_FROM_LEAD
+}
+
+enum WarrantyVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  NOT_FOUND
+}
+
+// Mirrors LeadHistory exactly in convention — every row append-only,
+// cascades away only on a hard-delete of the parent Complaint (soft delete
+// via deletedAt never triggers this), written inside the same
+// `$transaction` as each Complaint mutation via a `logHistory` helper (see
+// LeadsService's own logHistory for the pattern this follows).
+enum ComplaintHistoryAction {
+  CREATED
+  EDITED
+  STATUS_CHANGED
+  ASSIGNED
+  INVOICE_LINKED
+  CONVERTED_TO_LEAD
+  CONVERTED_FROM_LEAD
+  CUSTOMER_REPLIED
+}
+
+model ComplaintHistory {
+  id          String                 @id @default(uuid())
+  complaintId String
+  complaint   Complaint              @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  action      ComplaintHistoryAction
+  description String
+  // Actor display name captured from the authenticated request at the time
+  // of the action — same convention as LeadHistory.performedBy.
+  performedBy String?
+  createdAt   DateTime               @default(now())
+
+  @@index([complaintId])
+  @@index([action])
+}
+
+// Additive: Website Enquiries -> Lead/Complaint refactor — the relational
+// conversion-history table for both Lead->Complaint and Complaint->Lead
+// conversions. Deliberately real FKs to both possible source/target models
+// (not a polymorphic string-typed "entityType"/"entityId" pair) since there
+// are only ever two concrete entities involved; each row's `direction`
+// says which pair of source/target columns is actually populated.
+enum ConversionDirection {
+  LEAD_TO_COMPLAINT
+  COMPLAINT_TO_LEAD
+}
+
+model LeadComplaintConversion {
+  id                String              @id @default(uuid())
+  direction         ConversionDirection
+  sourceLeadId      String?
+  sourceLead        Lead?               @relation("ConversionSourceLead", fields: [sourceLeadId], references: [id], onDelete: SetNull)
+  sourceComplaintId String?
+  sourceComplaint   Complaint?          @relation("ConversionSourceComplaint", fields: [sourceComplaintId], references: [id], onDelete: SetNull)
+  targetLeadId      String?
+  targetLead        Lead?               @relation("ConversionTargetLead", fields: [targetLeadId], references: [id], onDelete: SetNull)
+  targetComplaintId String?
+  targetComplaint   Complaint?          @relation("ConversionTargetComplaint", fields: [targetComplaintId], references: [id], onDelete: SetNull)
+  reason            String?
+  // Actor display name — same plain-scalar convention as LeadHistory.performedBy.
+  convertedBy       String?
+  createdAt         DateTime            @default(now())
+
+  @@index([sourceLeadId])
+  @@index([sourceComplaintId])
+  @@index([targetLeadId])
+  @@index([targetComplaintId])
+}
+
+// Additive: Website Form Submissions -> Lead/Complaint routing. A
+// FormWebsite is an external marketing/product website whose contact/
+// enquiry forms feed into DailyOps (e.g. SPYRO) — deliberately NOT named
+// "Product": that name is already the business/catalog model above, and
+// reusing it here would confuse two unrelated concepts everywhere in the
+// codebase. Each FormWebsite has one or more FormDefinitions (typically
+// just one — "one active form per website" is this module's default, not
+// an enforced constraint); each FormDefinition has one or more FormVersions
+// over time, but only the latest *published* version is ever used to
+// validate a new public submission — unpublished (draft) versions let a
+// form's schema be edited without affecting what's already live on the
+// website. Unlike the standalone-inbox design this replaced, a submission
+// against these forms no longer creates its own operational record — it
+// creates an ordinary Lead or Complaint (see WebFormIntake below), routed
+// by FormSubjectRoute.
+model FormWebsite {
+  id             String            @id @default(uuid())
+  code           String            @unique
+  name           String
+  status         FormWebsiteStatus @default(ACTIVE)
+  supportEmail   String?
+  // Per-website CORS allow-list for the public submission endpoint (see
+  // PUBLIC_FORM_CORS_ORIGINS / the public-forms CORS delegate) — additive,
+  // empty by default so an existing seeded website doesn't suddenly start
+  // rejecting requests until an Administrator explicitly configures origins.
+  allowedOrigins String[]          @default([])
+  configuration  Json              @default("{}")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  forms    FormDefinition[]
+  products FormWebsiteProduct[]
+  intakes  WebFormIntake[]
+
+  // Additive: Lead.sourceWebsiteId / Complaint.sourceWebsiteId — every Lead
+  // or Complaint this website's forms have ever produced.
+  leads      Lead[]
+  complaints Complaint[]
+
+  @@index([status])
+}
+
+enum FormWebsiteStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model FormDefinition {
+  id            String      @id @default(uuid())
+  formWebsiteId String
+  formWebsite   FormWebsite @relation(fields: [formWebsiteId], references: [id], onDelete: Cascade)
+  code          String
+  name          String
+  // Looked up directly by public submitters — must be globally unique and is
+  // never reused, even after a form is disabled. A plain global unique
+  // constraint (rather than a partial index scoped to enabled=true) is
+  // simpler and just as correct: a disabled form's key still correctly
+  // rejects new submissions via the `enabled` check in the public-forms
+  // service, not via the uniqueness constraint.
+  publicFormKey String      @unique
+  enabled       Boolean     @default(true)
+  supportEmail  String?
+  configuration Json        @default("{}")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  versions FormVersion[]
+  routes   FormSubjectRoute[]
+  intakes  WebFormIntake[]
+
+  @@unique([formWebsiteId, code])
+  @@index([formWebsiteId])
+}
+
+model FormVersion {
+  id               String         @id @default(uuid())
+  formDefinitionId String
+  formDefinition   FormDefinition @relation(fields: [formDefinitionId], references: [id], onDelete: Cascade)
+  version          Int
+  // Shape: { "fields": { "<name>": { "type": "string"|"number"|"boolean",
+  // "required": boolean, "label"?: string, "options"?: {value,label}[] } } }
+  // — `options` is additive (not every field needs it; only enum-style
+  // selectors like `subject` do) and is validated against by
+  // FormSchemaValidatorService, not by any DB-level JSON schema constraint.
+  schema           Json
+  publishedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  intakes WebFormIntake[]
+
+  @@unique([formDefinitionId, version])
+  @@index([formDefinitionId])
+}
+
+// Additive: maps an external website's own product codes/labels onto this
+// schema's canonical Product catalog (Product remains the single source of
+// truth — this is purely a per-website presentation + selection layer,
+// never a second product table). A Product can be mapped on multiple
+// websites; a website can expose multiple Products.
+model FormWebsiteProduct {
+  id            String      @id @default(uuid())
+  formWebsiteId String
+  formWebsite   FormWebsite @relation(fields: [formWebsiteId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+  publicCode    String
+  label         String
+  enabled       Boolean     @default(true)
+  displayOrder  Int         @default(0)
+  // Optional product-specific field schema/config for this website's form
+  // (e.g. extra fields to show when this product is selected) — same
+  // flexible-JSON convention as Product.technicalSpec.
+  fieldConfig   Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([formWebsiteId, productId])
+  @@unique([formWebsiteId, publicCode])
+  @@index([formWebsiteId])
+  @@index([productId])
+}
+
+enum FormDestinationType {
+  LEAD
+  COMPLAINT
+}
+
+// Additive: explicit, stable-subject-code routing configuration (never
+// text/keyword matching in controller code — see the public-forms service
+// that will consume this in a later stage). One row resolves "this subject,
+// optionally this product, on this form" to a destination type plus an
+// optional default responsible department/user. `priority` breaks ties
+// when more than one enabled rule matches a submission (e.g. a
+// product-specific rule should usually outrank a product-agnostic one for
+// the same subjectCode) — resolution always picks the highest-priority
+// enabled match.
+model FormSubjectRoute {
+  id               String              @id @default(uuid())
+  formDefinitionId String
+  formDefinition   FormDefinition      @relation(fields: [formDefinitionId], references: [id], onDelete: Cascade)
+  // One of the canonical subject codes (see the subject-codes constant
+  // added alongside the public-forms module in a later stage) — a plain
+  // string rather than a Prisma enum so a future website can introduce its
+  // own code without a schema migration.
+  subjectCode      String
+  subjectLabel     String
+  destinationType  FormDestinationType
+  // Null = applies to any product (or no product) on this subjectCode; a
+  // website that wants different routing per product sets this.
+  productId        String?
+  product          Product?            @relation(fields: [productId], references: [id])
+  departmentId     String?
+  department       Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignedUserId   String?
+  assignedUser     User?               @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  priority         Int                 @default(0)
+  enabled          Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([formDefinitionId, subjectCode])
+  @@index([productId])
+  @@index([departmentId])
+  @@index([assignedUserId])
+}
+
+enum WebFormIntakeStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+// Immutable intake/audit record for every public form submission — exists
+// for traceability, idempotency, and troubleshooting, NOT as an operational
+// workflow (that lives entirely in the resulting Lead or Complaint, once
+// classification succeeds). Always references the exact FormVersion that
+// was live when submitted, same immutable-historical-snapshot rationale the
+// previous standalone-inbox design had. `leadId`/`complaintId` are mutually
+// exclusive in practice (exactly one is set once `status` moves to
+// PROCESSED) but both stay nullable/unique rather than a single polymorphic
+// column, consistent with this schema's "use foreign keys" convention.
+model WebFormIntake {
+  id               String              @id @default(uuid())
+  // Format ENQ-YYYY-NNNNNN, year-scoped sequential counter generated with a
+  // retry-on-conflict loop, same pattern as ComplaintsService's
+  // generateComplaintNumber.
+  referenceNumber  String              @unique
+  formWebsiteId    String
+  formWebsite      FormWebsite         @relation(fields: [formWebsiteId], references: [id])
+  formDefinitionId String
+  formDefinition   FormDefinition      @relation(fields: [formDefinitionId], references: [id])
+  formVersionId    String
+  formVersion      FormVersion         @relation(fields: [formVersionId], references: [id])
+  subjectCode      String
+  subjectLabel     String
+  name             String
+  email            String?
+  phone            String?
+  company          String?
+  message          String
+  // The full validated payload as submitted (minus the fields promoted to
+  // named columns above) — same flexible-JSON rationale as
+  // Product.technicalSpec.
+  submittedData    Json                @default("{}")
+  classification   FormDestinationType
+  leadId           String?             @unique
+  lead             Lead?               @relation(fields: [leadId], references: [id])
+  complaintId      String?             @unique
+  complaint        Complaint?          @relation(fields: [complaintId], references: [id])
+  // Client-supplied de-dupe key (optional) — a retried submission with the
+  // same key on the same form returns the existing intake's reference
+  // number instead of creating a duplicate. The `@@unique` below with a
+  // nullable idempotencyKey is intentional: Postgres treats multiple NULLs
+  // as distinct, so submissions without a key never collide with each
+  // other; submissions WITH the same key on the same form do.
+  idempotencyKey   String?
+  status           WebFormIntakeStatus @default(RECEIVED)
+  errorMessage     String?
+  createdAt        DateTime            @default(now())
+
+  @@unique([formDefinitionId, idempotencyKey])
+  @@index([formWebsiteId, createdAt(sort: Desc)])
+  @@index([formDefinitionId, createdAt(sort: Desc)])
+  @@index([status])
 }
 
 // Scoped to JobExecutionOrder only (not shared with LeadPriority), the same
@@ -973,17 +1457,17 @@ model JobExecutionOrder {
 // automatically inferred from the booleans, so a supervisor always makes
 // the final call rather than the last checkbox silently finishing the job.
 model ProductionChecklist {
-  id                 String            @id @default(uuid())
-  jeoId              String            @unique
-  jeo                JobExecutionOrder @relation(fields: [jeoId], references: [id], onDelete: Cascade)
-  materialIssued     Boolean           @default(false)
-  assemblyStarted    Boolean           @default(false)
-  controllerInstalled Boolean          @default(false)
-  wiringCompleted    Boolean           @default(false)
-  qcPassed           Boolean           @default(false)
-  packed             Boolean           @default(false)
-  readyForDispatch   Boolean           @default(false)
-  completedAt        DateTime?
+  id                  String            @id @default(uuid())
+  jeoId               String            @unique
+  jeo                 JobExecutionOrder @relation(fields: [jeoId], references: [id], onDelete: Cascade)
+  materialIssued      Boolean           @default(false)
+  assemblyStarted     Boolean           @default(false)
+  controllerInstalled Boolean           @default(false)
+  wiringCompleted     Boolean           @default(false)
+  qcPassed            Boolean           @default(false)
+  packed              Boolean           @default(false)
+  readyForDispatch    Boolean           @default(false)
+  completedAt         DateTime?
 }
 
 // Additive: State-wise JEO numbering. Each Indian state can have its own
@@ -1043,14 +1527,14 @@ model MaterialUnit {
 // deletedAt convention used by Lead/Quotation/SalesOrder), since its given
 // field list includes `isActive` rather than `deletedAt`.
 model Material {
-  id           String            @id @default(uuid())
-  materialCode String            @unique
+  id           String           @id @default(uuid())
+  materialCode String           @unique
   name         String
   description  String?
   categoryId   String
-  category     MaterialCategory  @relation(fields: [categoryId], references: [id])
+  category     MaterialCategory @relation(fields: [categoryId], references: [id])
   unitId       String
-  unit         MaterialUnit      @relation(fields: [unitId], references: [id])
+  unit         MaterialUnit     @relation(fields: [unitId], references: [id])
   // Plain scalars (no Supplier/Warehouse relation) — no Supplier or
   // Warehouse module exists yet in this schema, the same convention already
   // used for Lead.assignedTo / SalesOrder.createdBy / JobExecutionOrder.assignedTo.
@@ -1058,14 +1542,14 @@ model Material {
   // without renaming either column.
   supplierId   String?
   cost         Float?
-  minimumStock Int               @default(0)
+  minimumStock Int              @default(0)
   maximumStock Int?
-  reorderLevel Int               @default(0)
-  currentStock Int               @default(0)
+  reorderLevel Int              @default(0)
+  currentStock Int              @default(0)
   warehouseId  String?
-  isActive     Boolean           @default(true)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([categoryId])
   @@index([unitId])
@@ -1142,9 +1626,10 @@ model EmailTemplate {
 // Append-only record of every email this system has sent (or attempted to
 // send / simulated) — requirement #7/#12/#13/#16 ("Show Email History").
 // Exactly one of quotationId/proformaInvoiceId/jobExecutionOrderId/
-// salesOrderId is ever populated on a given row (enforced in
-// MailerService, not at the schema level) — real foreign keys to whichever
-// module triggered the email, per "Do NOT denormalize. Use foreign keys."
+// salesOrderId/taxInvoiceId/leadId/complaintId is ever populated on a given
+// row (enforced in MailerService, not at the schema level) — real foreign
+// keys to whichever module triggered the email, per "Do NOT denormalize.
+// Use foreign keys."
 model EmailHistory {
   id                  String             @id @default(uuid())
   module              String
@@ -1159,6 +1644,13 @@ model EmailHistory {
   // Additive: automated GST Tax Invoice email (see TaxInvoicesService).
   taxInvoiceId        String?
   taxInvoice          TaxInvoice?        @relation(fields: [taxInvoiceId], references: [id], onDelete: Cascade)
+  // Additive: Website Enquiries -> Lead/Complaint refactor — web-originated
+  // Lead/Complaint acknowledgement and internal-notification emails (see
+  // MailerLink.leadId/complaintId).
+  leadId              String?
+  lead                Lead?              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  complaintId         String?
+  complaint           Complaint?         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
   templateKey         String?
   subject             String
   recipientEmail      String
@@ -1175,6 +1667,8 @@ model EmailHistory {
   @@index([proformaInvoiceId])
   @@index([jobExecutionOrderId])
   @@index([taxInvoiceId])
+  @@index([leadId])
+  @@index([complaintId])
 }
 
 // Configurable Approval Matrix engine (requirement #9) — "No hardcoding."
@@ -1184,15 +1678,15 @@ model EmailHistory {
 // module name can add its own brackets later and reuse the exact same
 // ApprovalMatrixService.resolveRequiredRole(module, percent) engine.
 model ApprovalMatrix {
-  id           String   @id @default(uuid())
-  module       String
-  minPercent   Float
-  maxPercent   Float
+  id             String   @id @default(uuid())
+  module         String
+  minPercent     Float
+  maxPercent     Float
   requiredRoleId String
-  requiredRole Role     @relation(fields: [requiredRoleId], references: [id])
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  requiredRole   Role     @relation(fields: [requiredRoleId], references: [id])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([module])
 }

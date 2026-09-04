@@ -103,6 +103,16 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'StateSeriesCode', action: 'View', description: 'View state-wise JEO numbering series' },
   { module: 'StateSeriesCode', action: 'Create', description: 'Add a state-wise JEO numbering series' },
   { module: 'StateSeriesCode', action: 'Delete', description: 'Remove a state-wise JEO numbering series' },
+
+  // Additive: Web Form Configuration (replaces the old FormWebsite/
+  // FormSubmission modules from the standalone "Website Enquiries" design —
+  // website form submissions now create ordinary Lead/Complaint records
+  // instead of their own operational inbox, so this module is admin config
+  // only: websites, forms/form versions, product mappings, subject routing).
+  { module: 'FormConfiguration', action: 'View', description: 'View websites, forms, product mappings, and subject routing' },
+  { module: 'FormConfiguration', action: 'Create', description: 'Create websites, forms, product mappings, and subject routes' },
+  { module: 'FormConfiguration', action: 'Edit', description: 'Edit websites/forms, publish form versions, edit product mappings and routing' },
+  { module: 'FormConfiguration', action: 'Delete', description: 'Delete product mappings and subject routes' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -128,6 +138,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'taxinvoice.view',
     'taxinvoice.create',
     'product.view',
+    // Additive: Web Form Configuration — website form submissions now
+    // create ordinary Leads/Complaints directly (visible via the Lead/
+    // Complaint permissions above); this only gates the admin config screen
+    // (websites, forms, product mappings, subject routing).
+    ...permissionsForModule('FormConfiguration'),
   ],
   'Sales Executive': [
     'lead.view',
@@ -217,6 +232,13 @@ async function main() {
   }
 
   // 2. Permissions
+  // Delete stale permission rows from the old FormWebsite/FormSubmission
+  // modules (replaced by FormConfiguration above) so a re-run of this seed
+  // doesn't leave orphaned, no-longer-granted rows in the Permission catalog.
+  // RolePermission.permissionId is `onDelete: Cascade`, so this can never
+  // throw a FK error even if a role still references one of these rows.
+  await prisma.permission.deleteMany({ where: { module: { in: ['FormWebsite', 'FormSubmission'] } } });
+
   const permissionIdByCode = new Map<string, string>();
   for (const p of PERMISSIONS) {
     const permCode = code(p.module, p.action);
@@ -395,6 +417,87 @@ async function main() {
       bodyHtml:
         '<p>Dear {{customerName}},</p><p>Please find attached the Tax Invoice {{invoiceNumber}} for Sales Order {{salesOrderNumber}}. Grand total: {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamach Finance Team</p>',
     },
+    // Additive: Website Enquiries -> Lead/Complaint refactor. A public form
+    // submission now creates an ordinary Lead or Complaint (routed by
+    // FormSubjectRoute) rather than its own operational inbox record — sent
+    // automatically by the public-forms service on every submission
+    // (customer ack only when an email was given; internal notification
+    // always, if a recipient resolves), referencing the WebFormIntake's
+    // reference number, never an /enquiries/... link.
+    {
+      key: 'WEB_LEAD_RECEIVED',
+      name: 'Web Lead Received — Customer Acknowledgement',
+      subject: 'We received your enquiry — {{referenceNumber}}',
+      bodyHtml:
+        '<div style="font-family:Arial;padding:20px">' +
+        '<h2>Thank you for contacting Smart Rotamac</h2>' +
+        '<p>Dear <b>{{customerName}}</b>,</p>' +
+        '<p>Your enquiry has been received successfully.</p>' +
+        '<div style="background:#F3F4F6;padding:15px;border-radius:8px">' +
+        '<h3>Reference Number</h3>' +
+        '<h1 style="color:#2563EB">{{referenceNumber}}</h1>' +
+        '</div>' +
+        '<p>Our sales team will review your request and contact you shortly.</p>' +
+        '<hr>' +
+        '<p style="color:#6B7280">Smart Rotamac Sales Team</p>' +
+        '</div>',
+    },
+    {
+      key: 'WEB_COMPLAINT_RECEIVED',
+      name: 'Web Complaint Received — Customer Acknowledgement',
+      subject: 'We received your request — {{referenceNumber}}',
+      bodyHtml:
+        '<div style="font-family:Arial;padding:20px">' +
+        '<h2>Thank you for contacting Smart Rotamac Support</h2>' +
+        '<p>Dear <b>{{customerName}}</b>,</p>' +
+        '<p>Your warranty/service request has been received successfully.</p>' +
+        '<div style="background:#F3F4F6;padding:15px;border-radius:8px">' +
+        '<h3>Reference Number</h3>' +
+        '<h1 style="color:#2563EB">{{referenceNumber}}</h1>' +
+        '</div>' +
+        '<p>Our support team will review your request and contact you shortly.</p>' +
+        '<hr>' +
+        '<p style="color:#6B7280">Smart Rotamac Support Team</p>' +
+        '</div>',
+    },
+    // Internal notification for every web-originated Lead/Complaint, sent
+    // to the resolved department/assignee when FormSubjectRoute set one
+    // (never fabricated — an unrouted/unassigned submission simply omits
+    // {{assigneeName}}/{{departmentName}} rather than guessing a recipient).
+    {
+      key: 'WEB_SUBMISSION_INTERNAL',
+      name: 'Web Submission Received — Internal Notification',
+      subject: 'New {{destinationType}} {{referenceNumber}} — {{websiteName}}',
+      bodyHtml:
+        '<p>A new {{destinationType}} ({{referenceNumber}}) was received on {{websiteName}} via {{formName}}, subject: {{subjectLabel}}.</p>' +
+        '<p>From: {{customerName}}</p>' +
+        '<p>Department: {{departmentName}}<br/>Assigned to: {{assigneeName}}</p>' +
+        '<p>{{message}}</p>',
+    },
+    // Sent directly to the person a FormSubjectRoute (or a manual Lead
+    // reassignment) actually assigns a record to — distinct from
+    // WEB_SUBMISSION_INTERNAL above, which always goes to the generic
+    // department/support address regardless of whether an individual is
+    // also assigned. Only ever sent when an assignee's own email is on
+    // file; never fabricated.
+    {
+      key: 'WEB_SUBMISSION_ASSIGNED',
+      name: 'Web Submission — Assigned To You',
+      subject: '{{destinationType}} {{referenceNumber}} assigned to you — {{websiteName}}',
+      bodyHtml:
+        '<p>Hi {{assigneeName}},</p>' +
+        '<p>A new {{destinationType}} ({{referenceNumber}}) from {{websiteName}} has been assigned to you.</p>' +
+        '<p>Subject: {{subjectLabel}}<br/>From: {{customerName}}</p>' +
+        '<p>{{message}}</p>',
+    },
+    {
+      key: 'LEAD_ASSIGNED',
+      name: 'Lead Assigned To You',
+      subject: 'Lead {{leadNumber}} assigned to you',
+      bodyHtml:
+        '<p>Hi {{assigneeName}},</p>' +
+        '<p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>',
+    },
   ];
   for (const template of emailTemplateSeed) {
     await prisma.emailTemplate.upsert({
@@ -422,6 +525,144 @@ async function main() {
       where: { state: s.state },
       update: {},
       create: { state: s.state, seriesStart: s.seriesStart, nextNumber: s.seriesStart },
+    });
+  }
+
+  // 8. Web Form Configuration — Website Enquiries -> Lead/Complaint
+  // refactor. SPYRO is the only real website (the other three "websites"
+  // shown in the prior standalone-inbox design's Admin-Dashboard were 100%
+  // hardcoded frontend mock data with no backing rows anywhere — not
+  // ported). Redesigned down to **one** FormDefinition (this module's
+  // "one active form per website" default) whose schema covers both the
+  // former Contact Form's product-enquiry fields and the former Customer
+  // Support form's warranty/service fields, gated by a single `subject`
+  // selector rather than two separate forms — routing to Lead vs Complaint
+  // is now FormSubjectRoute's job, not "which form did they use". Upserted
+  // by natural unique keys so re-running this seed never duplicates rows or
+  // resets a published version's schema.
+  const spyro = await prisma.formWebsite.upsert({
+    where: { code: 'SPYRO' },
+    update: {},
+    create: { code: 'SPYRO', name: 'SPYRO', status: 'ACTIVE', supportEmail: 'info@spyro.com' },
+  });
+
+  // Canonical subject codes this form's `subject` selector offers — the
+  // same list FormSubjectRoute is seeded against below, and the single
+  // source of truth the (not-yet-built) public-forms module will validate
+  // against in a later stage.
+  const SUBJECT_OPTIONS: { value: string; label: string; destination: 'LEAD' | 'COMPLAINT' }[] = [
+    { value: 'PRODUCT_ENQUIRY', label: 'Product Enquiry', destination: 'LEAD' },
+    { value: 'REQUEST_QUOTATION', label: 'Request a Quotation', destination: 'LEAD' },
+    { value: 'PROJECT_ENQUIRY', label: 'Project Enquiry', destination: 'LEAD' },
+    { value: 'DEALERSHIP_ENQUIRY', label: 'Dealership Enquiry', destination: 'LEAD' },
+    { value: 'GENERAL_ENQUIRY', label: 'General Enquiry', destination: 'LEAD' },
+    { value: 'WARRANTY_CLAIM', label: 'Warranty Claim', destination: 'COMPLAINT' },
+    { value: 'SERVICE_REQUEST', label: 'Service Request', destination: 'COMPLAINT' },
+    { value: 'REPAIR_REQUEST', label: 'Repair Request', destination: 'COMPLAINT' },
+    { value: 'TECHNICAL_SUPPORT', label: 'Technical Support', destination: 'COMPLAINT' },
+  ];
+
+  const contactForm = await prisma.formDefinition.upsert({
+    where: { publicFormKey: 'fm_c92kl8' },
+    update: {},
+    create: {
+      formWebsiteId: spyro.id,
+      code: 'CONTACT_FORM',
+      name: 'Contact Form',
+      publicFormKey: 'fm_c92kl8',
+      enabled: true,
+    },
+  });
+  await prisma.formVersion.upsert({
+    where: { formDefinitionId_version: { formDefinitionId: contactForm.id, version: 1 } },
+    update: {},
+    create: {
+      formDefinitionId: contactForm.id,
+      version: 1,
+      publishedAt: new Date(),
+      schema: {
+        fields: {
+          // Common fields, always shown.
+          fullName: { type: 'string', required: true, label: 'Full Name' },
+          email: { type: 'string', required: true, label: 'Email' },
+          phone: { type: 'string', required: true, label: 'Phone' },
+          company: { type: 'string', required: false, label: 'Company' },
+          // `options` is additive to this schema shape (not every field
+          // needs it — only enum-style selectors like this one) — the
+          // schema validator is extended to understand it in a later stage.
+          subject: {
+            type: 'string',
+            required: true,
+            label: 'Subject',
+            options: SUBJECT_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+          },
+          message: { type: 'string', required: true, label: 'Message' },
+          // Conditional — shown only for WARRANTY_CLAIM/SERVICE_REQUEST/
+          // REPAIR_REQUEST/TECHNICAL_SUPPORT (validated by the public-forms
+          // module once built; the DB schema itself doesn't enforce
+          // conditionality).
+          invoiceNumber: { type: 'string', required: false, label: 'Invoice Number' },
+          productCode: { type: 'string', required: false, label: 'Product Model' },
+          serialNumber: { type: 'string', required: false, label: 'Fan Serial Number' },
+          // Conditional — shown only for PRODUCT_ENQUIRY/REQUEST_QUOTATION/
+          // PROJECT_ENQUIRY.
+          quantity: { type: 'number', required: false, label: 'Quantity' },
+          siteDetails: { type: 'string', required: false, label: 'Site Details' },
+        },
+      },
+    },
+  });
+
+  // Subject routing — one row per canonical subject code, all on the single
+  // FormDefinition above. `departmentId`/`assignedUserId` are left null
+  // ("do not arbitrarily assign the first user" — an unassigned queue is
+  // the correct default) unless a matching Department already exists in
+  // this seed's DEPARTMENTS list: 'Sales' does (LEAD-destined subjects get
+  // it), but no 'Service'/'Support' department is seeded yet, so
+  // COMPLAINT-destined subjects stay unassigned until one is added.
+  const salesDepartmentId = departmentByName.get('Sales');
+  await prisma.formSubjectRoute.deleteMany({ where: { formDefinitionId: contactForm.id } });
+  await prisma.formSubjectRoute.createMany({
+    data: SUBJECT_OPTIONS.map((s, index) => ({
+      formDefinitionId: contactForm.id,
+      subjectCode: s.value,
+      subjectLabel: s.label,
+      destinationType: s.destination,
+      departmentId: s.destination === 'LEAD' ? (salesDepartmentId ?? null) : null,
+      priority: index,
+    })),
+  });
+
+  // Product mappings — the 5 Spyro fan models this website's form lets a
+  // visitor pick from. Products are matched/created by `sku` (same
+  // SPYRO-<size> convention as prisma/seed-hvls-products.ts) so this never
+  // creates a duplicate Product if that script has already run; a minimal
+  // Product row is created here if it hasn't (category 'HVLS Fans', same
+  // convention as seed-hvls-products.ts), leaving `technicalSpec` for that
+  // dedicated script to fill in.
+  const SPYRO_MODELS = ['Spyro 24', 'Spyro 20', 'Spyro 18', 'Spyro 16', 'Spyro 12'];
+  for (const modelName of SPYRO_MODELS) {
+    const sizeFt = modelName.replace('Spyro ', '');
+    const sku = `SPYRO-${sizeFt}`;
+    // Product.sku has no unique constraint (see seed-hvls-products.ts, which
+    // already seeds these same 5 SKUs with full technical specs) — matched
+    // by findFirst, same pattern that script uses, so this never creates a
+    // duplicate Product if that script has already run.
+    const existingProduct = await prisma.product.findFirst({ where: { sku } });
+    const product =
+      existingProduct ??
+      (await prisma.product.create({ data: { name: modelName, category: 'HVLS Fans', sku, isActive: true } }));
+    await prisma.formWebsiteProduct.upsert({
+      where: { formWebsiteId_productId: { formWebsiteId: spyro.id, productId: product.id } },
+      update: {},
+      create: {
+        formWebsiteId: spyro.id,
+        productId: product.id,
+        publicCode: sku,
+        label: modelName,
+        enabled: true,
+        displayOrder: SPYRO_MODELS.indexOf(modelName),
+      },
     });
   }
 

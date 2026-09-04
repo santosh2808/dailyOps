@@ -19,6 +19,7 @@ import ComplaintFiltersBar, {
 } from "@/components/complaints/ComplaintFiltersBar";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
@@ -195,6 +196,7 @@ export default function ComplaintList() {
                 </TableHead>
                 <TableHead>Complaint No.</TableHead>
                 <TableHead>Subject</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Sales Order</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Invoice</TableHead>
@@ -205,7 +207,7 @@ export default function ComplaintList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading complaints...
                     </span>
@@ -213,13 +215,22 @@ export default function ComplaintList() {
                 </TableRow>
               ) : complaints.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     No complaints found. Click "Log Complaint" to create one.
                   </TableCell>
                 </TableRow>
               ) : (
                 complaints.map((complaint) => {
-                  const invoice = complaint.salesOrder?.proformaInvoices?.[0];
+                  const proformaInvoice = complaint.salesOrder?.proformaInvoices?.[0];
+                  const customerName =
+                    complaint.salesOrder?.customer?.companyName || complaint.reporterName || "—";
+                  const invoiceDisplay = complaint.taxInvoice
+                    ? complaint.taxInvoice.invoiceNumber
+                    : proformaInvoice?.invoiceNumber
+                      ? proformaInvoice.invoiceNumber
+                      : complaint.claimedInvoiceNumber
+                        ? `${complaint.claimedInvoiceNumber} (unverified)`
+                        : "—";
                   return (
                     <TableRow
                       key={complaint.id}
@@ -239,11 +250,24 @@ export default function ComplaintList() {
                       <TableCell>
                         <TruncatedText text={complaint.subject} />
                       </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            complaint.source === "WEB_FORM"
+                              ? "info"
+                              : complaint.source === "CONVERTED_FROM_LEAD"
+                                ? "warning"
+                                : "muted"
+                          }
+                        >
+                          {complaint.source.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{complaint.salesOrder?.salesOrderNumber || "—"}</TableCell>
                       <TableCell>
-                        <TruncatedText text={complaint.salesOrder?.customer?.companyName || "—"} />
+                        <TruncatedText text={customerName} />
                       </TableCell>
-                      <TableCell>{invoice?.invoiceNumber || "—"}</TableCell>
+                      <TableCell>{invoiceDisplay}</TableCell>
                       <TableCell>
                         <ComplaintStatusBadge status={complaint.status} />
                       </TableCell>

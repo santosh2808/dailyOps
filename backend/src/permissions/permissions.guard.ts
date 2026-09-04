@@ -14,19 +14,24 @@ export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.get<string | undefined>(PERMISSION_KEY, context.getHandler());
+    const required = this.reflector.get<string | string[] | undefined>(PERMISSION_KEY, context.getHandler());
 
-    // No @RequirePermission on this handler -> nothing for this guard to
-    // enforce; whatever auth guard already sits in front of it (JwtAuthGuard)
-    // is unaffected.
+    // No @RequirePermission/@RequireAllPermissions on this handler ->
+    // nothing for this guard to enforce; whatever auth guard already sits
+    // in front of it (JwtAuthGuard) is unaffected.
     if (!required) {
       return true;
     }
 
     const request = context.switchToHttp().getRequest();
     const permissions: string[] = request.user?.permissions ?? [];
-    if (!permissions.includes(required)) {
-      throw new ForbiddenException(`Missing required permission: ${required}`);
+    // Accepts either a single code (string, from @RequirePermission) or an
+    // array of codes (from @RequireAllPermissions) — every one of them must
+    // be present.
+    const requiredCodes = Array.isArray(required) ? required : [required];
+    const missing = requiredCodes.filter((code) => !permissions.includes(code));
+    if (missing.length > 0) {
+      throw new ForbiddenException(`Missing required permission(s): ${missing.join(', ')}`);
     }
     return true;
   }

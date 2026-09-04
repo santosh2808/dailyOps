@@ -20,7 +20,7 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
-import { RequirePermission } from '../permissions/require-permission.decorator';
+import { RequireAllPermissions, RequirePermission } from '../permissions/require-permission.decorator';
 import { LeadsService } from './leads.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
@@ -28,6 +28,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
+import { ConvertToComplaintDto } from './dto/convert-to-complaint.dto';
 
 @ApiTags('leads')
 @ApiBearerAuth()
@@ -106,6 +107,17 @@ export class LeadsController {
   @RequirePermission('Lead', 'Edit')
   convert(@Param('id') id: string, @Req() req: any) {
     return this.leadsService.convertToCustomer(id, req.user?.name);
+  }
+
+  // Additive: Lead <-> Complaint conversion (Website Enquiries -> Lead/Complaint
+  // refactor). Requires both Lead.Edit and Complaint.Create.
+  @Post(':id/convert-to-complaint')
+  @RequireAllPermissions([
+    ['Lead', 'Edit'],
+    ['Complaint', 'Create'],
+  ])
+  convertToComplaint(@Param('id') id: string, @Body() dto: ConvertToComplaintDto, @Req() req: any) {
+    return this.leadsService.convertToComplaint(id, req.user?.name, dto);
   }
 
   // Lead History / Notes — additive, read-only history + append-only notes.
