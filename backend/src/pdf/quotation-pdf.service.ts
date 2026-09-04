@@ -307,20 +307,21 @@ export class QuotationPdfService {
       const summaryLines: [string, string][] = [
         ['Subtotal (Fans)', this.formatCurrency(quotation.subtotal)],
         // When item prices already include installation/transportation/GST
-        // (staff-confirmed — see Quotation.pricesIncludeChargesAndGst),
-        // these are folded into the subtotal above rather than shown as
-        // separate additive lines.
-        ...(includesCharges
-          ? ([] as [string, string][])
-          : ([
-              ['Installation Charges', this.formatCurrency(quotation.installationCharge)],
-              [
-                'Transportation Charges',
-                quotation.transportScope === 'CUSTOMER_SCOPE'
-                  ? 'By Customer'
-                  : this.formatCurrency(quotation.transportationCharge),
-              ],
-            ] as [string, string][])),
+        // (staff-confirmed — see Quotation.pricesIncludeChargesAndGst), keep
+        // both rows but show "Included" instead of a separate additive
+        // amount — same treatment as the GST line below, not omitted.
+        [
+          'Installation Charges',
+          includesCharges ? 'Included' : this.formatCurrency(quotation.installationCharge),
+        ],
+        [
+          'Transportation Charges',
+          includesCharges
+            ? 'Included'
+            : quotation.transportScope === 'CUSTOMER_SCOPE'
+              ? 'By Customer'
+              : this.formatCurrency(quotation.transportationCharge),
+        ],
         ...gstSummaryLines,
         ['Grand Total', this.formatCurrency(quotation.grandTotal)],
       ];
@@ -717,29 +718,28 @@ export class QuotationPdfService {
     const terms = this.resolveCommercialTerms(quotation);
     const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
     // When item prices already include installation/transportation/GST,
-    // those two rows are dropped from the Annexure entirely — not relabeled
-    // "Included" — since the fan's Unit Price row already reflects the full
-    // charged amount; a leftover "Installation: ..." line would just be
-    // confusing (matches the Quotation Summary block, which does the same).
-    const installationRows: SpecRow[] = includesCharges
-      ? []
-      : [{ label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge }];
-    const transportationRows: SpecRow[] = includesCharges
-      ? []
-      : [
-          {
-            label: 'Transportation',
-            value:
-              quotation.transportScope === 'CUSTOMER_SCOPE'
-                ? 'By Customer'
-                : quotation.transportationCharge > 0
-                  ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
-                  : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
-          },
-        ];
-    const gstValue = includesCharges
-      ? `${quotation.gstPercent}% — Included in item price`
-      : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // both rows stay on the Annexure but read "Included" — same treatment
+    // as the GST row just below, not omitted (matches the Quotation
+    // Summary block, which does the same).
+    const installationRows: SpecRow[] = [
+      {
+        label: 'Installation',
+        value: includesCharges ? 'Included' : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+      },
+    ];
+    const transportationRows: SpecRow[] = [
+      {
+        label: 'Transportation',
+        value: includesCharges
+          ? 'Included'
+          : quotation.transportScope === 'CUSTOMER_SCOPE'
+            ? 'By Customer'
+            : quotation.transportationCharge > 0
+              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+      },
+    ];
+    const gstValue = includesCharges ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
 
     if (!this.hasPopulatedSpec(item)) {
       // Simple line item (spare part sold on its own) — no fan spec sheet
