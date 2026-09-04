@@ -14,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { isAxiosError } from "axios";
 import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
 import { getQuotation } from "@/api/quotations";
@@ -130,9 +131,17 @@ export default function GenerateJeoDialog({
         color: form.color.trim() || undefined,
       });
       onOpenChange(false);
-    } catch {
-      setError("Could not generate the job execution order. Please try again.");
-      toast.error("Could not generate the job execution order.");
+    } catch (err) {
+      // Surface the backend's actual reason (e.g. "An active Job Execution
+      // Order already exists for this Sales Order.") instead of a generic
+      // message — this dialog previously discarded it entirely, which made
+      // real causes (conflicts, permission errors, validation) impossible
+      // to diagnose from the UI.
+      const backendMessage = isAxiosError(err) ? err.response?.data?.message : undefined;
+      const message = Array.isArray(backendMessage) ? backendMessage.join(" ") : backendMessage;
+      const finalMessage = message || "Could not generate the job execution order. Please try again.";
+      setError(finalMessage);
+      toast.error(finalMessage);
     } finally {
       setSubmitting(false);
     }
