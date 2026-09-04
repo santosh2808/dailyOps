@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Download, ExternalLink, Pencil, QrCode, RefreshCw, Send } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Download,
+  ExternalLink,
+  MoreVertical,
+  Pencil,
+  QrCode,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
@@ -121,37 +132,14 @@ export default function TaxInvoiceDetails() {
             </div>
           ) : (
             <div className="mx-auto max-w-4xl space-y-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">{invoice.invoiceNumber}</h2>
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-semibold text-slate-900">{invoice.invoiceNumber}</h2>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {invoice.customer?.companyName ?? "Unknown customer"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => setEditOpen(true)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button variant="outline" onClick={() => setStatusOpen(true)}>
-                    Change Status
-                  </Button>
-                  <Button variant="outline" onClick={() => navigate(`/sales-orders/${invoice.salesOrderId}`)}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View Sales Order
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      openTaxInvoicePdf(invoice.id).catch(() => {
-                        setPdfError("Could not load the PDF. Please try again.");
-                        toast.error("Could not load the PDF. Please try again.");
-                      })
-                    }
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    View PDF
-                  </Button>
+                <div className="flex flex-wrap items-center gap-2">
                   {invoice.status !== "CANCELLED" && (
                     <Button
                       onClick={() => {
@@ -172,6 +160,37 @@ export default function TaxInvoiceDetails() {
                       {invoice.status === "SENT" ? "Resend to Customer" : "Send to Customer"}
                     </Button>
                   )}
+                  <DropdownMenu
+                    trigger={
+                      <Button variant="outline" size="icon" aria-label="More actions">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    }
+                  >
+                    <DropdownMenuItem
+                      icon={Download}
+                      onSelect={() =>
+                        openTaxInvoicePdf(invoice.id).catch(() => {
+                          setPdfError("Could not load the PDF. Please try again.");
+                          toast.error("Could not load the PDF. Please try again.");
+                        })
+                      }
+                    >
+                      View PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      icon={ExternalLink}
+                      onSelect={() => navigate(`/sales-orders/${invoice.salesOrderId}`)}
+                    >
+                      View Sales Order
+                    </DropdownMenuItem>
+                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                      Change Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem icon={Pencil} onSelect={() => setEditOpen(true)}>
+                      Edit
+                    </DropdownMenuItem>
+                  </DropdownMenu>
                 </div>
               </div>
 

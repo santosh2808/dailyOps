@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  MoreVertical,
   Pencil,
   RefreshCw,
   Trash2,
@@ -15,6 +16,7 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import SalesOrderStatusBadge from "@/components/sales-orders/SalesOrderStatusBadge";
 import ChangeSalesOrderStatusDialog from "@/components/sales-orders/ChangeSalesOrderStatusDialog";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
@@ -249,10 +251,10 @@ export default function SalesOrderDetails() {
             </div>
           ) : (
             <div className="mx-auto max-w-4xl space-y-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">{salesOrder.salesOrderNumber}</h2>
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-semibold text-slate-900">{salesOrder.salesOrderNumber}</h2>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {salesOrder.customer?.companyName ?? "Unknown customer"} · from quotation{" "}
                     <button
                       type="button"
@@ -263,18 +265,19 @@ export default function SalesOrderDetails() {
                     </button>
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {/* The three "next step" workflow actions (Proforma Invoice,
+                    Tax Invoice, JEO — each independently either "View" or
+                    "Generate") stay visible since they're the actual reason
+                    someone is on this page. Everything else (Record
+                    Advance, Change Status, Edit, Delete) moves into one
+                    More actions menu — was 7 buttons wrapping unpredictably
+                    before. */}
+                <div className="flex flex-wrap items-center gap-2">
                   {activeInvoice ? (
-                    <>
-                      <Button variant="outline" onClick={() => navigate(`/proforma-invoices/${activeInvoice.id}`)}>
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        View Proforma Invoice
-                      </Button>
-                      <Button variant="outline" onClick={() => setRecordAdvanceOpen(true)}>
-                        <Wallet className="mr-2 h-4 w-4" />
-                        Record Advance Payment
-                      </Button>
-                    </>
+                    <Button variant="outline" onClick={() => navigate(`/proforma-invoices/${activeInvoice.id}`)}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View Proforma Invoice
+                    </Button>
                   ) : (
                     <Button onClick={() => setGenerateInvoiceOpen(true)}>
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
@@ -311,17 +314,29 @@ export default function SalesOrderDetails() {
                       Generate JEO
                     </Button>
                   )}
-                  <Button variant="outline" onClick={() => setStatusOpen(true)}>
-                    Change Status
-                  </Button>
-                  <Button variant="outline" onClick={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
+                  <DropdownMenu
+                    trigger={
+                      <Button variant="outline" size="icon" aria-label="More actions">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    }
+                  >
+                    {activeInvoice && (
+                      <DropdownMenuItem icon={Wallet} onSelect={() => setRecordAdvanceOpen(true)}>
+                        Record Advance Payment
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                      Change Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}>
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem icon={Trash2} destructive onSelect={() => setDeleteOpen(true)}>
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenu>
                 </div>
               </div>
 
