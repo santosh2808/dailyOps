@@ -32,13 +32,26 @@ export function statusBadgeVariant(status: QuotationStatus): BadgeProps["variant
 // defaulted to (e.g. "BLACK COLOUR") whenever nothing was entered, which
 // nobody had actually confirmed with the customer. Forcing a real choice
 // here — Black included, but never assumed — is what fixes that.
+//
+// These 5 are the standard, no-extra-cost colors this business actually
+// paints fans in. Anything else (Custom) is a special paint job, which the
+// Quotation PDF's own Exclusions list already calls out — see
+// STANDARD_PAINT_EXTRA_CHARGE below and EXCLUSIONS in quotation-pdf.service.ts
+// ("Any specific paint shall be charged extra @ Rs.10,000.00").
 export const PAINT_COLOR_OPTIONS = [
   { value: "Black", label: "Black" },
   { value: "White", label: "White" },
   { value: "Grey", label: "Grey" },
-  { value: "Silver", label: "Silver" },
-  { value: "CUSTOM", label: "Custom (specify below)" },
+  { value: "Aluminium", label: "Aluminium" },
+  { value: "Orange", label: "Orange" },
+  { value: "CUSTOM", label: "Custom / Other (extra cost)" },
 ] as const;
+
+// Mirrors the "Any specific paint shall be charged extra @ Rs.10,000.00"
+// line in quotation-pdf.service.ts's EXCLUSIONS list — used to suggest a
+// starting Color Charge the moment staff pick Custom, since a non-standard
+// color always carries this extra cost.
+export const STANDARD_PAINT_EXTRA_CHARGE = 10000;
 
 const FIXED_COLOR_VALUES = new Set<string>(
   PAINT_COLOR_OPTIONS.filter((o) => o.value !== "CUSTOM").map((o) => o.value),
