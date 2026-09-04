@@ -13,10 +13,10 @@ npm run --silent seed:hvls-products
 
 # First deploy only
 if [ "$RUN_SEED" = "true" ]; then
-  echo "[entrypoint] 4/5 RUN_SEED=true -> seeding departments, permissions, roles, admin"
-  npm run --silent seed
+  echo "[entrypoint] 4/5 RUN_SEED=true -> seeding departments, permissions, roles, admin"
+  npm run --silent seed
 else
-  echo "[entrypoint] 4/5 RUN_SEED not set -> skipping seed (correct for normal deploys)"
+  echo "[entrypoint] 4/5 RUN_SEED not set -> skipping seed (correct for normal deploys)"
 fi
 
 echo "[entrypoint] 5/5 seeding named sales resources"
