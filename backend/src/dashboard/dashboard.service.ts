@@ -963,7 +963,7 @@ export class DashboardService {
         where: { id: { in: complaintIds } },
         select: { id: true, salesOrder: { select: { customer: { select: { state: true } } } } },
       });
-      for (const r of found) result.set(`Complaint:${r.id}`, r.salesOrder.customer.state);
+      for (const r of found) result.set(`Complaint:${r.id}`, r.salesOrder?.customer.state ?? null);
     }
 
     return result;

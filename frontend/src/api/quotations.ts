@@ -1,12 +1,14 @@
 import api from "@/lib/api";
 import type {
   EmailHistoryEntry,
+  HangingStructureType,
   PaginatedResponse,
   Quotation,
   QuotationApprovalRequest,
   QuotationCommercialTerms,
   QuotationHistoryEntry,
   QuotationStatus,
+  TransportScope,
 } from "@/types";
 
 export interface QuotationListParams {
@@ -26,6 +28,14 @@ export interface QuotationItemPayload {
   description?: string;
   quantity: number;
   unitPrice?: number;
+  // Additive: per-fan color/hanging-structure pricing — see backend
+  // QuotationItem schema comment. Charges are a flat extra amount for this
+  // line, not multiplied by quantity.
+  color?: string;
+  colorCharge?: number;
+  hangingStructureType?: HangingStructureType;
+  pipeLength?: string;
+  hangingStructureCharge?: number;
 }
 
 export interface QuotationPayload {
@@ -46,6 +56,12 @@ export interface QuotationPayload {
   // default — varies by site/distance).
   installationCharge?: number;
   transportationCharge?: number;
+  // Additive: who arranges transport (CUSTOMER_SCOPE forces transportationCharge
+  // to 0 server-side), and whether entered item prices already include
+  // installation/transportation/GST (staff-confirmed — see
+  // ConfirmPriceIncludesChargesDialog).
+  transportScope?: TransportScope;
+  pricesIncludeChargesAndGst?: boolean;
   validUntil?: string;
   notes?: string;
   terms?: string;

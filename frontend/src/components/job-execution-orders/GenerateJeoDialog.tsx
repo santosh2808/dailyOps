@@ -16,7 +16,33 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
+import { getQuotation } from "@/api/quotations";
 import type { HangingStructureType, JeoPriority, SalesOrder } from "@/types";
+
+// Additive: pre-fill Scope of Work (pipe length / hanging structure / color)
+// from the source quotation's own per-item choices, so staff generating a
+// JEO from a quotation that already specified these don't have to re-enter
+// them — still fully editable here, per the same "collected once at JEO
+// generation" convention this dialog already follows. Returns a value only
+// when every item on the quotation agrees on it (or when there's exactly
+// one item); a quotation with genuinely mixed fans on one JEO is left blank
+// for staff to decide rather than guessing.
+function suggestScopeOfWork(quotation: Awaited<ReturnType<typeof getQuotation>>): {
+  pipeLength: string;
+  hangingStructureType: HangingStructureType | "";
+  color: string;
+} {
+  const items = quotation.items ?? [];
+  const distinct = <T,>(values: (T | null | undefined)[]): T | undefined => {
+    const nonEmpty = [...new Set(values.filter((v): v is T => v !== null && v !== undefined && v !== ""))];
+    return nonEmpty.length === 1 ? nonEmpty[0] : undefined;
+  };
+  return {
+    pipeLength: distinct(items.map((i) => i.pipeLength?.trim())) ?? "",
+    hangingStructureType: distinct(items.map((i) => i.hangingStructureType)) ?? "",
+    color: distinct(items.map((i) => i.color?.trim())) ?? "Aluminium",
+  };
+}
 
 interface GenerateJeoDialogProps {
   open: boolean;
@@ -58,12 +84,33 @@ export default function GenerateJeoDialog({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
 
   useEffect(() => {
-    if (open && salesOrder) {
-      setForm(emptyForm);
-      setError("");
-    }
+    if (!open || !salesOrder) return;
+    setForm(emptyForm);
+    setError("");
+    // Pre-fill Scope of Work from the source quotation — best-effort only;
+    // if this fails (or the quotation has no items to suggest from), the
+    // dialog just falls back to emptyForm's defaults, same as before this
+    // feature existed.
+    let cancelled = false;
+    setLoadingSuggestion(true);
+    getQuotation(salesOrder.quotationId)
+      .then((quotation) => {
+        if (cancelled) return;
+        const suggestion = suggestScopeOfWork(quotation);
+        setForm((f) => ({ ...f, ...suggestion }));
+      })
+      .catch(() => {
+        // Ignore — staff can still fill Scope of Work in by hand.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSuggestion(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, salesOrder]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -128,6 +175,13 @@ export default function GenerateJeoDialog({
               onChange={(e) => update("assignedTo", e.target.value)}
               placeholder="e.g. Rahul (Production)"
             />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <p className="text-xs text-slate-500">
+              {loadingSuggestion
+                ? "Checking the quotation for a color / hanging structure already specified..."
+                : "Pipe length, hanging structure, and colour below are pre-filled from the quotation when it specified them — still editable."}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="pipeLength">Pipe Length</Label>

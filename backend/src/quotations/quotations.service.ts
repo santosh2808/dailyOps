@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, HangingStructureType, TransportScope } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
@@ -96,6 +96,8 @@ export interface PublicQuotationView {
   gstAmount: number;
   installationCharge: number;
   transportationCharge: number;
+  transportScope: TransportScope;
+  pricesIncludeChargesAndGst: boolean;
   grandTotal: number;
   paymentTerms: string | null;
   deliveryTerms: string | null;
@@ -139,12 +141,19 @@ interface QuotationSentSnapshot {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    color?: string | null;
+    colorCharge?: number;
+    hangingStructureType?: HangingStructureType | null;
+    pipeLength?: string | null;
+    hangingStructureCharge?: number;
   }[];
   subtotal: number;
   gstPercent: number;
   gstAmount: number;
   installationCharge: number;
   transportationCharge: number;
+  transportScope: TransportScope;
+  pricesIncludeChargesAndGst: boolean;
   grandTotal: number;
   notes: string | null;
   terms: string | null;
@@ -212,6 +221,11 @@ interface ComputedItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  color?: string;
+  colorCharge: number;
+  hangingStructureType?: HangingStructureType;
+  pipeLength?: string;
+  hangingStructureCharge: number;
 }
 
 interface ComputedTotals {
@@ -220,6 +234,8 @@ interface ComputedTotals {
   gstPercent: number;
   installationCharge: number;
   transportationCharge: number;
+  transportScope: TransportScope;
+  pricesIncludeChargesAndGst: boolean;
   gstAmount: number;
   grandTotal: number;
 }
@@ -351,6 +367,8 @@ export class QuotationsService {
       dto.gstPercent,
       dto.installationCharge,
       dto.transportationCharge,
+      dto.transportScope,
+      dto.pricesIncludeChargesAndGst,
     );
 
     for (let attempt = 1; attempt <= MAX_QUOTATION_NUMBER_ATTEMPTS; attempt++) {
@@ -366,6 +384,8 @@ export class QuotationsService {
             gstPercent: totals.gstPercent,
             installationCharge: totals.installationCharge,
             transportationCharge: totals.transportationCharge,
+            transportScope: totals.transportScope,
+            pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
             gstAmount: totals.gstAmount,
             grandTotal: totals.grandTotal,
             validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
@@ -418,7 +438,9 @@ export class QuotationsService {
       dto.items !== undefined ||
       dto.gstPercent !== undefined ||
       dto.installationCharge !== undefined ||
-      dto.transportationCharge !== undefined;
+      dto.transportationCharge !== undefined ||
+      dto.transportScope !== undefined ||
+      dto.pricesIncludeChargesAndGst !== undefined;
     // installationCharge: only carry forward the existing stored amount as
     // an explicit override when items AREN'T changing (quantity is the same,
     // so the previous amount — whether auto-computed or manually overridden
@@ -438,6 +460,8 @@ export class QuotationsService {
           dto.gstPercent ?? existing.gstPercent,
           installationOverride,
           dto.transportationCharge ?? existing.transportationCharge,
+          dto.transportScope ?? existing.transportScope,
+          dto.pricesIncludeChargesAndGst ?? existing.pricesIncludeChargesAndGst,
         )
       : null;
 
@@ -468,6 +492,8 @@ export class QuotationsService {
                 gstPercent: totals.gstPercent,
                 installationCharge: totals.installationCharge,
                 transportationCharge: totals.transportationCharge,
+                transportScope: totals.transportScope,
+                pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
                 gstAmount: totals.gstAmount,
                 grandTotal: totals.grandTotal,
               }
@@ -1067,12 +1093,19 @@ export class QuotationsService {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         lineTotal: item.lineTotal,
+        color: item.color,
+        colorCharge: item.colorCharge,
+        hangingStructureType: item.hangingStructureType,
+        pipeLength: item.pipeLength,
+        hangingStructureCharge: item.hangingStructureCharge,
       })),
       subtotal: quotation.subtotal,
       gstPercent: quotation.gstPercent,
       gstAmount: quotation.gstAmount,
       installationCharge: quotation.installationCharge,
       transportationCharge: quotation.transportationCharge,
+      transportScope: quotation.transportScope,
+      pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst,
       grandTotal: quotation.grandTotal,
       notes: quotation.notes,
       terms: quotation.terms,
@@ -1093,6 +1126,8 @@ export class QuotationsService {
       subtotal: content.subtotal,
       installationCharge: content.installationCharge,
       transportationCharge: content.transportationCharge,
+      transportScope: content.transportScope,
+      pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
       grandTotal: content.grandTotal,
       notes: content.notes,
       commercialTerms: content.commercialTerms,
@@ -1103,6 +1138,11 @@ export class QuotationsService {
         unitPrice: item.unitPrice,
         lineTotal: item.lineTotal,
         description: item.description,
+        color: item.color,
+        colorCharge: item.colorCharge,
+        hangingStructureType: item.hangingStructureType,
+        pipeLength: item.pipeLength,
+        hangingStructureCharge: item.hangingStructureCharge,
         product: {
           name: item.productName,
           description: item.productDescription,
@@ -1135,6 +1175,8 @@ export class QuotationsService {
       gstAmount: content.gstAmount,
       installationCharge: content.installationCharge,
       transportationCharge: content.transportationCharge,
+      transportScope: content.transportScope,
+      pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
       grandTotal: content.grandTotal,
       paymentTerms: (content.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
       deliveryTerms: (content.commercialTerms as Prisma.JsonObject | null)?.delivery as string | null ?? null,
@@ -1422,13 +1464,28 @@ export class QuotationsService {
   }
 
   private toItemInput(
-    items: { productId: string; description?: string | null; quantity: number; unitPrice: number }[],
+    items: {
+      productId: string;
+      description?: string | null;
+      quantity: number;
+      unitPrice: number;
+      color?: string | null;
+      colorCharge?: number;
+      hangingStructureType?: HangingStructureType | null;
+      pipeLength?: string | null;
+      hangingStructureCharge?: number;
+    }[],
   ): QuotationItemInputDto[] {
     return items.map((item) => ({
       productId: item.productId,
       description: item.description ?? undefined,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
+      color: item.color ?? undefined,
+      colorCharge: item.colorCharge ?? undefined,
+      hangingStructureType: item.hangingStructureType ?? undefined,
+      pipeLength: item.pipeLength ?? undefined,
+      hangingStructureCharge: item.hangingStructureCharge ?? undefined,
     }));
   }
 
@@ -1441,6 +1498,12 @@ export class QuotationsService {
     // when not supplied, since it varies by site/distance.
     installationCharge?: number,
     transportationCharge?: number,
+    // Who arranges transport — CUSTOMER_SCOPE always zeroes out the
+    // transportation charge below, regardless of what was passed in.
+    transportScope: TransportScope = TransportScope.COMPANY_SCOPE,
+    // True once staff have confirmed a raised item price already bakes in
+    // installation/transportation/GST — see the inclusive-GST branch below.
+    pricesIncludeChargesAndGst = false,
   ): Promise<ComputedTotals> {
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
@@ -1451,12 +1514,23 @@ export class QuotationsService {
     const computedItems: ComputedItem[] = items.map((item) => {
       const unitPrice = item.unitPrice ?? productMap.get(item.productId)?.price ?? 0;
       const quantity = item.quantity;
+      // Additive: color/hanging-structure charges are a flat extra amount
+      // for this line (not multiplied by quantity) — folded straight into
+      // lineTotal, same convention as installationCharge/transportationCharge
+      // being flat quotation-wide amounts.
+      const colorCharge = item.colorCharge ?? 0;
+      const hangingStructureCharge = item.hangingStructureCharge ?? 0;
       return {
         productId: item.productId,
         description: item.description,
         quantity,
         unitPrice,
-        lineTotal: Math.round(quantity * unitPrice * 100) / 100,
+        lineTotal: Math.round((quantity * unitPrice + colorCharge + hangingStructureCharge) * 100) / 100,
+        color: item.color,
+        colorCharge,
+        hangingStructureType: item.hangingStructureType,
+        pipeLength: item.pipeLength,
+        hangingStructureCharge,
       };
     });
 
@@ -1473,10 +1547,37 @@ export class QuotationsService {
       const isFan = !!spec && Object.keys(spec).length > 0;
       return isFan ? sum + i.quantity : sum;
     }, 0);
+    const effectiveGstPercent = gstPercent ?? DEFAULT_GST_PERCENT;
+
+    if (pricesIncludeChargesAndGst) {
+      // Staff confirmed the entered item prices already include
+      // installation, transportation, and GST — so nothing more is added on
+      // top: grandTotal is just the subtotal, installation/transportation
+      // are recorded as 0 (not double-charged), and GST is shown as the
+      // amount already embedded in the subtotal (back-calculated), not an
+      // additional line.
+      const grandTotal = subtotal;
+      const gstAmount = Math.round((subtotal - subtotal / (1 + effectiveGstPercent / 100)) * 100) / 100;
+      return {
+        items: computedItems,
+        subtotal,
+        gstPercent: effectiveGstPercent,
+        installationCharge: 0,
+        transportationCharge: 0,
+        transportScope,
+        pricesIncludeChargesAndGst: true,
+        gstAmount,
+        grandTotal,
+      };
+    }
+
     const effectiveInstallationCharge =
       installationCharge ?? Math.round(INSTALLATION_RATE_PER_FAN * fanQuantity * 100) / 100;
-    const effectiveTransportationCharge = transportationCharge ?? 0;
-    const effectiveGstPercent = gstPercent ?? DEFAULT_GST_PERCENT;
+    // CUSTOMER_SCOPE means the customer arranges their own transport —
+    // DailyOps never bills for it, so the charge is forced to 0 regardless
+    // of what was passed in.
+    const effectiveTransportationCharge =
+      transportScope === TransportScope.CUSTOMER_SCOPE ? 0 : (transportationCharge ?? 0);
     // GST is charged on the full pre-tax total — fans + installation +
     // transportation — matching standard invoicing practice, not just the
     // fan subtotal.
@@ -1492,6 +1593,8 @@ export class QuotationsService {
       gstPercent: effectiveGstPercent,
       installationCharge: effectiveInstallationCharge,
       transportationCharge: effectiveTransportationCharge,
+      transportScope,
+      pricesIncludeChargesAndGst: false,
       gstAmount,
       grandTotal,
     };

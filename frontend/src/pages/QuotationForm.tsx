@@ -14,6 +14,8 @@ import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
 } from "@/components/quotations/QuotationItemsEditor";
+import ConfirmPriceIncludesChargesDialog from "@/components/quotations/ConfirmPriceIncludesChargesDialog";
+import { Select } from "@/components/ui/select";
 import {
   createQuotation,
   getQuotation,
@@ -21,7 +23,7 @@ import {
   type QuotationItemPayload,
   type QuotationPayload,
 } from "@/api/quotations";
-import type { QuotationCommercialTerms } from "@/types";
+import type { QuotationCommercialTerms, TransportScope } from "@/types";
 
 interface FormState {
   customerId: string;
@@ -32,6 +34,13 @@ interface FormState {
   // overrides that default.
   installationCharge: string;
   transportationCharge: string;
+  // Additive: who arranges transport — CUSTOMER_SCOPE hides/zeroes the
+  // Transportation Charge field below. See Quotation.transportScope.
+  transportScope: TransportScope;
+  // Additive: set via ConfirmPriceIncludesChargesDialog when staff confirm
+  // a raised item price already includes installation/transportation/GST —
+  // see Quotation.pricesIncludeChargesAndGst.
+  pricesIncludeChargesAndGst: boolean;
   validUntil: string;
   notes: string;
   terms: string;
@@ -86,6 +95,8 @@ const emptyForm: FormState = {
   gstPercent: "18",
   installationCharge: "",
   transportationCharge: "",
+  transportScope: "COMPANY_SCOPE",
+  pricesIncludeChargesAndGst: false,
   validUntil: "",
   notes: "",
   terms: "",
@@ -137,6 +148,8 @@ export default function QuotationForm() {
   const [leadOrigin, setLeadOrigin] = useState<{ id: string; companyName: string; contactPerson: string } | null>(
     null,
   );
+  const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [priceDialogProductName, setPriceDialogProductName] = useState("");
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -163,6 +176,8 @@ export default function QuotationForm() {
           // transportationCharge has no auto-compute, so always show the
           // real stored value (0 just means "not filled in yet").
           transportationCharge: quotation.transportationCharge ? String(quotation.transportationCharge) : "",
+          transportScope: quotation.transportScope ?? "COMPANY_SCOPE",
+          pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst ?? false,
           validUntil: toDateInputValue(quotation.validUntil),
           notes: quotation.notes ?? "",
           terms: quotation.terms ?? "",
@@ -188,6 +203,11 @@ export default function QuotationForm() {
             description: item.description ?? undefined,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            color: item.color ?? undefined,
+            colorCharge: item.colorCharge,
+            hangingStructureType: item.hangingStructureType ?? undefined,
+            pipeLength: item.pipeLength ?? undefined,
+            hangingStructureCharge: item.hangingStructureCharge,
           }))
         );
       } catch {
@@ -210,6 +230,26 @@ export default function QuotationForm() {
 
   function updateCommercialTerm(key: keyof QuotationCommercialTerms, value: string) {
     setForm((f) => ({ ...f, commercialTerms: { ...f.commercialTerms, [key]: value } }));
+  }
+
+  // Fired by QuotationItemsEditor when a row's unit price is raised above
+  // the product's own catalog price — skip re-asking if already marked
+  // included, since re-confirming every edit would get tedious.
+  function handleUnitPriceAboveBase(productName: string) {
+    if (form.pricesIncludeChargesAndGst) return;
+    setPriceDialogProductName(productName);
+    setPriceDialogOpen(true);
+  }
+
+  function handlePriceDialogAnswer(includesChargesAndGst: boolean) {
+    setForm((f) => ({
+      ...f,
+      pricesIncludeChargesAndGst: includesChargesAndGst,
+      // "Remove that price cost in quotation" — clear the separate charge
+      // fields once they're confirmed to already be folded into item
+      // prices, so the (now-hidden) inputs don't leave a stale override.
+      ...(includesChargesAndGst ? { installationCharge: "", transportationCharge: "" } : {}),
+    }));
   }
 
   function validate(): boolean {
@@ -260,6 +300,8 @@ export default function QuotationForm() {
       // an untouched field.
       installationCharge: form.installationCharge.trim() ? Number(form.installationCharge) : undefined,
       transportationCharge: form.transportationCharge.trim() ? Number(form.transportationCharge) : undefined,
+      transportScope: form.transportScope,
+      pricesIncludeChargesAndGst: form.pricesIncludeChargesAndGst,
       validUntil: form.validUntil || undefined,
       notes: form.notes.trim() || undefined,
       terms: form.terms.trim() || undefined,
@@ -288,13 +330,29 @@ export default function QuotationForm() {
   const subtotal = computeSubtotal(items);
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const autoInstallationCharge = INSTALLATION_RATE_PER_FAN * totalQuantity;
-  const installationChargeNum = form.installationCharge.trim()
-    ? Number(form.installationCharge) || 0
-    : autoInstallationCharge;
-  const transportationChargeNum = form.transportationCharge.trim() ? Number(form.transportationCharge) || 0 : 0;
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
-  const gstAmount = (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
-  const grandTotal = subtotal + installationChargeNum + transportationChargeNum + gstAmount;
+  // Mirrors QuotationsService.computeTotals(): once staff confirm item
+  // prices already include installation/transportation/GST, those charges
+  // drop to 0 and GST is shown as the amount already embedded in the
+  // subtotal (back-calculated) instead of added on top.
+  const installationChargeNum = form.pricesIncludeChargesAndGst
+    ? 0
+    : form.installationCharge.trim()
+      ? Number(form.installationCharge) || 0
+      : autoInstallationCharge;
+  const transportationChargeNum = form.pricesIncludeChargesAndGst
+    ? 0
+    : form.transportScope === "CUSTOMER_SCOPE"
+      ? 0
+      : form.transportationCharge.trim()
+        ? Number(form.transportationCharge) || 0
+        : 0;
+  const gstAmount = form.pricesIncludeChargesAndGst
+    ? subtotal - subtotal / (1 + gstPercentNum / 100)
+    : (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
+  const grandTotal = form.pricesIncludeChargesAndGst
+    ? subtotal
+    : subtotal + installationChargeNum + transportationChargeNum + gstAmount;
 
   return (
     <div className="flex h-screen bg-app-grid">
@@ -342,8 +400,26 @@ export default function QuotationForm() {
                   <CardTitle className="text-base">Items</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <QuotationItemsEditor value={items} onChange={setItems} />
+                  <QuotationItemsEditor
+                    value={items}
+                    onChange={setItems}
+                    onUnitPriceAboveBase={handleUnitPriceAboveBase}
+                  />
                   {errors.items && <p className="text-xs text-destructive">{errors.items}</p>}
+
+                  {form.pricesIncludeChargesAndGst && (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                      Item prices on this quotation already include installation, transportation,
+                      and GST — those are not added separately below.{" "}
+                      <button
+                        type="button"
+                        className="font-medium underline"
+                        onClick={() => update("pricesIncludeChargesAndGst", false)}
+                      >
+                        Undo — charge them separately instead
+                      </button>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
@@ -374,40 +450,60 @@ export default function QuotationForm() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="installationCharge">Installation Charge (₹)</Label>
-                      <Input
-                        id="installationCharge"
-                        inputMode="decimal"
-                        value={form.installationCharge}
-                        onChange={(e) => update("installationCharge", e.target.value)}
-                        placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${totalQuantity} fan${totalQuantity === 1 ? "" : "s"})`}
-                      />
+                      <Label htmlFor="transportScope">Transport Scope</Label>
+                      <Select
+                        id="transportScope"
+                        value={form.transportScope}
+                        onChange={(e) => update("transportScope", e.target.value as TransportScope)}
+                      >
+                        <option value="COMPANY_SCOPE">Company Scope — we arrange &amp; charge transport</option>
+                        <option value="CUSTOMER_SCOPE">Customer Scope — customer arranges their own transport</option>
+                      </Select>
                       <p className="text-xs text-muted-foreground">
-                        Leave blank to auto-calculate at ₹8,000 per fan. Only fill this in to
-                        override that rate for this quotation.
+                        Customer Scope hides/zeroes the Transportation Charge below — no transport
+                        is billed on this quotation.
                       </p>
-                      {errors.installationCharge && (
-                        <p className="text-xs text-destructive">{errors.installationCharge}</p>
-                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="transportationCharge">Transportation Charge (₹)</Label>
-                      <Input
-                        id="transportationCharge"
-                        inputMode="decimal"
-                        value={form.transportationCharge}
-                        onChange={(e) => update("transportationCharge", e.target.value)}
-                        placeholder="Enter based on delivery location"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        No default — varies by site/distance. Leave blank until known (treated as
-                        ₹0 until filled in).
-                      </p>
-                      {errors.transportationCharge && (
-                        <p className="text-xs text-destructive">{errors.transportationCharge}</p>
-                      )}
-                    </div>
+                    {!form.pricesIncludeChargesAndGst && (
+                      <div className="space-y-2">
+                        <Label htmlFor="installationCharge">Installation Charge (₹)</Label>
+                        <Input
+                          id="installationCharge"
+                          inputMode="decimal"
+                          value={form.installationCharge}
+                          onChange={(e) => update("installationCharge", e.target.value)}
+                          placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${totalQuantity} fan${totalQuantity === 1 ? "" : "s"})`}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Leave blank to auto-calculate at ₹8,000 per fan. Only fill this in to
+                          override that rate for this quotation.
+                        </p>
+                        {errors.installationCharge && (
+                          <p className="text-xs text-destructive">{errors.installationCharge}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {!form.pricesIncludeChargesAndGst && form.transportScope !== "CUSTOMER_SCOPE" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="transportationCharge">Transportation Charge (₹)</Label>
+                        <Input
+                          id="transportationCharge"
+                          inputMode="decimal"
+                          value={form.transportationCharge}
+                          onChange={(e) => update("transportationCharge", e.target.value)}
+                          placeholder="Enter based on delivery location"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          No default — varies by site/distance. Leave blank until known (treated
+                          as ₹0 until filled in).
+                        </p>
+                        {errors.transportationCharge && (
+                          <p className="text-xs text-destructive">{errors.transportationCharge}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-5">
@@ -417,15 +513,23 @@ export default function QuotationForm() {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Installation</p>
-                      <p className="font-medium text-slate-900">{formatCurrency(installationChargeNum)}</p>
+                      <p className="font-medium text-slate-900">
+                        {form.pricesIncludeChargesAndGst ? "Included" : formatCurrency(installationChargeNum)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Transportation</p>
-                      <p className="font-medium text-slate-900">{formatCurrency(transportationChargeNum)}</p>
+                      <p className="font-medium text-slate-900">
+                        {form.pricesIncludeChargesAndGst
+                          ? "Included"
+                          : form.transportScope === "CUSTOMER_SCOPE"
+                            ? "By Customer"
+                            : formatCurrency(transportationChargeNum)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        GST ({gstPercentNum || 0}%)
+                        GST ({gstPercentNum || 0}%){form.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">{formatCurrency(gstAmount)}</p>
                     </div>
@@ -509,6 +613,12 @@ export default function QuotationForm() {
           )}
         </main>
       </div>
+      <ConfirmPriceIncludesChargesDialog
+        open={priceDialogOpen}
+        onOpenChange={setPriceDialogOpen}
+        productName={priceDialogProductName}
+        onAnswer={handlePriceDialogAnswer}
+      />
     </div>
   );
 }

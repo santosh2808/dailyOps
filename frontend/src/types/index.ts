@@ -467,6 +467,14 @@ export interface LeadStatusHistoryEntry {
 export const QUOTATION_STATUSES = ["DRAFT", "READY", "SENT", "VIEWED", "ACCEPTED", "REJECTED", "EXPIRED"] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 
+// Scope of Work — how the fan is hung at the customer's site (mirrors the
+// backend's HangingStructureType enum). Fixed to these three values, the
+// only ones this business actually uses. Defined here (ahead of its first
+// use on QuotationItem below) since it's also used by JobExecutionOrder
+// further down this file.
+export const HANGING_STRUCTURE_TYPES = ["HIGH_BEAM", "RCC_SLAB_BEAM", "PIPE_TRUSS"] as const;
+export type HangingStructureType = (typeof HANGING_STRUCTURE_TYPES)[number];
+
 export interface QuotationItem {
   id: string;
   quotationId: string;
@@ -475,6 +483,16 @@ export interface QuotationItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  // Additive: per-fan color/hanging-structure pricing collected at
+  // quotation time — see backend QuotationItem schema comment. Charges are
+  // a flat extra amount for this line (not multiplied by quantity), folded
+  // straight into lineTotal. JEO generation pre-fills its own Scope of Work
+  // fields by reading these across a quotation's items.
+  color?: string | null;
+  colorCharge?: number;
+  hangingStructureType?: HangingStructureType | null;
+  pipeLength?: string | null;
+  hangingStructureCharge?: number;
   createdAt: string;
   product?: Product;
 }
@@ -500,6 +518,11 @@ export interface QuotationCommercialTerms {
   offerValidity?: string;
 }
 
+// Additive: who arranges/pays for transport on a Quotation. Defaults to
+// COMPANY_SCOPE (today's only behavior).
+export const TRANSPORT_SCOPES = ["CUSTOMER_SCOPE", "COMPANY_SCOPE"] as const;
+export type TransportScope = (typeof TRANSPORT_SCOPES)[number];
+
 export interface Quotation {
   id: string;
   quotationNumber: string;
@@ -520,6 +543,12 @@ export interface Quotation {
   // until filled in per quotation. See QuotationsService.computeTotals().
   installationCharge: number;
   transportationCharge: number;
+  // Additive: who arranges transport, and whether item prices already
+  // include installation/transportation/GST (staff-confirmed via
+  // ConfirmPriceIncludesChargesDialog when a unit price is raised above the
+  // product's base price). See QuotationsService.computeTotals().
+  transportScope: TransportScope;
+  pricesIncludeChargesAndGst: boolean;
   gstAmount: number;
   grandTotal: number;
   validUntil?: string | null;
@@ -817,11 +846,9 @@ export type JeoStatus = (typeof JEO_STATUSES)[number];
 export const JEO_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type JeoPriority = (typeof JEO_PRIORITIES)[number];
 
-// Scope of Work — how the fan is hung at the customer's site (mirrors the
-// backend's HangingStructureType enum). Fixed to these three values, the
-// only ones this business actually uses.
-export const HANGING_STRUCTURE_TYPES = ["HIGH_BEAM", "RCC_SLAB_BEAM", "PIPE_TRUSS"] as const;
-export type HangingStructureType = (typeof HANGING_STRUCTURE_TYPES)[number];
+// HANGING_STRUCTURE_TYPES/HangingStructureType now declared up near
+// QuotationItem (its first use) — see there. Still used below by
+// JobExecutionOrder.
 
 export interface ProductionChecklist {
   id: string;

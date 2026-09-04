@@ -3,7 +3,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import PDFDocument = require('pdfkit');
+import type { HangingStructureType, TransportScope } from '@prisma/client';
 import type { ProductTechnicalSpec } from '../products/dto/create-product.dto';
+
+// Display labels for HangingStructureType — mirrors
+// frontend/src/components/job-execution-orders/jeoOptions.ts's
+// HANGING_STRUCTURE_OPTIONS and jeo-pdf.service.ts's own copy (kept in sync
+// by hand, same "no cross-file coupling" convention already used throughout
+// this file).
+const HANGING_STRUCTURE_LABELS: Record<HangingStructureType, string> = {
+  HIGH_BEAM: 'High Beam',
+  RCC_SLAB_BEAM: 'RCC Slab Beam',
+  PIPE_TRUSS: 'Pipe Truss',
+};
 
 // Branded "Techno-Commercial Offer" Quotation PDF — an exact reproduction
 // of the customer-supplied reference template ("Pitambari - 14 feet as on
@@ -35,6 +47,14 @@ export interface QuotationPdfItem {
   unitPrice: number;
   lineTotal: number;
   description?: string | null;
+  // Additive: per-fan color/hanging-structure pricing collected at
+  // quotation time — see QuotationItem's schema comment. Rendered as extra
+  // Annexure-I rows on this item when set.
+  color?: string | null;
+  colorCharge?: number;
+  hangingStructureType?: HangingStructureType | null;
+  pipeLength?: string | null;
+  hangingStructureCharge?: number;
   product: {
     name: string;
     description?: string | null;
@@ -81,6 +101,16 @@ export interface QuotationPdfInput {
   // numbers shown in the always-rendered Quotation Summary block.
   installationCharge: number;
   transportationCharge: number;
+  // Additive: who arranges transport (see Quotation.transportScope) and
+  // whether item prices already include installation/transportation/GST
+  // (see Quotation.pricesIncludeChargesAndGst) — both change how the
+  // Quotation Summary block and Annexure rows below word/hide the
+  // installation, transportation, and GST lines. Optional so any existing
+  // caller passing a plain object still type-checks; defaults applied at
+  // the render call sites (COMPANY_SCOPE / false), matching the schema's
+  // own defaults.
+  transportScope?: TransportScope;
+  pricesIncludeChargesAndGst?: boolean;
   grandTotal: number;
   notes?: string | null;
   commercialTerms?: unknown;
@@ -266,16 +296,31 @@ export class QuotationPdfService {
       doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Quotation Summary', contentLeft, doc.y, { width: contentWidth });
       doc.moveDown(0.3);
       const isIntra = this.isIntraState(quotation);
+      const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
+      const gstSuffix = includesCharges ? ' — Included' : '';
       const gstSummaryLines: [string, string][] = isIntra
         ? [
-            [`CGST (${quotation.gstPercent / 2}%)`, this.formatCurrency(quotation.gstAmount / 2)],
-            [`SGST (${quotation.gstPercent / 2}%)`, this.formatCurrency(quotation.gstAmount / 2)],
+            [`CGST (${quotation.gstPercent / 2}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount / 2)],
+            [`SGST (${quotation.gstPercent / 2}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount / 2)],
           ]
-        : [[`IGST (${quotation.gstPercent}%)`, this.formatCurrency(quotation.gstAmount)]];
+        : [[`IGST (${quotation.gstPercent}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount)]];
       const summaryLines: [string, string][] = [
         ['Subtotal (Fans)', this.formatCurrency(quotation.subtotal)],
-        ['Installation Charges', this.formatCurrency(quotation.installationCharge)],
-        ['Transportation Charges', this.formatCurrency(quotation.transportationCharge)],
+        // When item prices already include installation/transportation/GST
+        // (staff-confirmed — see Quotation.pricesIncludeChargesAndGst),
+        // these are folded into the subtotal above rather than shown as
+        // separate additive lines.
+        ...(includesCharges
+          ? ([] as [string, string][])
+          : ([
+              ['Installation Charges', this.formatCurrency(quotation.installationCharge)],
+              [
+                'Transportation Charges',
+                quotation.transportScope === 'CUSTOMER_SCOPE'
+                  ? 'By Customer'
+                  : this.formatCurrency(quotation.transportationCharge),
+              ],
+            ] as [string, string][])),
         ...gstSummaryLines,
         ['Grand Total', this.formatCurrency(quotation.grandTotal)],
       ];
@@ -599,7 +644,13 @@ export class QuotationPdfService {
         label: 'Taxes',
         value: `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
       },
-      { label: 'Transportation', value: terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation },
+      {
+        label: 'Transportation',
+        value:
+          quotation.transportScope === 'CUSTOMER_SCOPE'
+            ? 'By Customer'
+            : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+      },
       { label: 'Packing & Forwarding', value: terms.packingForwarding || DEFAULT_COMMERCIAL_TERMS.packingForwarding },
       { label: 'Transport Insurance', value: terms.transportInsurance || DEFAULT_COMMERCIAL_TERMS.transportInsurance },
     ];
@@ -633,10 +684,51 @@ export class QuotationPdfService {
     return !!spec && Object.keys(spec).length > 0;
   }
 
+  // Additive: extra Annexure-I rows for the per-fan color/hanging-structure
+  // pricing collected at quotation time (QuotationItem.color/colorCharge/
+  // hangingStructureType/pipeLength/hangingStructureCharge) — only rendered
+  // when actually set on this item, so a quotation item with none of this
+  // filled in shows exactly the same rows as before this feature existed.
+  private buildColorAndStructureRows(item: QuotationPdfItem): SpecRow[] {
+    const rows: SpecRow[] = [];
+    const color = item.color?.trim();
+    const colorCharge = item.colorCharge ?? 0;
+    if (color || colorCharge > 0) {
+      rows.push({
+        label: 'Color',
+        value: `${color || 'Custom'}${colorCharge > 0 ? ` (+${this.formatCurrency(colorCharge)})` : ''}`,
+      });
+    }
+    const hangingStructureCharge = item.hangingStructureCharge ?? 0;
+    if (item.hangingStructureType || hangingStructureCharge > 0) {
+      const structureLabel = item.hangingStructureType ? HANGING_STRUCTURE_LABELS[item.hangingStructureType] : 'Custom';
+      const pipeNote = item.hangingStructureType === 'PIPE_TRUSS' && item.pipeLength?.trim() ? `, Pipe Length: ${item.pipeLength.trim()}` : '';
+      rows.push({
+        label: 'Hanging Structure',
+        value: `${structureLabel}${pipeNote}${hangingStructureCharge > 0 ? ` (+${this.formatCurrency(hangingStructureCharge)})` : ''}`,
+      });
+    }
+    return rows;
+  }
+
   private buildSpecRows(item: QuotationPdfItem, quotation: QuotationPdfInput): SpecRow[] {
     const spec = this.getTechnicalSpec(item) ?? {};
     const dash = (v?: string) => (v && v.trim() ? v.trim() : '—');
     const terms = this.resolveCommercialTerms(quotation);
+    const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
+    const transportValue = includesCharges
+      ? 'Included in item price'
+      : quotation.transportScope === 'CUSTOMER_SCOPE'
+        ? 'By Customer'
+        : quotation.transportationCharge > 0
+          ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+          : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation;
+    const installationValue = includesCharges
+      ? 'Included in item price'
+      : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge;
+    const gstValue = includesCharges
+      ? `${quotation.gstPercent}% — Included in item price`
+      : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
 
     if (!this.hasPopulatedSpec(item)) {
       // Simple line item (spare part sold on its own) — no fan spec sheet
@@ -647,15 +739,10 @@ export class QuotationPdfService {
         { label: 'Description', value: dash(item.description ?? item.product.description ?? undefined) },
         ...(applicableTo ? [{ label: 'Applicable To', value: applicableTo }] : []),
         { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
-        { label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge },
-        {
-          label: 'Transportation',
-          value:
-            quotation.transportationCharge > 0
-              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all items)`
-              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
-        },
-        { label: this.gstLabel(quotation), value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
+        ...this.buildColorAndStructureRows(item),
+        { label: 'Installation', value: installationValue },
+        { label: 'Transportation', value: transportValue },
+        { label: this.gstLabel(quotation), value: gstValue },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
       ];
     }
@@ -694,19 +781,15 @@ export class QuotationPdfService {
       { label: 'Warranty – Other', value: dash(spec.warrantyOther) },
       { label: 'Warranty Conditions', value: WARRANTY_CONDITIONS },
       { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
-      { label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge },
-      {
-        label: 'Transportation',
-        // Once a real transportation amount has actually been entered for
-        // this quotation, show that number instead of the generic "Extra at
-        // actual" wording — the exact figure is more useful to the customer
-        // than the placeholder text once it's known.
-        value:
-          quotation.transportationCharge > 0
-            ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
-            : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
-      },
-      { label: `GST ${quotation.gstPercent}%`, value: terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms },
+      ...this.buildColorAndStructureRows(item),
+      { label: 'Installation', value: installationValue },
+      // Once a real transportation amount has actually been entered for
+      // this quotation, show that number instead of the generic "Extra at
+      // actual" wording — the exact figure is more useful to the customer
+      // than the placeholder text once it's known. Overridden above when
+      // Customer Scope or "price already includes charges" applies.
+      { label: 'Transportation', value: transportValue },
+      { label: `GST ${quotation.gstPercent}%`, value: gstValue },
       { label: 'Quantity', value: `${item.quantity} Nos.` },
     ];
   }

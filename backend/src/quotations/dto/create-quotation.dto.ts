@@ -1,9 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { QuotationStatus } from '@prisma/client';
+import { QuotationStatus, TransportScope } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -72,6 +73,25 @@ export class CreateQuotationDto {
   @IsNumber()
   @Min(0, { message: 'Transportation charge must be a positive number' })
   transportationCharge?: number;
+
+  // Additive: who arranges/pays for transport. Defaults to COMPANY_SCOPE
+  // (today's only behavior). When CUSTOMER_SCOPE, transportationCharge is
+  // forced to 0 in QuotationsService.computeTotals() regardless of what's
+  // sent here — the customer arranges their own transport.
+  @ApiPropertyOptional({ enum: TransportScope, default: TransportScope.COMPANY_SCOPE })
+  @IsOptional()
+  @IsEnum(TransportScope)
+  transportScope?: TransportScope;
+
+  // Additive: set when staff confirm that a quotation item's price already
+  // has installation/transportation/GST baked in (prompted by the frontend
+  // when a unit price is raised above the product's base price). When true,
+  // QuotationsService.computeTotals() stops adding installation/
+  // transportation/GST on top of the subtotal.
+  @ApiPropertyOptional({ default: false, description: 'True when item prices already include installation/transportation/GST' })
+  @IsOptional()
+  @IsBoolean()
+  pricesIncludeChargesAndGst?: boolean;
 
   @ApiPropertyOptional({ example: '2026-09-30' })
   @IsOptional()

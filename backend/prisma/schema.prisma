@@ -536,6 +536,23 @@ model Quotation {
   // QuotationsService.computeTotals()).
   installationCharge    Float           @default(0)
   transportationCharge  Float           @default(0)
+  // Additive: Transport Scope — who arranges/pays for transport. Defaults to
+  // COMPANY_SCOPE (today's only behavior, preserved for every existing
+  // quotation). When set to CUSTOMER_SCOPE, QuotationsService.computeTotals()
+  // forces transportationCharge to 0 regardless of what was entered, since
+  // the customer is arranging their own transport and DailyOps doesn't bill
+  // for it.
+  transportScope        TransportScope  @default(COMPANY_SCOPE)
+  // Additive: set when staff confirm (via the frontend's "does this price
+  // already include transportation/installation/GST?" prompt, shown when a
+  // quotation item's unitPrice is raised above the product's base price)
+  // that the entered item prices already have everything baked in. When
+  // true, computeTotals() stops adding installationCharge/transportationCharge
+  // and GST on top of the subtotal — grandTotal is just the subtotal, and
+  // gstAmount is back-calculated as the 18% already embedded in it (see
+  // computeTotals()'s inclusive-GST branch). Defaults to false, i.e. today's
+  // additive behavior, for every existing quotation.
+  pricesIncludeChargesAndGst Boolean    @default(false)
   grandTotal            Float           @default(0)
   // Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms
   // (price basis, GST Included/Extra wording, transportation, payment,
@@ -628,6 +645,22 @@ model QuotationItem {
   quantity    Int       @default(1)
   unitPrice   Float     @default(0)
   lineTotal   Float     @default(0)
+  // Additive: per-fan color/hanging-structure pricing, entered at quotation
+  // time instead of only at JEO generation. `color`/`hangingStructureType`/
+  // `pipeLength` mirror JobExecutionOrder's own Scope of Work fields (same
+  // HangingStructureType enum, same "pipeLength only makes sense for
+  // PIPE_TRUSS" convention) but are per-item here since different fans on
+  // the same quotation can need different colors/structures — unlike a JEO,
+  // which covers one whole job. *Charge fields are a flat extra amount for
+  // this line (not multiplied by quantity), added straight into lineTotal,
+  // the same "flat entered amount" convention as Quotation.installationCharge/
+  // transportationCharge. All nullable/zero-default: a quotation item with
+  // none of this set behaves exactly as before.
+  color                  String?
+  colorCharge             Float                 @default(0)
+  hangingStructureType    HangingStructureType?
+  pipeLength              String?
+  hangingStructureCharge  Float                 @default(0)
   createdAt   DateTime  @default(now())
 
   @@index([quotationId])
@@ -1389,6 +1422,13 @@ enum HangingStructureType {
   HIGH_BEAM
   RCC_SLAB_BEAM
   PIPE_TRUSS
+}
+
+// Who arranges and pays for transport on a Quotation — see
+// Quotation.transportScope.
+enum TransportScope {
+  CUSTOMER_SCOPE
+  COMPANY_SCOPE
 }
 
 // A Job Execution Order (JEO) is always machine-generated from an existing
