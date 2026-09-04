@@ -24,3 +24,32 @@ export function statusLabel(status: QuotationStatus) {
 export function statusBadgeVariant(status: QuotationStatus): BadgeProps["variant"] {
   return STATUS_OPTIONS.find((s) => s.value === status)?.badge ?? "default";
 }
+
+// Standard paint color choices for a Quotation item's Color field —
+// mirrors jeoOptions.ts's HANGING_STRUCTURE_OPTIONS pattern. Deliberately a
+// fixed list plus "Custom" rather than free text by default: the PDF used
+// to silently fall back to whatever color the seeded product catalog
+// defaulted to (e.g. "BLACK COLOUR") whenever nothing was entered, which
+// nobody had actually confirmed with the customer. Forcing a real choice
+// here — Black included, but never assumed — is what fixes that.
+export const PAINT_COLOR_OPTIONS = [
+  { value: "Black", label: "Black" },
+  { value: "White", label: "White" },
+  { value: "Grey", label: "Grey" },
+  { value: "Silver", label: "Silver" },
+  { value: "CUSTOM", label: "Custom (specify below)" },
+] as const;
+
+const FIXED_COLOR_VALUES = new Set<string>(
+  PAINT_COLOR_OPTIONS.filter((o) => o.value !== "CUSTOM").map((o) => o.value),
+);
+
+// Given whatever free-text value is actually stored on the item (color is
+// still just a string on the wire — see QuotationItem.color), figures out
+// which dropdown option should show as selected: a fixed color matches
+// directly, any other non-empty value means "Custom" was used, and nothing
+// set means no selection yet.
+export function colorSelectValue(color?: string | null): string {
+  if (!color || !color.trim()) return "";
+  return FIXED_COLOR_VALUES.has(color) ? color : "CUSTOM";
+}

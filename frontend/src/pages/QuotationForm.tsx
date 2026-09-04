@@ -13,6 +13,7 @@ import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
+  isFanProduct,
 } from "@/components/quotations/QuotationItemsEditor";
 import ConfirmPriceIncludesChargesDialog from "@/components/quotations/ConfirmPriceIncludesChargesDialog";
 import { Select } from "@/components/ui/select";
@@ -23,7 +24,8 @@ import {
   type QuotationItemPayload,
   type QuotationPayload,
 } from "@/api/quotations";
-import type { QuotationCommercialTerms, TransportScope } from "@/types";
+import { listProducts } from "@/api/products";
+import type { Product, QuotationCommercialTerms, TransportScope } from "@/types";
 
 interface FormState {
   customerId: string;
@@ -150,6 +152,31 @@ export default function QuotationForm() {
   );
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
   const [priceDialogProductName, setPriceDialogProductName] = useState("");
+  // Lifted up from QuotationItemsEditor (which used to fetch this itself)
+  // so validate() below can also check each item's product — specifically
+  // whether it's a fan (populated technicalSpec) and therefore requires a
+  // confirmed Color choice, not just QuotationItemsEditor's own rendering.
+  const [catalog, setCatalog] = useState<Product[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
+      try {
+        const res = await listProducts({ page: 1, limit: 100 });
+        if (!cancelled) setCatalog(res.data);
+      } catch {
+        if (!cancelled) {
+          setCatalogError("Could not load the product catalog.");
+          toast.error("Could not load the product catalog.");
+        }
+      }
+    }
+    loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -256,7 +283,17 @@ export default function QuotationForm() {
     const next: Partial<Record<keyof FormState, string>> & { items?: string } = {};
 
     if (!leadOrigin && !form.customerId) next.customerId = "Customer is required";
-    if (items.length === 0) next.items = "Add at least one item";
+    if (items.length === 0) {
+      next.items = "Add at least one item";
+    } else {
+      const catalogById = new Map(catalog.map((p) => [p.id, p]));
+      const missingColor = items.some(
+        (item) => isFanProduct(catalogById.get(item.productId)) && !item.color?.trim(),
+      );
+      if (missingColor) {
+        next.items = "Pick a Color for every fan item before saving — ask the customer which color they want.";
+      }
+    }
     if (form.gstPercent.trim()) {
       const parsed = Number(form.gstPercent);
       if (Number.isNaN(parsed) || parsed < 0) {
@@ -403,6 +440,8 @@ export default function QuotationForm() {
                   <QuotationItemsEditor
                     value={items}
                     onChange={setItems}
+                    catalog={catalog}
+                    catalogError={catalogError}
                     onUnitPriceAboveBase={handleUnitPriceAboveBase}
                   />
                   {errors.items && <p className="text-xs text-destructive">{errors.items}</p>}

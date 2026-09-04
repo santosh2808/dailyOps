@@ -264,7 +264,8 @@ export class QuotationPdfService {
         } else {
           this.drawTableHeaderRow(doc, ['Items', 'Quantity / Fan'], [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
           for (const row of scope) {
-            this.drawTwoColDataRow(doc, row.item, row.quantityPerFan, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+            const value = this.resolveScopeRowValue(row, item);
+            this.drawTwoColDataRow(doc, row.item, value, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
           }
         }
       }
@@ -284,57 +285,11 @@ export class QuotationPdfService {
       doc.y = rowTop + height;
     });
 
-    {
-      // Previously this block only rendered for multi-item quotations
-      // (single-item quotations relied on the Annexure-I per-item price
-      // rows alone). Now that Installation and Transportation are real
-      // amounts on top of the fan subtotal — not just descriptive text —
-      // every quotation needs this breakdown to show the actual Grand
-      // Total, so it always renders.
-      doc.moveDown(0.5);
-      ensureSpace(90);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Quotation Summary', contentLeft, doc.y, { width: contentWidth });
-      doc.moveDown(0.3);
-      const isIntra = this.isIntraState(quotation);
-      const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
-      const gstSuffix = includesCharges ? ' — Included' : '';
-      const gstSummaryLines: [string, string][] = isIntra
-        ? [
-            [`CGST (${quotation.gstPercent / 2}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount / 2)],
-            [`SGST (${quotation.gstPercent / 2}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount / 2)],
-          ]
-        : [[`IGST (${quotation.gstPercent}%)${gstSuffix}`, this.formatCurrency(quotation.gstAmount)]];
-      const summaryLines: [string, string][] = [
-        ['Subtotal (Fans)', this.formatCurrency(quotation.subtotal)],
-        // When item prices already include installation/transportation/GST
-        // (staff-confirmed — see Quotation.pricesIncludeChargesAndGst), keep
-        // both rows but show "Included" instead of a separate additive
-        // amount — same treatment as the GST line below, not omitted.
-        [
-          'Installation Charges',
-          includesCharges ? 'Included' : this.formatCurrency(quotation.installationCharge),
-        ],
-        [
-          'Transportation Charges',
-          includesCharges
-            ? 'Included'
-            : quotation.transportScope === 'CUSTOMER_SCOPE'
-              ? 'By Customer'
-              : this.formatCurrency(quotation.transportationCharge),
-        ],
-        ...gstSummaryLines,
-        ['Grand Total', this.formatCurrency(quotation.grandTotal)],
-      ];
-      for (const [label, value] of summaryLines) {
-        ensureSpace(16);
-        const rowTop = doc.y;
-        doc.font('Helvetica').fontSize(10).fillColor('black');
-        doc.text(label, contentLeft, rowTop, { width: contentWidth - 150 });
-        doc.font('Helvetica-Bold').text(value, contentLeft + contentWidth - 150, rowTop, { width: 150, align: 'right' });
-        doc.y = rowTop + 16;
-      }
-    }
-
+    // The standalone "Quotation Summary" block (Subtotal/Installation/
+    // Transportation/GST/Grand Total) was removed — Grand Total now prints
+    // once per item, right under Quantity, inside each Annexure-I table
+    // (see buildSpecRows()); Installation/Transportation/GST already print
+    // there too, so nothing here duplicated only in this block.
     doc.moveDown(0.6);
     ensureSpace(30);
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('ANNEXURE – II', contentLeft, doc.y, { width: contentWidth, align: 'left' });
@@ -685,6 +640,20 @@ export class QuotationPdfService {
     return !!spec && Object.keys(spec).length > 0;
   }
 
+  // The seeded technicalSpec.scopeOfSupply list has a fixed "Paint" row per
+  // product (e.g. "BLACK COLOUR" for SPYRO-16, "Standard Aluminum metal
+  // coat" for others) — that was only ever a catalog default, not a
+  // customer's actual choice. Once staff pick a real color on the quotation
+  // item (QuotationItem.color — required for fan items, see
+  // QuotationItemsEditor), this scope row must reflect that choice instead
+  // of silently printing the seeded default.
+  private resolveScopeRowValue(row: { item: string; quantityPerFan: string }, item: QuotationPdfItem): string {
+    const isPaintRow = row.item.trim().toLowerCase() === 'paint';
+    const color = item.color?.trim();
+    if (isPaintRow && color) return color;
+    return row.quantityPerFan;
+  }
+
   // Additive: extra Annexure-I rows for the per-fan color/hanging-structure
   // pricing collected at quotation time (QuotationItem.color/colorCharge/
   // hangingStructureType/pipeLength/hangingStructureCharge) — only rendered
@@ -755,6 +724,7 @@ export class QuotationPdfService {
         ...transportationRows,
         { label: this.gstLabel(quotation), value: gstValue },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
+        { label: 'Grand Total', value: this.formatCurrency(quotation.grandTotal) },
       ];
     }
 
@@ -802,6 +772,11 @@ export class QuotationPdfService {
       ...transportationRows,
       { label: `GST ${quotation.gstPercent}%`, value: gstValue },
       { label: 'Quantity', value: `${item.quantity} Nos.` },
+      // Removed the standalone Quotation Summary block that used to be the
+      // only place Grand Total printed — now it prints here instead, right
+      // under Quantity, on every item's Annexure-I table (same repeat-per-
+      // item convention Installation/Transportation/GST already use above).
+      { label: 'Grand Total', value: this.formatCurrency(quotation.grandTotal) },
     ];
   }
 

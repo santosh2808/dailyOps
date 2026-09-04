@@ -1511,6 +1511,24 @@ export class QuotationsService {
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
+    // Backend safety net for the frontend's own required-Color validation
+    // (QuotationForm.validate()) — a fan item (product with a populated
+    // Annexure-I technical spec) must have a confirmed paint Color before
+    // the quotation can be saved. Previously an empty Color silently fell
+    // back to whatever the seeded product catalog happened to default to
+    // (e.g. "BLACK COLOUR") on the printed PDF — nobody had actually
+    // confirmed that with the customer, so it's rejected here rather than
+    // guessed.
+    for (const item of items) {
+      const spec = productMap.get(item.productId)?.technicalSpec as Record<string, unknown> | null;
+      const isFan = !!spec && Object.keys(spec).length > 0;
+      if (isFan && !item.color?.trim()) {
+        throw new BadRequestException(
+          `Pick a Color for "${productMap.get(item.productId)?.name ?? 'this fan'}" before saving — ask the customer which color they want.`,
+        );
+      }
+    }
+
     const computedItems: ComputedItem[] = items.map((item) => {
       const unitPrice = item.unitPrice ?? productMap.get(item.productId)?.price ?? 0;
       const quantity = item.quantity;

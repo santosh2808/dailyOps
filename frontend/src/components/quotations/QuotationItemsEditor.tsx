@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,21 +12,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "@/lib/toast";
-import { listProducts } from "@/api/products";
 import { HANGING_STRUCTURE_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
+import { PAINT_COLOR_OPTIONS, colorSelectValue } from "@/components/quotations/quotationOptions";
 import type { QuotationItemPayload } from "@/api/quotations";
 import type { HangingStructureType, Product } from "@/types";
 
 interface QuotationItemsEditorProps {
   value: QuotationItemPayload[];
   onChange: (value: QuotationItemPayload[]) => void;
+  // Lifted up to QuotationForm.tsx (rather than fetched here) so the form's
+  // own validate() can also check each item's product — specifically
+  // whether it's a fan (has a populated technicalSpec) and therefore
+  // requires a Color choice. See isFanProduct() below.
+  catalog: Product[];
+  catalogError?: string;
   // Additive: fired when staff raise a row's unit price above the product's
   // own catalog price — QuotationForm.tsx uses this to prompt whether the
   // higher price already includes installation/transportation/GST (see
   // ConfirmPriceIncludesChargesDialog). Fires on blur, not on every
   // keystroke, so it doesn't nag mid-edit.
   onUnitPriceAboveBase?: (productName: string) => void;
+}
+
+// Mirrors the backend's QuotationPdfService.hasPopulatedSpec() — a product
+// only counts as "a fan" (and therefore needs a confirmed paint Color) once
+// someone has filled in its technical spec sheet in Add/Edit Product. A
+// spare part (motor, drive, etc.) is deliberately left blank there.
+export function isFanProduct(product?: Product): boolean {
+  return !!product?.technicalSpec && Object.keys(product.technicalSpec).length > 0;
 }
 
 function formatCurrency(value: number) {
@@ -54,29 +67,14 @@ export function computeSubtotal(items: QuotationItemPayload[]) {
 // price (auto-filled from the catalog, editable). Mirrors the structure of
 // LeadProductsSelector so the two multi-line editors stay visually
 // consistent across the app.
-export default function QuotationItemsEditor({ value, onChange, onUnitPriceAboveBase }: QuotationItemsEditorProps) {
-  const [catalog, setCatalog] = useState<Product[]>([]);
+export default function QuotationItemsEditor({
+  value,
+  onChange,
+  catalog,
+  catalogError,
+  onUnitPriceAboveBase,
+}: QuotationItemsEditorProps) {
   const [pendingProductId, setPendingProductId] = useState("");
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadCatalog() {
-      try {
-        const res = await listProducts({ page: 1, limit: 100 });
-        if (!cancelled) setCatalog(res.data);
-      } catch {
-        if (!cancelled) {
-          setLoadError("Could not load the product catalog.");
-          toast.error("Could not load the product catalog.");
-        }
-      }
-    }
-    loadCatalog();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const productMap = useMemo(() => new Map(catalog.map((p) => [p.id, p])), [catalog]);
 
@@ -126,7 +124,7 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
         </Button>
       </div>
 
-      {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+      {catalogError && <p className="text-xs text-destructive">{catalogError}</p>}
 
       {value.length > 0 && (
         <Table>
@@ -195,16 +193,43 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
                   <TableRow>
                     <TableCell colSpan={6} className="bg-slate-50 py-3">
                       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Color / Hanging Structure (optional, priced separately)
+                        Color / Hanging Structure {isFanProduct(product) ? "" : "(optional, priced separately)"}
                       </p>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
                         <div className="space-y-1">
-                          <Label className="text-xs">Color</Label>
-                          <Input
-                            value={row.color ?? ""}
-                            onChange={(e) => updateRow(index, { color: e.target.value })}
-                            placeholder="e.g. Custom RAL 9016"
-                          />
+                          <Label className="text-xs">
+                            Color{isFanProduct(product) ? " *" : ""}
+                          </Label>
+                          <Select
+                            value={colorSelectValue(row.color)}
+                            onChange={(e) =>
+                              updateRow(index, {
+                                // Picking a fixed color stores it directly;
+                                // picking Custom clears the field so the
+                                // free-text box below starts blank instead
+                                // of showing a stale fixed-color value.
+                                color: e.target.value === "CUSTOM" ? "" : e.target.value || undefined,
+                              })
+                            }
+                          >
+                            <option value="">Select a color...</option>
+                            {PAINT_COLOR_OPTIONS.map((c) => (
+                              <option key={c.value} value={c.value}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </Select>
+                          {colorSelectValue(row.color) === "CUSTOM" && (
+                            <Input
+                              value={row.color ?? ""}
+                              onChange={(e) => updateRow(index, { color: e.target.value })}
+                              placeholder="e.g. Custom RAL 9016 White"
+                              className="mt-1"
+                            />
+                          )}
+                          {isFanProduct(product) && !row.color?.trim() && (
+                            <p className="text-xs text-destructive">Required — ask the customer which color they want.</p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Color Charge (₹)</Label>
