@@ -23,8 +23,10 @@ import {
   AlertCircle,
   Hash,
   Globe,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useSidebar } from "@/context/SidebarContext";
 import { cn } from "@/lib/utils";
 // .volt-btn/.volt-btn-bolt are the exact same classes the login page's
 // "LOG ME IN" button uses (see LoginRobot.css) — imported here too so the
@@ -197,6 +199,7 @@ function navLinkClasses(isActive: boolean) {
 
 export default function Sidebar() {
   const { logout, hasPermission } = useAuth();
+  const { isOpen, close } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -230,7 +233,27 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground">
+    <>
+      {/* Backdrop — only meaningful below lg (the sidebar itself is
+          static/always-visible at lg and up, so isOpen never applies
+          there, but lg:hidden is kept as a defensive belt-and-braces
+          in case that ever changes). Clicking it closes the drawer, same
+          as picking a nav link does via SidebarProvider's route-change
+          effect. */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={close}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out",
+          "lg:static lg:z-auto lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
       {/* Full lockup image (gear/SR icon + "DailyOps" wordmark + "By Smart
           Rotamach" caption all baked in) — replaces the old two-row
           icon+text/caption layout, so no separate caption element is
@@ -238,8 +261,16 @@ export default function Sidebar() {
           (h-14) has room to sit fully inside it without being clipped —
           the earlier pb-6 shrank the content box below the image's own
           height and cropped its top edge. */}
-      <div className="flex h-20 items-center px-6">
+      <div className="flex h-20 items-center justify-between px-6">
         <img src="/sr-dailyops-logo-full.svg" alt="SR DailyOps — by Smart Rotamach" className="h-14 w-auto" />
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Close menu"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-srm-green/10 hover:text-sidebar-foreground lg:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
@@ -312,6 +343,7 @@ export default function Sidebar() {
           <span className="volt-btn-label">LOGOUT</span>
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

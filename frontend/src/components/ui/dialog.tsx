@@ -13,7 +13,13 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      // overflow-y-auto + items-start on the outer scroll container (with
+      // items-center restored from sm up) is what lets a dialog taller
+      // than the viewport actually be reached on a short/mobile screen —
+      // items-center alone with no scroll clips anything past the edges
+      // with no way to get to it. py-8 keeps a tall dialog from touching
+      // the very top/bottom edge when it does scroll.
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-8 sm:items-center"
       onClick={() => onOpenChange(false)}
     >
       <div onClick={(e) => e.stopPropagation()} className="w-full">

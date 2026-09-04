@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { SidebarProvider } from "@/context/SidebarContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Toaster from "@/components/ui/toaster";
 import Login from "@/pages/Login";
@@ -47,6 +48,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <SidebarProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* Customer Quotation Acceptance workflow — public, unauthenticated
@@ -408,6 +410,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </SidebarProvider>
       </AuthProvider>
       <Toaster />
     </BrowserRouter>
