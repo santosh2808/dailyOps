@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { HANGING_STRUCTURE_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
 import {
+  FREE_PAINT_COLORS,
   PAINT_COLOR_OPTIONS,
   STANDARD_PAINT_EXTRA_CHARGE,
   colorSelectValue,
@@ -208,24 +209,26 @@ export default function QuotationItemsEditor({
                             value={colorSelectValue(row.color)}
                             onChange={(e) => {
                               const selected = e.target.value;
+                              // Only Aluminium/Orange are free — every other
+                              // fixed color (Black/White/Grey) and Custom all
+                              // carry the same "specific paint" extra charge
+                              // (see the Quotation PDF's own Exclusions
+                              // line), so they're treated identically here.
+                              const isFree = FREE_PAINT_COLORS.has(selected);
                               updateRow(index, {
                                 // Picking a fixed color stores it directly;
                                 // picking Custom clears the field so the
                                 // free-text box below starts blank instead
                                 // of showing a stale fixed-color value.
                                 color: selected === "CUSTOM" ? "" : selected || undefined,
-                                // A non-standard color always carries the
-                                // "specific paint" extra charge (see the
-                                // Quotation PDF's own Exclusions line) — pre-
-                                // fill that amount the moment Custom is
-                                // picked, still editable. Switching back to a
-                                // standard color clears it again.
-                                colorCharge:
-                                  selected === "CUSTOM"
-                                    ? row.colorCharge || STANDARD_PAINT_EXTRA_CHARGE
-                                    : selected
-                                      ? 0
-                                      : row.colorCharge,
+                                // Pre-fill the extra charge the moment a
+                                // non-free color is picked, still editable.
+                                // Switching to Aluminium/Orange clears it.
+                                colorCharge: !selected
+                                  ? row.colorCharge
+                                  : isFree
+                                    ? 0
+                                    : row.colorCharge || STANDARD_PAINT_EXTRA_CHARGE,
                               });
                             }}
                           >
@@ -237,18 +240,19 @@ export default function QuotationItemsEditor({
                             ))}
                           </Select>
                           {colorSelectValue(row.color) === "CUSTOM" && (
-                            <>
-                              <Input
-                                value={row.color ?? ""}
-                                onChange={(e) => updateRow(index, { color: e.target.value })}
-                                placeholder="e.g. Custom RAL 9016 White"
-                                className="mt-1"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Not one of the standard colors — carries an extra charge (see Color Charge).
-                              </p>
-                            </>
+                            <Input
+                              value={row.color ?? ""}
+                              onChange={(e) => updateRow(index, { color: e.target.value })}
+                              placeholder="e.g. Custom RAL 9016 White"
+                              className="mt-1"
+                            />
                           )}
+                          {colorSelectValue(row.color) &&
+                            !FREE_PAINT_COLORS.has(row.color?.trim() ?? "") && (
+                              <p className="text-xs text-muted-foreground">
+                                Only Aluminium and Orange are free — this color carries an extra charge (see Color Charge).
+                              </p>
+                            )}
                           {isFanProduct(product) && !row.color?.trim() && (
                             <p className="text-xs text-destructive">Required — ask the customer which color they want.</p>
                           )}

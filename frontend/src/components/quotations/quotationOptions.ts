@@ -31,26 +31,31 @@ export function statusBadgeVariant(status: QuotationStatus): BadgeProps["variant
 // to silently fall back to whatever color the seeded product catalog
 // defaulted to (e.g. "BLACK COLOUR") whenever nothing was entered, which
 // nobody had actually confirmed with the customer. Forcing a real choice
-// here — Black included, but never assumed — is what fixes that.
+// here is what fixes that.
 //
-// These 5 are the standard, no-extra-cost colors this business actually
-// paints fans in. Anything else (Custom) is a special paint job, which the
-// Quotation PDF's own Exclusions list already calls out — see
-// STANDARD_PAINT_EXTRA_CHARGE below and EXCLUSIONS in quotation-pdf.service.ts
-// ("Any specific paint shall be charged extra @ Rs.10,000.00").
+// Only Aluminium and Orange are the free, standard colors (see
+// FREE_PAINT_COLORS below) — Black/White/Grey are still offered as quick
+// picks since staff ask for them often, but they (and anything typed under
+// Custom) carry the same extra charge as a one-off custom color. Mirrors
+// STANDARD_PAINT_EXTRA_CHARGE below and EXCLUSIONS in
+// quotation-pdf.service.ts ("Any specific paint shall be charged extra @
+// Rs.10,000.00").
 export const PAINT_COLOR_OPTIONS = [
-  { value: "Black", label: "Black" },
-  { value: "White", label: "White" },
-  { value: "Grey", label: "Grey" },
   { value: "Aluminium", label: "Aluminium" },
   { value: "Orange", label: "Orange" },
+  { value: "Black", label: "Black (extra cost)" },
+  { value: "White", label: "White (extra cost)" },
+  { value: "Grey", label: "Grey (extra cost)" },
   { value: "CUSTOM", label: "Custom / Other (extra cost)" },
 ] as const;
 
+// The only two colors that don't carry the extra paint charge.
+export const FREE_PAINT_COLORS = new Set<string>(["Aluminium", "Orange"]);
+
 // Mirrors the "Any specific paint shall be charged extra @ Rs.10,000.00"
 // line in quotation-pdf.service.ts's EXCLUSIONS list — used to suggest a
-// starting Color Charge the moment staff pick Custom, since a non-standard
-// color always carries this extra cost.
+// starting Color Charge the moment staff pick any color other than
+// Aluminium/Orange, since that always carries this extra cost.
 export const STANDARD_PAINT_EXTRA_CHARGE = 10000;
 
 const FIXED_COLOR_VALUES = new Set<string>(
