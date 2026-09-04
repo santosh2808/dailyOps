@@ -33,6 +33,7 @@ import {
   updateQuotationStatus,
 } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
+import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
 import type { EmailHistoryEntry, Quotation, QuotationHistoryEntry, QuotationStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -358,42 +359,84 @@ export default function QuotationDetails() {
                 <CardContent>
                   {quotation.items && quotation.items.length > 0 ? (
                     <div className="space-y-2">
-                      {quotation.items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                        >
-                          <div>
-                            <p className="font-medium text-slate-900">
-                              {item.product?.name ?? "Unknown product"}
-                            </p>
-                            {item.description && (
-                              <p className="text-xs text-muted-foreground">{item.description}</p>
+                      {quotation.items.map((item) => {
+                        const hasColor = !!item.color?.trim() || (item.colorCharge ?? 0) > 0;
+                        const hasStructure = !!item.hangingStructureType || (item.hangingStructureCharge ?? 0) > 0;
+                        return (
+                          <div key={item.id} className="rounded-md border px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {item.product?.name ?? "Unknown product"}
+                                </p>
+                                {item.description && (
+                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                )}
+                              </div>
+                              <div className="text-right text-muted-foreground">
+                                <p>
+                                  Qty: {item.quantity} × {formatCurrency(item.unitPrice)}
+                                </p>
+                                <p className="font-medium text-slate-900">
+                                  {formatCurrency(item.lineTotal)}
+                                </p>
+                              </div>
+                            </div>
+                            {(hasColor || hasStructure) && (
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                                {hasColor && (
+                                  <span>
+                                    Color: <span className="text-slate-700">{item.color?.trim() || "Custom"}</span>
+                                    {(item.colorCharge ?? 0) > 0 && ` (+${formatCurrency(item.colorCharge)})`}
+                                  </span>
+                                )}
+                                {hasStructure && (
+                                  <span>
+                                    Hanging Structure:{" "}
+                                    <span className="text-slate-700">
+                                      {item.hangingStructureType ? hangingStructureLabel(item.hangingStructureType) : "Custom"}
+                                      {item.hangingStructureType === "PIPE_TRUSS" && item.pipeLength?.trim()
+                                        ? `, Pipe Length: ${item.pipeLength.trim()}`
+                                        : ""}
+                                    </span>
+                                    {(item.hangingStructureCharge ?? 0) > 0 &&
+                                      ` (+${formatCurrency(item.hangingStructureCharge)})`}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
-                          <div className="text-right text-muted-foreground">
-                            <p>
-                              Qty: {item.quantity} × {formatCurrency(item.unitPrice)}
-                            </p>
-                            <p className="font-medium text-slate-900">
-                              {formatCurrency(item.lineTotal)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">No items on this quotation.</p>
                   )}
 
-                  <div className="mt-4 grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-3">
+                  <div className="mt-4 grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-5">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Subtotal</p>
                       <p className="font-medium text-slate-900">{formatCurrency(quotation.subtotal)}</p>
                     </div>
                     <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Installation</p>
+                      <p className="font-medium text-slate-900">
+                        {quotation.pricesIncludeChargesAndGst ? "Included" : formatCurrency(quotation.installationCharge)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Transportation</p>
+                      <p className="font-medium text-slate-900">
+                        {quotation.pricesIncludeChargesAndGst
+                          ? "Included"
+                          : quotation.transportScope === "CUSTOMER_SCOPE"
+                            ? "By Customer"
+                            : formatCurrency(quotation.transportationCharge)}
+                      </p>
+                    </div>
+                    <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        GST ({quotation.gstPercent}%)
+                        GST ({quotation.gstPercent}%){quotation.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">{formatCurrency(quotation.gstAmount)}</p>
                     </div>
@@ -404,6 +447,11 @@ export default function QuotationDetails() {
                       </p>
                     </div>
                   </div>
+                  {quotation.pricesIncludeChargesAndGst && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Item prices on this quotation already include installation, transportation, and GST.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

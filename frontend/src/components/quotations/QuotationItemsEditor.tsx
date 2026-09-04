@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -58,7 +58,6 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [pendingProductId, setPendingProductId] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +132,6 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-8" />
               <TableHead>Product</TableHead>
               <TableHead>Description</TableHead>
               <TableHead className="w-24">Qty</TableHead>
@@ -146,31 +144,11 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
             {value.map((row, index) => {
               const product = productMap.get(row.productId);
               const basePrice = product?.price ?? 0;
-              const expanded = expandedIndex === index;
-              const hasExtras =
-                !!row.color?.trim() ||
-                (row.colorCharge ?? 0) > 0 ||
-                !!row.hangingStructureType ||
-                (row.hangingStructureCharge ?? 0) > 0;
               return (
                 <Fragment key={`${row.productId}-${index}`}>
                   <TableRow>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Color / Hanging Structure"
-                        onClick={() => setExpandedIndex(expanded ? null : index)}
-                      >
-                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      </Button>
-                    </TableCell>
                     <TableCell className="font-medium text-slate-900">
                       {product?.name ?? "Unknown product"}
-                      {hasExtras && !expanded && (
-                        <span className="ml-1 text-xs font-normal text-slate-500">(color/structure set)</span>
-                      )}
                     </TableCell>
                     <TableCell>
                       <Input
@@ -212,79 +190,81 @@ export default function QuotationItemsEditor({ value, onChange, onUnitPriceAbove
                       </Button>
                     </TableCell>
                   </TableRow>
-                  {expanded && (
-                    <TableRow>
-                      <TableCell />
-                      <TableCell colSpan={6} className="bg-slate-50">
-                        <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-5">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Color</Label>
-                            <Input
-                              value={row.color ?? ""}
-                              onChange={(e) => updateRow(index, { color: e.target.value })}
-                              placeholder="e.g. Custom RAL 9016"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Color Charge</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={row.colorCharge ?? ""}
-                              onChange={(e) =>
-                                updateRow(index, {
-                                  colorCharge: e.target.value ? Number(e.target.value) : undefined,
-                                })
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Hanging Structure</Label>
-                            <Select
-                              value={row.hangingStructureType ?? ""}
-                              onChange={(e) =>
-                                updateRow(index, {
-                                  hangingStructureType: (e.target.value || undefined) as
-                                    | HangingStructureType
-                                    | undefined,
-                                })
-                              }
-                            >
-                              <option value="">Select...</option>
-                              {HANGING_STRUCTURE_OPTIONS.map((h) => (
-                                <option key={h.value} value={h.value}>
-                                  {h.label}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-                          {row.hangingStructureType === "PIPE_TRUSS" && (
-                            <div className="space-y-1">
-                              <Label className="text-xs">Pipe Length</Label>
-                              <Input
-                                value={row.pipeLength ?? ""}
-                                onChange={(e) => updateRow(index, { pipeLength: e.target.value })}
-                                placeholder="e.g. 3 ft"
-                              />
-                            </div>
-                          )}
-                          <div className="space-y-1">
-                            <Label className="text-xs">Hanging Structure Charge</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={row.hangingStructureCharge ?? ""}
-                              onChange={(e) =>
-                                updateRow(index, {
-                                  hangingStructureCharge: e.target.value ? Number(e.target.value) : undefined,
-                                })
-                              }
-                            />
-                          </div>
+                  {/* Color / Hanging Structure — always visible per item, not
+                      hidden behind a toggle, so it isn't easy to miss. */}
+                  <TableRow>
+                    <TableCell colSpan={6} className="bg-slate-50 py-3">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Color / Hanging Structure (optional, priced separately)
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Color</Label>
+                          <Input
+                            value={row.color ?? ""}
+                            onChange={(e) => updateRow(index, { color: e.target.value })}
+                            placeholder="e.g. Custom RAL 9016"
+                          />
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
+                        <div className="space-y-1">
+                          <Label className="text-xs">Color Charge (₹)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={row.colorCharge ?? ""}
+                            onChange={(e) =>
+                              updateRow(index, {
+                                colorCharge: e.target.value ? Number(e.target.value) : undefined,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Hanging Structure</Label>
+                          <Select
+                            value={row.hangingStructureType ?? ""}
+                            onChange={(e) =>
+                              updateRow(index, {
+                                hangingStructureType: (e.target.value || undefined) as
+                                  | HangingStructureType
+                                  | undefined,
+                              })
+                            }
+                          >
+                            <option value="">Select...</option>
+                            {HANGING_STRUCTURE_OPTIONS.map((h) => (
+                              <option key={h.value} value={h.value}>
+                                {h.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        {row.hangingStructureType === "PIPE_TRUSS" && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Pipe Length</Label>
+                            <Input
+                              value={row.pipeLength ?? ""}
+                              onChange={(e) => updateRow(index, { pipeLength: e.target.value })}
+                              placeholder="e.g. 3 ft"
+                            />
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <Label className="text-xs">Hanging Structure Charge (₹)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={row.hangingStructureCharge ?? ""}
+                            onChange={(e) =>
+                              updateRow(index, {
+                                hangingStructureCharge: e.target.value ? Number(e.target.value) : undefined,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 </Fragment>
               );
             })}

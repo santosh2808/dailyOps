@@ -716,16 +716,27 @@ export class QuotationPdfService {
     const dash = (v?: string) => (v && v.trim() ? v.trim() : '—');
     const terms = this.resolveCommercialTerms(quotation);
     const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
-    const transportValue = includesCharges
-      ? 'Included in item price'
-      : quotation.transportScope === 'CUSTOMER_SCOPE'
-        ? 'By Customer'
-        : quotation.transportationCharge > 0
-          ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
-          : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation;
-    const installationValue = includesCharges
-      ? 'Included in item price'
-      : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge;
+    // When item prices already include installation/transportation/GST,
+    // those two rows are dropped from the Annexure entirely — not relabeled
+    // "Included" — since the fan's Unit Price row already reflects the full
+    // charged amount; a leftover "Installation: ..." line would just be
+    // confusing (matches the Quotation Summary block, which does the same).
+    const installationRows: SpecRow[] = includesCharges
+      ? []
+      : [{ label: 'Installation', value: terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge }];
+    const transportationRows: SpecRow[] = includesCharges
+      ? []
+      : [
+          {
+            label: 'Transportation',
+            value:
+              quotation.transportScope === 'CUSTOMER_SCOPE'
+                ? 'By Customer'
+                : quotation.transportationCharge > 0
+                  ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+                  : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+          },
+        ];
     const gstValue = includesCharges
       ? `${quotation.gstPercent}% — Included in item price`
       : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
@@ -740,8 +751,8 @@ export class QuotationPdfService {
         ...(applicableTo ? [{ label: 'Applicable To', value: applicableTo }] : []),
         { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
         ...this.buildColorAndStructureRows(item),
-        { label: 'Installation', value: installationValue },
-        { label: 'Transportation', value: transportValue },
+        ...installationRows,
+        ...transportationRows,
         { label: this.gstLabel(quotation), value: gstValue },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
       ];
@@ -782,13 +793,13 @@ export class QuotationPdfService {
       { label: 'Warranty Conditions', value: WARRANTY_CONDITIONS },
       { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
       ...this.buildColorAndStructureRows(item),
-      { label: 'Installation', value: installationValue },
       // Once a real transportation amount has actually been entered for
       // this quotation, show that number instead of the generic "Extra at
       // actual" wording — the exact figure is more useful to the customer
-      // than the placeholder text once it's known. Overridden above when
-      // Customer Scope or "price already includes charges" applies.
-      { label: 'Transportation', value: transportValue },
+      // than the placeholder text once it's known. Both rows are dropped
+      // entirely (not relabeled) when the price already includes them.
+      ...installationRows,
+      ...transportationRows,
       { label: `GST ${quotation.gstPercent}%`, value: gstValue },
       { label: 'Quantity', value: `${item.quantity} Nos.` },
     ];
