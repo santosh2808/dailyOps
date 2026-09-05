@@ -122,6 +122,14 @@ export interface QuotationPdfInput {
 const DEFAULT_COMMERCIAL_TERMS: Required<
   Omit<QuotationCommercialTerms, 'regionCode' | 'unloading' | 'installationSchedule'>
 > = {
+  // Falls back based on Quotation.transportScope when staff haven't typed
+  // an explicit Price Basis (see buildCommercialTermsRows) — "By Customer"
+  // transport is priced Ex-Works, Hyderabad (customer collects/arranges
+  // their own transport from the factory); "By Company" transport is priced
+  // FOR Site (Smart Rotamach delivers, so the price is quoted to-site).
+  // This constant is what CUSTOMER_SCOPE falls back to; COMPANY_SCOPE's
+  // fallback ('FOR Site') is inlined at the one call site below since it
+  // isn't otherwise reused.
   priceBasis: 'Ex-Works, Hyderabad',
   // Rs.8,000 per fan is the standard installation rate (see
   // INSTALLATION_RATE_PER_FAN in QuotationsService, which is what actually
@@ -135,7 +143,7 @@ const DEFAULT_COMMERCIAL_TERMS: Required<
   transportInsurance: 'To your account',
   payment: '100% advance along with the Purchase order.',
   delivery: '7-10 days from the date of PO / release of advance.',
-  offerValidity: '90 days from the date of offer',
+  offerValidity: '10 days from the date of offer',
 };
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
@@ -590,7 +598,14 @@ export class QuotationPdfService {
   private resolveCommercialTerms(quotation: QuotationPdfInput): QuotationCommercialTerms {
     const raw = quotation.commercialTerms;
     const given = raw && typeof raw === 'object' ? (raw as QuotationCommercialTerms) : {};
-    return { ...DEFAULT_COMMERCIAL_TERMS, ...given };
+    // Price Basis's fallback (used only when `given` doesn't already have an
+    // explicit value — e.g. a quotation saved before this field existed, or
+    // created directly via the API) depends on transportScope: computed
+    // here, before DEFAULT_COMMERCIAL_TERMS's own fixed priceBasis would
+    // otherwise win by always being present in the spread below.
+    const priceBasisDefault =
+      quotation.transportScope === 'CUSTOMER_SCOPE' ? DEFAULT_COMMERCIAL_TERMS.priceBasis : 'FOR Site';
+    return { ...DEFAULT_COMMERCIAL_TERMS, priceBasis: priceBasisDefault, ...given };
   }
 
   private buildCommercialTermsRows(terms: QuotationCommercialTerms, quotation: QuotationPdfInput): SpecRow[] {
@@ -659,14 +674,23 @@ export class QuotationPdfService {
   // hangingStructureType/pipeLength/hangingStructureCharge) — only rendered
   // when actually set on this item, so a quotation item with none of this
   // filled in shows exactly the same rows as before this feature existed.
-  private buildColorAndStructureRows(item: QuotationPdfItem): SpecRow[] {
+  //
+  // `includesCharges` (Quotation.pricesIncludeChargesAndGst) mirrors the
+  // Installation/Transportation/GST rows right below these: once staff have
+  // confirmed the Unit Price already bakes in every extra, the color/
+  // hanging-structure charge amounts are already part of that one inclusive
+  // figure too — showing "(+₹8,000)" here as well as an all-inclusive Unit
+  // Price and "Included" everywhere else reads as double-charging, so the
+  // charge amount is hidden (the color/structure choice itself is still
+  // shown) whenever includesCharges is true.
+  private buildColorAndStructureRows(item: QuotationPdfItem, includesCharges: boolean): SpecRow[] {
     const rows: SpecRow[] = [];
     const color = item.color?.trim();
     const colorCharge = item.colorCharge ?? 0;
     if (color || colorCharge > 0) {
       rows.push({
         label: 'Color',
-        value: `${color || 'Custom'}${colorCharge > 0 ? ` (+${this.formatCurrency(colorCharge)})` : ''}`,
+        value: `${color || 'Custom'}${!includesCharges && colorCharge > 0 ? ` (+${this.formatCurrency(colorCharge)})` : ''}`,
       });
     }
     const hangingStructureCharge = item.hangingStructureCharge ?? 0;
@@ -675,7 +699,7 @@ export class QuotationPdfService {
       const pipeNote = item.hangingStructureType === 'PIPE_TRUSS' && item.pipeLength?.trim() ? `, Pipe Length: ${item.pipeLength.trim()}` : '';
       rows.push({
         label: 'Hanging Structure',
-        value: `${structureLabel}${pipeNote}${hangingStructureCharge > 0 ? ` (+${this.formatCurrency(hangingStructureCharge)})` : ''}`,
+        value: `${structureLabel}${pipeNote}${!includesCharges && hangingStructureCharge > 0 ? ` (+${this.formatCurrency(hangingStructureCharge)})` : ''}`,
       });
     }
     return rows;
@@ -719,7 +743,7 @@ export class QuotationPdfService {
         { label: 'Description', value: dash(item.description ?? item.product.description ?? undefined) },
         ...(applicableTo ? [{ label: 'Applicable To', value: applicableTo }] : []),
         { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
-        ...this.buildColorAndStructureRows(item),
+        ...this.buildColorAndStructureRows(item, includesCharges),
         ...installationRows,
         ...transportationRows,
         { label: this.gstLabel(quotation), value: gstValue },
@@ -762,7 +786,7 @@ export class QuotationPdfService {
       { label: 'Warranty – Other', value: dash(spec.warrantyOther) },
       { label: 'Warranty Conditions', value: WARRANTY_CONDITIONS },
       { label: 'Unit Price', value: `${this.formatCurrency(item.unitPrice)} Each` },
-      ...this.buildColorAndStructureRows(item),
+      ...this.buildColorAndStructureRows(item, includesCharges),
       // Once a real transportation amount has actually been entered for
       // this quotation, show that number instead of the generic "Extra at
       // actual" wording — the exact figure is more useful to the customer

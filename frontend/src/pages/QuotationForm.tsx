@@ -62,9 +62,21 @@ const INSTALLATION_RATE_PER_FAN = 8000;
 // values exactly, so a brand-new quotation's form shows what would actually
 // print on the PDF if nothing here is touched — not blank fields that then
 // silently render as something else.
+// Price Basis follows Transport Scope: "By Company" (we arrange/charge
+// transport) is priced FOR Site (delivered to-site); "By Customer" (they
+// arrange their own) is priced Ex-Works, Hyderabad (collected from the
+// factory). Kept as its own lookup (rather than folded into
+// COMMERCIAL_TERMS_DEFAULTS) so the Transport Scope onChange handler below
+// can auto-swap the Price Basis text when scope changes and staff haven't
+// typed a custom value — mirrors QuotationPdfService's own fallback.
+const PRICE_BASIS_BY_SCOPE: Record<TransportScope, string> = {
+  COMPANY_SCOPE: "FOR Site",
+  CUSTOMER_SCOPE: "Ex-Works, Hyderabad",
+};
+
 const COMMERCIAL_TERMS_DEFAULTS: Record<keyof QuotationCommercialTerms, string> = {
   regionCode: "",
-  priceBasis: "Ex-Works, Hyderabad",
+  priceBasis: PRICE_BASIS_BY_SCOPE.COMPANY_SCOPE,
   installationCharge: "Rs.8,000 per fan",
   transportation: "Extra at actual",
   gstTerms: "Included",
@@ -74,12 +86,12 @@ const COMMERCIAL_TERMS_DEFAULTS: Record<keyof QuotationCommercialTerms, string> 
   payment: "100% advance along with the Purchase order.",
   delivery: "7-10 days from the date of PO / release of advance.",
   installationSchedule: "",
-  offerValidity: "90 days from the date of offer",
+  offerValidity: "10 days from the date of offer",
 };
 
 const COMMERCIAL_TERMS_FIELDS: { key: keyof QuotationCommercialTerms; label: string; placeholder?: string; optional?: boolean }[] = [
   { key: "regionCode", label: "Region / Branch Code", placeholder: "e.g. NCR (leave blank for none)" },
-  { key: "priceBasis", label: "Price Basis", placeholder: "e.g. Ex-Works, Hyderabad" },
+  { key: "priceBasis", label: "Price Basis", placeholder: "Auto: FOR Site / Ex-Works, Hyderabad based on Transport Scope" },
   { key: "installationCharge", label: "Installation — wording only (see Installation Charge ₹ field above)", placeholder: "e.g. Rs.8,000 per fan" },
   { key: "transportation", label: "Transportation — wording only (see Transportation Charge ₹ field above)", placeholder: "e.g. Extra at actual" },
   { key: "gstTerms", label: "GST", placeholder: "e.g. Included / Extra" },
@@ -89,7 +101,7 @@ const COMMERCIAL_TERMS_FIELDS: { key: keyof QuotationCommercialTerms; label: str
   { key: "payment", label: "Payment", placeholder: "e.g. 100% advance along with the Purchase order." },
   { key: "delivery", label: "Delivery", placeholder: "e.g. 7-10 days from the date of PO / release of advance." },
   { key: "installationSchedule", label: "Installation schedule (optional line)", placeholder: "Leave blank to omit this line entirely", optional: true },
-  { key: "offerValidity", label: "Offer Validity", placeholder: "e.g. 90 days from the date of offer" },
+  { key: "offerValidity", label: "Offer Validity", placeholder: "e.g. 10 days from the date of offer" },
 ];
 
 const emptyForm: FormState = {
@@ -493,14 +505,38 @@ export default function QuotationForm() {
                       <Select
                         id="transportScope"
                         value={form.transportScope}
-                        onChange={(e) => update("transportScope", e.target.value as TransportScope)}
+                        onChange={(e) => {
+                          const nextScope = e.target.value as TransportScope;
+                          setForm((f) => {
+                            // Auto-follow Price Basis with Transport Scope —
+                            // but only when staff haven't typed something
+                            // custom. "Untouched" means it still matches
+                            // either scope's own default wording (covers a
+                            // fresh quotation, and switching scope back and
+                            // forth); anything else is a deliberate edit and
+                            // is left alone.
+                            const priceBasisUntouched =
+                              !f.commercialTerms.priceBasis.trim() ||
+                              f.commercialTerms.priceBasis.trim() === PRICE_BASIS_BY_SCOPE.COMPANY_SCOPE ||
+                              f.commercialTerms.priceBasis.trim() === PRICE_BASIS_BY_SCOPE.CUSTOMER_SCOPE;
+                            return {
+                              ...f,
+                              transportScope: nextScope,
+                              commercialTerms: priceBasisUntouched
+                                ? { ...f.commercialTerms, priceBasis: PRICE_BASIS_BY_SCOPE[nextScope] }
+                                : f.commercialTerms,
+                            };
+                          });
+                        }}
                       >
                         <option value="COMPANY_SCOPE">Company Scope — we arrange &amp; charge transport</option>
                         <option value="CUSTOMER_SCOPE">Customer Scope — customer arranges their own transport</option>
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         Customer Scope hides/zeroes the Transportation Charge below — no transport
-                        is billed on this quotation.
+                        is billed on this quotation. Price Basis (below, under Commercial Terms)
+                        follows this automatically — FOR Site for Company Scope, Ex-Works,
+                        Hyderabad for Customer Scope — unless you've typed a custom value there.
                       </p>
                     </div>
 
