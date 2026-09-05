@@ -193,6 +193,7 @@ export class SalesOrdersService {
 
     const rawItems = this.resolveItemsAgainstQuotation(dto.items, quotation.items);
     const totals = this.computeTotals(rawItems, dto.gstPercent ?? DEFAULT_GST_PERCENT, dto.discount ?? 0);
+    this.freezeToQuotationTotalsIfUnmodified(totals, rawItems, quotation);
 
     for (let attempt = 1; attempt <= MAX_SALES_ORDER_NUMBER_ATTEMPTS; attempt++) {
       const salesOrderNumber = await this.generateSalesOrderNumber();
@@ -566,6 +567,61 @@ export class SalesOrdersService {
         discount: item.discount ?? 0,
       };
     });
+  }
+
+  // Bug fix (reported: "prices are getting varied in JEO grand total is
+  // changing again from quotation"): computeTotals() above only ever
+  // multiplies quantity x unitPrice and applies its own tax pass — it has
+  // no notion of Quotation.installationCharge, Quotation.transportationCharge,
+  // or a QuotationItem's colorCharge/hangingStructureCharge, and doesn't
+  // understand the "prices already include GST" (pricesIncludeChargesAndGst)
+  // branch at all. So any accepted Quotation that used any of those (which
+  // is most real quotations — installationCharge alone auto-defaults to
+  // Rs.8,000/fan) produced a Sales Order whose grandTotal silently differed
+  // from the Quotation's — and since Proforma Invoice/Tax Invoice copy their
+  // amounts from the Sales Order, and JEO's own "Grand Total" (shown on its
+  // linked Sales Order) is read the same way, that wrong number is what
+  // showed up everywhere downstream.
+  //
+  // Rather than reimplementing Quotation's whole charge/tax model a second,
+  // divergent way here, when the Sales Order being created is an exact,
+  // unmodified pass-through of the Quotation it's generated from (true for
+  // every automatic Accept-cascade, and for a manual creation where staff
+  // didn't touch quantity or add a discount — the Sales Order Items editor
+  // doesn't even let unitPrice be edited, only quantity/discount), we freeze
+  // the order-level totals to the Quotation's own already-computed
+  // subtotal/gstAmount/grandTotal instead of recomputing them. Per-item
+  // rows (SalesOrderItem.unitPrice/tax/lineTotal) are left as computeTotals()
+  // produced them — still a plain qty x unitPrice breakdown for display —
+  // so they may no longer sum to the new subtotal when the Quotation had
+  // installation/transportation/color/hanging-structure charges; those
+  // amounts are carried in the order-level total but aren't attributed to
+  // any single line, the same way the Quotation PDF itself shows
+  // installation/transportation as summary lines rather than per-item ones.
+  //
+  // When quantities were actually edited from what was quoted, we
+  // deliberately do NOT freeze — how installationCharge/discount should
+  // scale with a changed quantity is a business decision, not something to
+  // guess here, so that case keeps using the recompute exactly as before
+  // (unchanged, pre-existing behavior, not a regression).
+  private freezeToQuotationTotalsIfUnmodified(
+    totals: ComputedTotals,
+    rawItems: RawItem[],
+    quotation: { subtotal: number; gstAmount: number; grandTotal: number; items: { productId: string; quantity: number }[] },
+  ): void {
+    const matchesQuotationExactly =
+      rawItems.length === quotation.items.length &&
+      rawItems.every((item) => {
+        const qi = quotation.items.find((q) => q.productId === item.productId);
+        return !!qi && qi.quantity === item.quantity && item.discount === 0;
+      }) &&
+      totals.discount === 0;
+
+    if (!matchesQuotationExactly) return;
+
+    totals.subtotal = quotation.subtotal;
+    totals.tax = quotation.gstAmount;
+    totals.grandTotal = quotation.grandTotal;
   }
 
   private computeTotals(items: RawItem[], gstPercent: number, extraDiscount: number): ComputedTotals {
