@@ -116,6 +116,15 @@ export class QuotationsController {
     return this.quotationsService.sendQuotation(id, dto, actorFrom(req));
   }
 
+  // Additive: WhatsApp Share via Interakt — sends the document directly to
+  // the customer's WhatsApp, reusing the same secure link :id/send above
+  // already emailed.
+  @Post(':id/whatsapp-send')
+  @RequirePermission('Quotation', 'Edit')
+  sendWhatsApp(@Param('id') id: string) {
+    return this.quotationsService.sendWhatsAppShare(id);
+  }
+
   // "Request Approval" button (requirement #8) — same permission as Edit,
   // since any Sales rep working the quotation should be able to escalate.
   @Post(':id/request-approval')

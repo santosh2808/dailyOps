@@ -14,12 +14,11 @@ import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProfor
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { openWhatsAppShare } from "@/lib/whatsapp";
 import {
   getProformaInvoice,
   getProformaInvoiceEmailHistory,
-  getProformaInvoiceWhatsAppLink,
   openProformaInvoicePdf,
+  sendProformaInvoiceWhatsApp,
   updateProformaInvoiceStatus,
 } from "@/api/proforma-invoices";
 import type { EmailHistoryEntry, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
@@ -162,24 +161,32 @@ export default function ProformaInvoiceDetails() {
                     >
                       View PDF
                     </DropdownMenuItem>
-                    {/* Additive: WhatsApp Share. Unlike Quotation (which
+                    {/* Additive: WhatsApp Share via Interakt — sends the
+                        invoice directly to the customer's WhatsApp using a
+                        pre-approved template. Unlike Quotation (which
                         reuses an already-emailed link), this document has
-                        no prior "sent" link to reuse, so the token is
-                        generated lazily right here on first click and
-                        reused on every later one — see
+                        no prior "sent" link to reuse, so the backend
+                        generates the public token lazily on first send and
+                        reuses it on every later one — see
                         ProformaInvoicesService.getOrCreatePublicToken(). */}
                     <DropdownMenuItem
                       icon={WhatsAppIcon}
                       onSelect={async () => {
                         try {
-                          const link = await getProformaInvoiceWhatsAppLink(invoice.id);
-                          const name = invoice.customer?.contactPerson ?? "there";
-                          const message = `Hi ${name}, please find your proforma invoice ${invoice.invoiceNumber} from SRM here: ${link}`;
-                          if (!openWhatsAppShare(invoice.customer?.phone, message)) {
-                            toast.error("No valid phone number on file for this customer.");
+                          const result = await sendProformaInvoiceWhatsApp(invoice.id);
+                          if (result.status === "SENT") {
+                            toast.success("WhatsApp message sent.");
+                          } else if (result.status === "SIMULATED") {
+                            toast.success("WhatsApp message logged (Interakt not configured).");
+                          } else {
+                            toast.error(
+                              result.errorMessage || "Could not send the WhatsApp message. Please try again.",
+                            );
                           }
-                        } catch {
-                          toast.error("Could not create the WhatsApp share link. Please try again.");
+                        } catch (err: any) {
+                          toast.error(
+                            err?.response?.data?.message || "Could not send the WhatsApp message. Please try again.",
+                          );
                         }
                       }}
                     >

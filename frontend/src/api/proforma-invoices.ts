@@ -102,12 +102,18 @@ export async function openProformaInvoicePdf(id: string) {
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-// Additive: WhatsApp Share. Generates (or reuses) the invoice's public
-// token and returns the full, no-login PDF URL — pointing directly at the
-// backend's public route (there's no frontend page for this document type,
-// unlike Quotation's /quote/:token), so a WhatsApp recipient's browser
-// opens/downloads the PDF straight from the API.
-export async function getProformaInvoiceWhatsAppLink(id: string): Promise<string> {
-  const res = await api.post<{ token: string }>(`/api/v1/proforma-invoices/${id}/whatsapp-link`);
-  return `${api.defaults.baseURL}/api/v1/public/proforma-invoices/${res.data.token}/pdf`;
+// Additive: WhatsApp Share via Interakt — sends the invoice directly to the
+// customer's WhatsApp using a pre-approved template (rather than returning
+// a link for the browser to open a wa.me chat with). The backend generates
+// (or reuses) the invoice's public token and embeds the no-login PDF link
+// as a template variable.
+export interface WhatsAppSendResult {
+  status: "SENT" | "SIMULATED" | "FAILED";
+  errorMessage?: string;
+  phone?: string | null;
+}
+
+export async function sendProformaInvoiceWhatsApp(id: string) {
+  const res = await api.post<WhatsAppSendResult>(`/api/v1/proforma-invoices/${id}/whatsapp-send`);
+  return res.data;
 }

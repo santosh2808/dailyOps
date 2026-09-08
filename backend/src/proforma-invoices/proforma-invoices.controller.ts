@@ -75,13 +75,12 @@ export class ProformaInvoicesController {
     res.send(pdf);
   }
 
-  // Additive: WhatsApp Share. Returns (generating on first use) the public
-  // token used to build the no-login PDF link at
-  // /api/v1/public/proforma-invoices/:token/pdf.
-  @Post(':id/whatsapp-link')
-  @RequirePermission('ProformaInvoice', 'View')
-  async getWhatsAppLink(@Param('id') id: string) {
-    const token = await this.proformaInvoicesService.getOrCreatePublicToken(id);
-    return { token };
+  // Additive: WhatsApp Share via Interakt — sends the document directly to
+  // the customer's WhatsApp (rather than returning a link for the browser
+  // to open a wa.me chat with).
+  @Post(':id/whatsapp-send')
+  @RequirePermission('ProformaInvoice', 'Edit')
+  sendWhatsApp(@Param('id') id: string) {
+    return this.proformaInvoicesService.sendWhatsAppShare(id);
   }
 }

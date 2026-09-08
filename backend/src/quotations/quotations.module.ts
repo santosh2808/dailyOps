@@ -7,6 +7,7 @@ import { MailerModule } from '../mailer/mailer.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { LeadsModule } from '../leads/leads.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { QuotationsController } from './quotations.controller';
 import { PublicQuotationsController } from './public-quotations.controller';
 import { QuotationsService } from './quotations.service';
@@ -29,6 +30,7 @@ import { QuotationsService } from './quotations.service';
     PdfModule,
     AuditLogModule,
     LeadsModule,
+    WhatsAppModule,
   ],
   // PublicQuotationsController: Customer Quotation Acceptance workflow's
   // unauthenticated /api/v1/public/quotations/:token routes. Shares this

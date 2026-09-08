@@ -148,6 +148,20 @@ export async function sendQuotation(id: string, payload: SendQuotationPayload) {
   return res.data;
 }
 
+// Additive: WhatsApp Share via Interakt — sends the quotation directly to
+// the customer's WhatsApp using a pre-approved template, reusing the same
+// secure /quote/:token link already emailed by sendQuotation() above.
+export interface WhatsAppSendResult {
+  status: "SENT" | "SIMULATED" | "FAILED";
+  errorMessage?: string;
+  phone?: string | null;
+}
+
+export async function sendQuotationWhatsApp(id: string) {
+  const res = await api.post<WhatsAppSendResult>(`/api/v1/quotations/${id}/whatsapp-send`);
+  return res.data;
+}
+
 export async function getQuotationEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/quotations/${id}/email-history`);
   return res.data;

@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
-import { openWhatsAppShare } from "@/lib/whatsapp";
 import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import ChangeQuotationStatusDialog from "@/components/quotations/ChangeQuotationStatusDialog";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
@@ -34,6 +33,7 @@ import {
   getQuotationEmailHistory,
   getQuotationHistory,
   openQuotationPdf,
+  sendQuotationWhatsApp,
   updateQuotationStatus,
 } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
@@ -278,7 +278,9 @@ export default function QuotationDetails() {
                         Resend Quotation
                       </DropdownMenuItem>
                     )}
-                    {/* Additive: WhatsApp Share. Reuses the same secure
+                    {/* Additive: WhatsApp Share via Interakt — sends the
+                        quotation directly to the customer's WhatsApp using
+                        a pre-approved template, reusing the same secure
                         public link the customer was already emailed (only
                         exists once the quotation has been sent at least
                         once) rather than minting a second, separately
@@ -287,13 +289,23 @@ export default function QuotationDetails() {
                     {quotation.publicToken && (
                       <DropdownMenuItem
                         icon={WhatsAppIcon}
-                        onSelect={() => {
-                          const phone = quotation.customer?.phone ?? quotation.lead?.phone;
-                          const name = quotation.customer?.contactPerson ?? quotation.lead?.contactPerson ?? "there";
-                          const link = `${window.location.origin}/quote/${quotation.publicToken}`;
-                          const message = `Hi ${name}, please find your quotation ${quotation.quotationNumber} from SRM here: ${link}`;
-                          if (!openWhatsAppShare(phone, message)) {
-                            toast.error("No valid phone number on file for this customer.");
+                        onSelect={async () => {
+                          try {
+                            const result = await sendQuotationWhatsApp(quotation.id);
+                            if (result.status === "SENT") {
+                              toast.success("WhatsApp message sent.");
+                            } else if (result.status === "SIMULATED") {
+                              toast.success("WhatsApp message logged (Interakt not configured).");
+                            } else {
+                              toast.error(
+                                result.errorMessage || "Could not send the WhatsApp message. Please try again.",
+                              );
+                            }
+                          } catch (err: any) {
+                            toast.error(
+                              err?.response?.data?.message ||
+                                "Could not send the WhatsApp message. Please try again.",
+                            );
                           }
                         }}
                       >

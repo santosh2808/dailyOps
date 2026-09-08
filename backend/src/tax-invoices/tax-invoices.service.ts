@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
+import { backendBaseUrl } from '../common/backend-base-url';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { TaxInvoicePdfService } from '../pdf/tax-invoice-pdf.service';
@@ -54,6 +56,7 @@ export class TaxInvoicesService {
     private mailerService: MailerService,
     private taxInvoicePdfService: TaxInvoicePdfService,
     private auditLogService: AuditLogService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   async findAll(query: QueryTaxInvoiceDto) {
@@ -367,6 +370,22 @@ export class TaxInvoicesService {
       throw new NotFoundException('Invalid or expired link');
     }
     return this.getPdf(rows[0].id);
+  }
+
+  // Additive: WhatsApp Share via Interakt — see the identical method on
+  // ProformaInvoicesService for the full rationale.
+  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+    const invoice = await this.findOne(id);
+    const phone = invoice.customer?.phone ?? null;
+    const token = await this.getOrCreatePublicToken(id);
+    const link = `${backendBaseUrl()}/api/v1/public/tax-invoices/${token}/pdf`;
+    const templateName = process.env.INTERAKT_TAX_INVOICE_TEMPLATE_NAME?.trim() || 'tax_invoice_share';
+    const result = await this.whatsAppService.sendTemplateMessage({
+      phone,
+      templateName,
+      bodyValues: [invoice.customer?.contactPerson || 'Customer', invoice.invoiceNumber, link],
+    });
+    return { ...result, phone };
   }
 
   private toPdfInput(invoice: Prisma.TaxInvoiceGetPayload<{ include: typeof TAX_INVOICE_DETAIL_INCLUDE }>) {

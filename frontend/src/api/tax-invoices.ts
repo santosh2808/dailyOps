@@ -105,9 +105,15 @@ export async function openTaxInvoicePdf(id: string) {
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-// Additive: WhatsApp Share — see the identical helper in
+// Additive: WhatsApp Share via Interakt — see the identical helper in
 // api/proforma-invoices.ts for the full rationale.
-export async function getTaxInvoiceWhatsAppLink(id: string): Promise<string> {
-  const res = await api.post<{ token: string }>(`/api/v1/tax-invoices/${id}/whatsapp-link`);
-  return `${api.defaults.baseURL}/api/v1/public/tax-invoices/${res.data.token}/pdf`;
+export interface WhatsAppSendResult {
+  status: "SENT" | "SIMULATED" | "FAILED";
+  errorMessage?: string;
+  phone?: string | null;
+}
+
+export async function sendTaxInvoiceWhatsApp(id: string) {
+  const res = await api.post<WhatsAppSendResult>(`/api/v1/tax-invoices/${id}/whatsapp-send`);
+  return res.data;
 }

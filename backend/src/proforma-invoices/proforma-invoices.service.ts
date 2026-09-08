@@ -6,6 +6,8 @@ import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
+import { backendBaseUrl } from '../common/backend-base-url';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
@@ -52,6 +54,7 @@ export class ProformaInvoicesService {
     private mailerService: MailerService,
     private proformaInvoicePdfService: ProformaInvoicePdfService,
     private auditLogService: AuditLogService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   async findAll(query: QueryProformaInvoiceDto) {
@@ -350,6 +353,26 @@ export class ProformaInvoicesService {
       throw new NotFoundException('Invalid or expired link');
     }
     return this.getPdf(rows[0].id);
+  }
+
+  // Additive: WhatsApp Share via Interakt — replaces the earlier
+  // click-to-chat button with a real send. Builds the same public PDF link
+  // getPublicPdf() above serves, then hands it to WhatsAppService as the
+  // template's last body variable. INTERAKT_PROFORMA_INVOICE_TEMPLATE_NAME
+  // must match a template already created and approved in Interakt (see
+  // .env.example for the suggested wording to submit for approval).
+  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+    const invoice = await this.findOne(id);
+    const phone = invoice.customer?.phone ?? null;
+    const token = await this.getOrCreatePublicToken(id);
+    const link = `${backendBaseUrl()}/api/v1/public/proforma-invoices/${token}/pdf`;
+    const templateName = process.env.INTERAKT_PROFORMA_INVOICE_TEMPLATE_NAME?.trim() || 'proforma_invoice_share';
+    const result = await this.whatsAppService.sendTemplateMessage({
+      phone,
+      templateName,
+      bodyValues: [invoice.customer?.contactPerson || 'Customer', invoice.invoiceNumber, link],
+    });
+    return { ...result, phone };
   }
 
   private toPdfInput(

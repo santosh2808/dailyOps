@@ -2,6 +2,8 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { Prisma, SalesOrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
+import { backendBaseUrl } from '../common/backend-base-url';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
@@ -114,6 +116,7 @@ export class JobExecutionOrdersService {
     private stateSeriesCodesService: StateSeriesCodesService,
     private auditLogService: AuditLogService,
     private salesOrdersService: SalesOrdersService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   // Sales Orders that haven't reached the dispatch stage yet — the only
@@ -433,6 +436,24 @@ export class JobExecutionOrdersService {
       throw new NotFoundException('Invalid or expired link');
     }
     return this.getPdf(rows[0].id);
+  }
+
+  // Additive: WhatsApp Share via Interakt — customer-facing, see the
+  // identical method on ProformaInvoicesService for the full rationale.
+  // Distinct from sendFactoryNotificationEmail(), which targets the
+  // internal Production Team rather than the customer.
+  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+    const jeo = await this.findOne(id);
+    const phone = jeo.customer?.phone ?? null;
+    const token = await this.getOrCreatePublicToken(id);
+    const link = `${backendBaseUrl()}/api/v1/public/job-execution-orders/${token}/pdf`;
+    const templateName = process.env.INTERAKT_JEO_TEMPLATE_NAME?.trim() || 'jeo_share';
+    const result = await this.whatsAppService.sendTemplateMessage({
+      phone,
+      templateName,
+      bodyValues: [jeo.customer?.contactPerson || 'Customer', jeo.jeoNumber, link],
+    });
+    return { ...result, phone };
   }
 
   private toPdfInput(

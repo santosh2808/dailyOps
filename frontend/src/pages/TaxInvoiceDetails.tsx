@@ -26,12 +26,11 @@ import ConfirmSendMissingQrDialog from "@/components/tax-invoices/ConfirmSendMis
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { openWhatsAppShare } from "@/lib/whatsapp";
 import {
   getTaxInvoice,
   getTaxInvoiceEmailHistory,
-  getTaxInvoiceWhatsAppLink,
   openTaxInvoicePdf,
+  sendTaxInvoiceWhatsApp,
   updateTaxInvoiceStatus,
 } from "@/api/tax-invoices";
 import type { EmailHistoryEntry, TaxInvoice, TaxInvoiceStatus } from "@/types";
@@ -181,20 +180,28 @@ export default function TaxInvoiceDetails() {
                     >
                       View PDF
                     </DropdownMenuItem>
-                    {/* Additive: WhatsApp Share — same lazily-generated
-                        public link pattern as Proforma Invoice's. */}
+                    {/* Additive: WhatsApp Share via Interakt — same
+                        lazily-generated public link pattern as Proforma
+                        Invoice's, sent directly to the customer's WhatsApp
+                        using a pre-approved template. */}
                     <DropdownMenuItem
                       icon={WhatsAppIcon}
                       onSelect={async () => {
                         try {
-                          const link = await getTaxInvoiceWhatsAppLink(invoice.id);
-                          const name = invoice.customer?.contactPerson ?? "there";
-                          const message = `Hi ${name}, please find your tax invoice ${invoice.invoiceNumber} from SRM here: ${link}`;
-                          if (!openWhatsAppShare(invoice.customer?.phone, message)) {
-                            toast.error("No valid phone number on file for this customer.");
+                          const result = await sendTaxInvoiceWhatsApp(invoice.id);
+                          if (result.status === "SENT") {
+                            toast.success("WhatsApp message sent.");
+                          } else if (result.status === "SIMULATED") {
+                            toast.success("WhatsApp message logged (Interakt not configured).");
+                          } else {
+                            toast.error(
+                              result.errorMessage || "Could not send the WhatsApp message. Please try again.",
+                            );
                           }
-                        } catch {
-                          toast.error("Could not create the WhatsApp share link. Please try again.");
+                        } catch (err: any) {
+                          toast.error(
+                            err?.response?.data?.message || "Could not send the WhatsApp message. Please try again.",
+                          );
                         }
                       }}
                     >

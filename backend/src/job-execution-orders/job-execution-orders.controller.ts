@@ -102,16 +102,13 @@ export class JobExecutionOrdersController {
     res.send(pdf);
   }
 
-  // Additive: WhatsApp Share. Returns (generating on first use) the public
-  // token used to build the no-login PDF link at
-  // /api/v1/public/job-execution-orders/:token/pdf. Customer-facing,
-  // distinct from :id/send above (which notifies the internal Production
-  // Team, not the customer).
-  @Post(':id/whatsapp-link')
-  @RequirePermission('JEO', 'View')
-  async getWhatsAppLink(@Param('id') id: string) {
-    const token = await this.jobExecutionOrdersService.getOrCreatePublicToken(id);
-    return { token };
+  // Additive: WhatsApp Share via Interakt — sends the document directly to
+  // the customer's WhatsApp. Customer-facing, distinct from :id/send above
+  // (which notifies the internal Production Team, not the customer).
+  @Post(':id/whatsapp-send')
+  @RequirePermission('JEO', 'Update')
+  sendWhatsApp(@Param('id') id: string) {
+    return this.jobExecutionOrdersService.sendWhatsAppShare(id);
   }
 
   // No delete endpoint — JobExecutionOrder has no deletedAt column (per the

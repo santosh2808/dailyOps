@@ -29,13 +29,12 @@ import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { openWhatsAppShare } from "@/lib/whatsapp";
 import {
   getJeoEmailHistory,
   getJeoTimeline,
-  getJeoWhatsAppLink,
   getJobExecutionOrder,
   openJeoPdf,
+  sendJeoWhatsApp,
   updateJeoStatus,
   updateProductionChecklist,
 } from "@/api/job-execution-orders";
@@ -308,23 +307,30 @@ export default function JobExecutionOrderDetails() {
                     >
                       View PDF
                     </DropdownMenuItem>
-                    {/* Additive: WhatsApp Share — customer-facing, unlike
-                        "Resend to Factory" right below (which emails the
-                        internal Production Team, not the customer). Same
-                        lazily-generated public link pattern as Proforma
-                        Invoice / Tax Invoice. */}
+                    {/* Additive: WhatsApp Share via Interakt —
+                        customer-facing, unlike "Resend to Factory" right
+                        below (which emails the internal Production Team,
+                        not the customer). Same lazily-generated public
+                        link pattern as Proforma Invoice / Tax Invoice,
+                        sent using a pre-approved template. */}
                     <DropdownMenuItem
                       icon={WhatsAppIcon}
                       onSelect={async () => {
                         try {
-                          const link = await getJeoWhatsAppLink(jeo.id);
-                          const name = jeo.customer?.contactPerson ?? "there";
-                          const message = `Hi ${name}, please find your job execution order ${jeo.jeoNumber} from SRM here: ${link}`;
-                          if (!openWhatsAppShare(jeo.customer?.phone, message)) {
-                            toast.error("No valid phone number on file for this customer.");
+                          const result = await sendJeoWhatsApp(jeo.id);
+                          if (result.status === "SENT") {
+                            toast.success("WhatsApp message sent.");
+                          } else if (result.status === "SIMULATED") {
+                            toast.success("WhatsApp message logged (Interakt not configured).");
+                          } else {
+                            toast.error(
+                              result.errorMessage || "Could not send the WhatsApp message. Please try again.",
+                            );
                           }
-                        } catch {
-                          toast.error("Could not create the WhatsApp share link. Please try again.");
+                        } catch (err: any) {
+                          toast.error(
+                            err?.response?.data?.message || "Could not send the WhatsApp message. Please try again.",
+                          );
                         }
                       }}
                     >
