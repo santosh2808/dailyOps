@@ -230,11 +230,15 @@ export default function SupplierList() {
                 </TableHead>
                 <TableHead>Supplier Code</TableHead>
                 <TableHead>Supplier Name</TableHead>
-                <TableHead>Contact Person</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>City</TableHead>
-                <TableHead>Country</TableHead>
+                {/* Bug fix: lower-priority columns now progressively
+                    appear from md/lg/xl up instead of all ten always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden md:table-cell">Contact Person</TableHead>
+                <TableHead className="hidden md:table-cell">Phone</TableHead>
+                <TableHead className="hidden xl:table-cell">Email</TableHead>
+                <TableHead className="hidden lg:table-cell">City</TableHead>
+                <TableHead className="hidden lg:table-cell">Country</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -274,11 +278,11 @@ export default function SupplierList() {
                     <TableCell>
                       <TruncatedText text={supplier.supplierName} />
                     </TableCell>
-                    <TableCell>{supplier.contactPerson || "—"}</TableCell>
-                    <TableCell>{supplier.phone || "—"}</TableCell>
-                    <TableCell>{supplier.email || "—"}</TableCell>
-                    <TableCell>{supplier.city || "—"}</TableCell>
-                    <TableCell>{supplier.country || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{supplier.contactPerson || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{supplier.phone || "—"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{supplier.email || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{supplier.city || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{supplier.country || "—"}</TableCell>
                     <TableCell>
                       <SupplierStatusBadge status={supplier.status} />
                     </TableCell>

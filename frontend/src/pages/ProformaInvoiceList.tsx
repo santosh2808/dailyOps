@@ -142,9 +142,9 @@ export default function ProformaInvoiceList() {
                   </button>
                 </TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Sales Order</TableHead>
+                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -154,7 +154,7 @@ export default function ProformaInvoiceList() {
                     {sortIcon("grandTotal")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -195,12 +195,12 @@ export default function ProformaInvoiceList() {
                     <TableCell>
                       <TruncatedText text={invoice.customer?.companyName ?? "—"} />
                     </TableCell>
-                    <TableCell>{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                     <TableCell>
                       <ProformaInvoiceStatusBadge status={invoice.status} />
                     </TableCell>
-                    <TableCell>{formatCurrency(invoice.grandTotal)}</TableCell>
-                    <TableCell>{formatDate(invoice.validUntil)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(invoice.validUntil)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

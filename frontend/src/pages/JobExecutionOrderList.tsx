@@ -144,16 +144,20 @@ export default function JobExecutionOrderList() {
                   </button>
                 </TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Sales Order</TableHead>
-                <TableHead>
+                {/* Bug fix: lower-priority columns now progressively appear
+                    from md/lg up instead of all eight always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden lg:table-cell">State</TableHead>
+                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <button type="button" className="flex items-center" onClick={() => toggleSort("priority")}>
                     Priority
                     {sortIcon("priority")}
                   </button>
                 </TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -192,15 +196,15 @@ export default function JobExecutionOrderList() {
                     <TableCell>
                       <TruncatedText text={jeo.customer?.companyName ?? "—"} />
                     </TableCell>
-                    <TableCell>{jeo.customer?.state ?? "—"}</TableCell>
-                    <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">{jeo.customer?.state ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <JeoPriorityBadge priority={jeo.priority} />
                     </TableCell>
                     <TableCell>
                       <JeoStatusBadge status={jeo.status} />
                     </TableCell>
-                    <TableCell>{formatDate(jeo.deliveryDate)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatDate(jeo.deliveryDate)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

@@ -293,14 +293,23 @@ export default function LeadList() {
                   </button>
                 </TableHead>
                 <TableHead>Company</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Assigned To</TableHead>
+                {/* Bug fix: this table had 13 columns always rendered at
+                    once, forcing a horizontal scroll on anything narrower
+                    than a wide desktop monitor. Lower-priority columns now
+                    progressively appear from md/lg/xl up instead — Lead No/
+                    Company/Status/Actions (plus Assigned To and Next
+                    Follow-up, the two day-to-day workflow columns) stay
+                    visible everywhere; the rest reappear as the viewport has
+                    room, same data as before, just not fighting for space on
+                    a laptop-width screen. */}
+                <TableHead className="hidden lg:table-cell">Contact</TableHead>
+                <TableHead className="hidden xl:table-cell">Phone</TableHead>
+                <TableHead className="hidden xl:table-cell">Email</TableHead>
+                <TableHead className="hidden xl:table-cell">Source</TableHead>
+                <TableHead className="hidden lg:table-cell">State</TableHead>
+                <TableHead className="hidden md:table-cell">Assigned To</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -310,7 +319,7 @@ export default function LeadList() {
                     {sortIcon("nextFollowUp")}
                   </button>
                 </TableHead>
-                <TableHead>Last Updated</TableHead>
+                <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -343,14 +352,14 @@ export default function LeadList() {
                     <TableCell>
                       <TruncatedText text={lead.companyName || "-"} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <TruncatedText text={lead.contactPerson || "-"} className="max-w-[160px]" />
                     </TableCell>
-                    <TableCell>{lead.phone || "-"}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden xl:table-cell">{lead.phone || "-"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">
                       <TruncatedText text={lead.email || "-"} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden xl:table-cell">
                       {/* Bug fix (TC-040): this used to show the source
                           label ("Website") and then a static "Website"
                           badge right next to it — literally repeating the
@@ -365,16 +374,16 @@ export default function LeadList() {
                         sourceLabel(lead.source)
                       )}
                     </TableCell>
-                    <TableCell>{lead.state || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{lead.state || "—"}</TableCell>
                     {/* Full name only — never the role — with an explicit
                         "Unassigned" label (not a bare dash) when no user is
                         assigned. */}
-                    <TableCell>{lead.assignedToUser?.name || "Unassigned"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{lead.assignedToUser?.name || "Unassigned"}</TableCell>
                     <TableCell>
                       <LeadStatusBadge status={lead.status} />
                     </TableCell>
-                    <TableCell>{formatDate(lead.nextFollowUp)}</TableCell>
-                    <TableCell>{formatDate(lead.updatedAt)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

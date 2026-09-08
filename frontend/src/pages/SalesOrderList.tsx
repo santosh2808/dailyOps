@@ -297,10 +297,14 @@ export default function SalesOrderList() {
                   </button>
                 </TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Quotation</TableHead>
-                <TableHead>Sales Executive</TableHead>
+                {/* Bug fix: lower-priority columns now progressively appear
+                    from md/lg/xl up instead of all nine always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden xl:table-cell">Quotation</TableHead>
+                <TableHead className="hidden lg:table-cell">Sales Executive</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -310,7 +314,7 @@ export default function SalesOrderList() {
                     {sortIcon("grandTotal")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -358,13 +362,13 @@ export default function SalesOrderList() {
                     <TableCell>
                       <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
                     </TableCell>
-                    <TableCell>{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
-                    <TableCell>{salesOrder.createdBy ?? "—"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{salesOrder.createdBy ?? "—"}</TableCell>
                     <TableCell>
                       <SalesOrderStatusBadge status={salesOrder.status} />
                     </TableCell>
-                    <TableCell>{formatCurrency(salesOrder.grandTotal)}</TableCell>
-                    <TableCell>{formatDate(salesOrder.deliveryDate)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatCurrency(salesOrder.grandTotal)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(salesOrder.deliveryDate)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

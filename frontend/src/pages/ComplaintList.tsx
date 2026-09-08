@@ -196,10 +196,14 @@ export default function ComplaintList() {
                 </TableHead>
                 <TableHead>Complaint No.</TableHead>
                 <TableHead>Subject</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Sales Order</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Invoice</TableHead>
+                {/* Bug fix: lower-priority columns now progressively
+                    appear from md/lg/xl up instead of all nine always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden xl:table-cell">Source</TableHead>
+                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                <TableHead className="hidden md:table-cell">Customer</TableHead>
+                <TableHead className="hidden lg:table-cell">Invoice</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -250,7 +254,7 @@ export default function ComplaintList() {
                       <TableCell>
                         <TruncatedText text={complaint.subject} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden xl:table-cell">
                         <Badge
                           variant={
                             complaint.source === "WEB_FORM"
@@ -263,11 +267,11 @@ export default function ComplaintList() {
                           {complaint.source.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell>{complaint.salesOrder?.salesOrderNumber || "—"}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">{complaint.salesOrder?.salesOrderNumber || "—"}</TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <TruncatedText text={customerName} />
                       </TableCell>
-                      <TableCell>{invoiceDisplay}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{invoiceDisplay}</TableCell>
                       <TableCell>
                         <ComplaintStatusBadge status={complaint.status} />
                       </TableCell>

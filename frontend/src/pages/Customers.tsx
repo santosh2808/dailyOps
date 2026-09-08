@@ -134,11 +134,11 @@ export default function Customers() {
             <TableHeader>
               <TableRow>
                 <TableHead>Company Name</TableHead>
-                <TableHead>Contact Person</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead className="hidden md:table-cell">Contact Person</TableHead>
+                <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                <TableHead className="hidden xl:table-cell">Email</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead>GST Number</TableHead>
+                <TableHead className="hidden lg:table-cell">GST Number</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -167,15 +167,15 @@ export default function Customers() {
                     <TableCell className="font-medium text-slate-900">
                       <TruncatedText text={customer.companyName} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <TruncatedText text={customer.contactPerson} className="max-w-[160px]" />
                     </TableCell>
-                    <TableCell>{customer.phone}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">{customer.phone}</TableCell>
+                    <TableCell className="hidden xl:table-cell">
                       <TruncatedText text={customer.email || "—"} />
                     </TableCell>
                     <TableCell>{customer.state || "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       {customer.gstNumber ? (
                         customer.gstNumber
                       ) : customer.isGstRegistered ? (

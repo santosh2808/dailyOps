@@ -141,9 +141,9 @@ export default function TaxInvoiceList() {
                   </button>
                 </TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Sales Order</TableHead>
+                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -153,7 +153,7 @@ export default function TaxInvoiceList() {
                     {sortIcon("grandTotal")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -194,12 +194,12 @@ export default function TaxInvoiceList() {
                     <TableCell>
                       <TruncatedText text={invoice.customer?.companyName ?? "—"} />
                     </TableCell>
-                    <TableCell>{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                     <TableCell>
                       <TaxInvoiceStatusBadge status={invoice.status} />
                     </TableCell>
-                    <TableCell>{formatCurrency(invoice.grandTotal)}</TableCell>
-                    <TableCell>{formatDate(invoice.invoiceDate)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(invoice.invoiceDate)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

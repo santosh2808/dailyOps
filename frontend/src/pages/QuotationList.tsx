@@ -242,8 +242,12 @@ export default function QuotationList() {
                 </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>
+                {/* Bug fix: lower-priority columns now progressively appear
+                    from md/lg up instead of all eight always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden lg:table-cell">Items</TableHead>
+                <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -253,7 +257,7 @@ export default function QuotationList() {
                     {sortIcon("grandTotal")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <button
                     type="button"
                     className="flex items-center"
@@ -304,9 +308,9 @@ export default function QuotationList() {
                     <TableCell>
                       <QuotationStatusBadge status={quotation.status} />
                     </TableCell>
-                    <TableCell>{quotation._count?.items ?? 0}</TableCell>
-                    <TableCell>{formatCurrency(quotation.grandTotal)}</TableCell>
-                    <TableCell>{formatDate(quotation.validUntil)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{quotation._count?.items ?? 0}</TableCell>
+                    <TableCell className="hidden md:table-cell">{formatCurrency(quotation.grandTotal)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(quotation.validUntil)}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

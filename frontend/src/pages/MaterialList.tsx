@@ -252,10 +252,14 @@ export default function MaterialList() {
                 </TableHead>
                 <TableHead>Material Code</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Cost</TableHead>
-                <TableHead>Current Stock</TableHead>
+                {/* Bug fix: lower-priority columns now progressively
+                    appear from md/lg up instead of all nine always being
+                    rendered at once, which forced a horizontal scroll on
+                    anything narrower than a wide desktop monitor. */}
+                <TableHead className="hidden md:table-cell">Category</TableHead>
+                <TableHead className="hidden lg:table-cell">Unit</TableHead>
+                <TableHead className="hidden lg:table-cell">Cost</TableHead>
+                <TableHead className="hidden md:table-cell">Current Stock</TableHead>
                 <TableHead>Stock Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -295,10 +299,10 @@ export default function MaterialList() {
                     <TableCell>
                       <TruncatedText text={material.name} />
                     </TableCell>
-                    <TableCell>{material.category?.name ?? "—"}</TableCell>
-                    <TableCell>{material.unit?.symbol || material.unit?.name || "—"}</TableCell>
-                    <TableCell>{formatCurrency(material.cost)}</TableCell>
-                    <TableCell>{material.currentStock}</TableCell>
+                    <TableCell className="hidden md:table-cell">{material.category?.name ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{material.unit?.symbol || material.unit?.name || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatCurrency(material.cost)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{material.currentStock}</TableCell>
                     <TableCell>
                       <MaterialStockBadge material={material} />
                     </TableCell>
