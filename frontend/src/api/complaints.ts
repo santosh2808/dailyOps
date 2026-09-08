@@ -18,6 +18,10 @@ export interface ComplaintPayload {
   salesOrderId: string;
   subject: string;
   description?: string;
+  // Bug fix (TC-042/TC-048): optional, create-only (see ComplaintForm) —
+  // when given, the backend auto-verifies it against TaxInvoice right at
+  // creation instead of requiring a separate manual lookup/link step.
+  invoiceNumber?: string;
 }
 
 export interface ComplaintStatusPayload {

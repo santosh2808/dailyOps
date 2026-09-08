@@ -507,6 +507,30 @@ async function main() {
         '<p>Subject: {{subjectLabel}}<br/>From: {{customerName}}</p>' +
         '<p>{{message}}</p>',
     },
+    // Bug fix (TC-048): sent by ComplaintsService.create() (the internal
+    // "Log Complaint" path) right after the transaction commits — the
+    // mirror-image of WEB_COMPLAINT_RECEIVED above, which only ever fires
+    // for a web-form-originated complaint. Keyed by complaintNumber, not
+    // referenceNumber, since a manually-logged complaint has no
+    // WebFormIntake.
+    {
+      key: 'COMPLAINT_LOGGED_CONFIRMATION',
+      name: 'Complaint Logged — Customer Confirmation',
+      subject: 'We received your complaint — {{complaintNumber}}',
+      bodyHtml:
+        '<div style="font-family:Arial;padding:20px">' +
+        '<h2>Thank you for contacting Smart Rotamac Support</h2>' +
+        '<p>Dear <b>{{customerName}}</b>,</p>' +
+        '<p>Your complaint has been logged successfully.</p>' +
+        '<div style="background:#F3F4F6;padding:15px;border-radius:8px">' +
+        '<h3>Complaint Number</h3>' +
+        '<h1 style="color:#2563EB">{{complaintNumber}}</h1>' +
+        '</div>' +
+        '<p>Our support team will review your request and contact you shortly.</p>' +
+        '<hr>' +
+        '<p style="color:#6B7280">Smart Rotamac Support Team</p>' +
+        '</div>',
+    },
     {
       key: 'LEAD_ASSIGNED',
       name: 'Lead Assigned To You',

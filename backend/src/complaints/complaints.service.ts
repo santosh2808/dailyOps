@@ -56,8 +56,22 @@ const COMPLAINT_DETAIL_INCLUDE = {
   webFormIntake: {
     select: { id: true, referenceNumber: true, subjectLabel: true, submittedData: true, createdAt: true },
   },
-  taxInvoice: { select: { id: true, invoiceNumber: true } },
-  taxInvoiceItem: { select: { id: true, productName: true, productSku: true } },
+  taxInvoice: { select: { id: true, invoiceNumber: true, invoiceDate: true } },
+  // Bug fix (TC-043): "warranty" isn't a computable field anywhere in this
+  // schema — Product.technicalSpec only ever carries it as free descriptive
+  // text (warrantyMotor/warrantyDrive/warrantyOther, e.g. "36 months from
+  // the date of erection"). Including it here lets Complaint Details show
+  // that text next to the verified invoice/customer info instead of nothing
+  // at all, without pretending there's a computed in-warranty/expired date
+  // this data can't actually support.
+  taxInvoiceItem: {
+    select: {
+      id: true,
+      productName: true,
+      productSku: true,
+      product: { select: { id: true, name: true, technicalSpec: true } },
+    },
+  },
 } satisfies Prisma.ComplaintInclude;
 
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'complaintNumber', 'status'] as const;
@@ -150,10 +164,19 @@ export class ComplaintsService {
               description: dto.description,
               createdBy,
             },
-            include: COMPLAINT_DETAIL_INCLUDE,
           });
           await this.logHistory(tx, complaint.id, 'CREATED', `Complaint ${complaint.complaintNumber} created`, createdBy);
-          return complaint;
+
+          // Bug fix (TC-042/TC-048): Log Complaint now optionally captures an
+          // invoice number up front — verify it immediately instead of
+          // leaving every manually-logged complaint permanently UNVERIFIED
+          // until a staff member separately runs the Invoice Verification
+          // lookup on the Details page.
+          if (dto.invoiceNumber?.trim()) {
+            await this.autoVerifyInvoice(tx, complaint.id, dto.invoiceNumber.trim());
+          }
+
+          return tx.complaint.findUniqueOrThrow({ where: { id: complaint.id }, include: COMPLAINT_DETAIL_INCLUDE });
         });
 
         await this.auditLogService
@@ -165,6 +188,15 @@ export class ComplaintsService {
             newValue: { complaintNumber: created.complaintNumber, subject: created.subject },
           })
           .catch((error) => this.logger.error('AuditLog record failed', error));
+
+        // Bug fix (TC-048): Log Complaint previously never sent any
+        // acknowledgement — a web-originated complaint already gets one via
+        // PublicFormsService.sendSubmissionNotifications(); this is the same
+        // send for a manually-logged one. Runs after the transaction commits
+        // and never blocks/fails complaint creation (see method comment).
+        await this.sendComplaintLoggedConfirmation(created).catch((error) =>
+          this.logger.error('Complaint confirmation email failed', error),
+        );
 
         return created;
       } catch (error) {
@@ -242,13 +274,16 @@ export class ComplaintsService {
   //    fields, verbatim — a web-originated complaint may have no verified
   //    Customer/SalesOrder yet, hence these plain scalar reporter columns.
   //  - claimedInvoiceNumber: fields.invoiceNumber if the submitter supplied
-  //    one — unverified until staff runs the invoice lookup (linkInvoice()
-  //    below).
+  //    one — auto-verified against TaxInvoice immediately (see
+  //    autoVerifyInvoice() below); staff can still correct a wrong/missing
+  //    match manually via invoice-lookup/link-invoice afterwards.
   //  - subject/description: the resolved route's subjectLabel / the
   //    submitted message.
   //  - assignedToUserId/departmentId: the resolved route's own values, or
   //    null — never defaulted.
-  //  - warrantyVerificationStatus always starts UNVERIFIED.
+  //  - warrantyVerificationStatus starts UNVERIFIED and only ever changes
+  //    from inside autoVerifyInvoice() (VERIFIED/NOT_FOUND) — never
+  //    defaulted to anything else here.
   async createFromWebFormIntake(
     input: {
       formWebsiteId: string;
@@ -281,13 +316,13 @@ export class ComplaintsService {
         reporterName: input.name,
         reporterEmail: input.email || undefined,
         reporterPhone: input.phone || undefined,
-        claimedInvoiceNumber: input.invoiceNumber || undefined,
         assignedToUserId: input.assignedToUserId ?? undefined,
         departmentId: input.departmentId ?? undefined,
         submittedData: input.submittedData,
-        warrantyVerificationStatus: 'UNVERIFIED',
+        // claimedInvoiceNumber/warrantyVerificationStatus are set by
+        // autoVerifyInvoice() below when the submitter gave a number;
+        // otherwise both stay at their schema defaults (null / UNVERIFIED).
       },
-      include: COMPLAINT_DETAIL_INCLUDE,
     });
 
     await this.logHistory(
@@ -297,7 +332,88 @@ export class ComplaintsService {
       `Complaint ${complaint.complaintNumber} created from website submission (${input.subjectLabel})`,
     );
 
-    return complaint;
+    // Bug fix (TC-042): auto-verify the submitter's claimed invoice number
+    // right away, same as the manual Log Complaint path in create() —
+    // previously this was left permanently UNVERIFIED until a staff member
+    // ran the lookup by hand.
+    if (input.invoiceNumber?.trim()) {
+      await this.autoVerifyInvoice(tx, complaint.id, input.invoiceNumber.trim());
+    }
+
+    return tx.complaint.findUniqueOrThrow({ where: { id: complaint.id }, include: COMPLAINT_DETAIL_INCLUDE });
+  }
+
+  // Bug fix (TC-042): runs the same TaxInvoice match findInvoiceForLookup()
+  // already implements, but automatically at complaint-creation time instead
+  // of waiting for a separate manual "Look Up"/"Link Invoice" step. A match
+  // sets taxInvoiceId/warrantyVerificationStatus VERIFIED and logs
+  // INVOICE_LINKED (the same outcome linkInvoice() produces); no match sets
+  // claimedInvoiceNumber/NOT_FOUND and logs INVOICE_NOT_FOUND so staff can
+  // still see what was typed and correct it manually via the existing
+  // lookup/link endpoints. Never throws — an unmatched or malformed number
+  // must never block the complaint itself from being created.
+  private async autoVerifyInvoice(tx: Prisma.TransactionClient, complaintId: string, invoiceNumber: string) {
+    const invoice = await tx.taxInvoice.findUnique({ where: { invoiceNumber } });
+    if (invoice) {
+      await tx.complaint.update({
+        where: { id: complaintId },
+        data: {
+          claimedInvoiceNumber: invoiceNumber,
+          taxInvoiceId: invoice.id,
+          warrantyVerificationStatus: 'VERIFIED',
+        },
+      });
+      await this.logHistory(tx, complaintId, 'INVOICE_LINKED', `Automatically matched Tax Invoice ${invoice.invoiceNumber}`);
+    } else {
+      await tx.complaint.update({
+        where: { id: complaintId },
+        data: { claimedInvoiceNumber: invoiceNumber, warrantyVerificationStatus: 'NOT_FOUND' },
+      });
+      await this.logHistory(
+        tx,
+        complaintId,
+        'INVOICE_NOT_FOUND',
+        `No Tax Invoice found matching "${invoiceNumber}" — verify manually`,
+      );
+    }
+  }
+
+  // Bug fix (TC-048): the confirmation send for a manually-logged
+  // complaint — mirrors PublicFormsService.sendSubmissionNotifications()'s
+  // customer-acknowledgement send for a web-originated one (same Mailer/
+  // EmailHistory pipeline, same "only if a recipient email is on file, never
+  // fabricated" rule). A manual complaint has no reporterEmail of its own —
+  // its only possible recipient is its Sales Order's Customer — so this
+  // simply no-ops when that's unset, rather than failing the send.
+  private async sendComplaintLoggedConfirmation(
+    complaint: Prisma.ComplaintGetPayload<{ include: typeof COMPLAINT_DETAIL_INCLUDE }>,
+  ) {
+    const recipientEmail = complaint.salesOrder?.customer?.email;
+    if (!recipientEmail) return;
+
+    await this.mailerService.send({
+      templateKey: 'COMPLAINT_LOGGED_CONFIRMATION',
+      fallbackSubject: 'We received your complaint — {{complaintNumber}}',
+      fallbackBodyHtml:
+        '<div style="font-family:Arial;padding:20px">' +
+        '<h2>Thank you for contacting Smart Rotamac Support</h2>' +
+        '<p>Dear <b>{{customerName}}</b>,</p>' +
+        '<p>Your complaint has been logged successfully.</p>' +
+        '<div style="background:#F3F4F6;padding:15px;border-radius:8px">' +
+        '<h3>Complaint Number</h3>' +
+        '<h1 style="color:#2563EB">{{complaintNumber}}</h1>' +
+        '</div>' +
+        '<p>Our support team will review your request and contact you shortly.</p>' +
+        '<hr>' +
+        '<p style="color:#6B7280">Smart Rotamac Support Team</p>' +
+        '</div>',
+      vars: {
+        customerName: complaint.salesOrder?.customer?.companyName ?? 'Customer',
+        complaintNumber: complaint.complaintNumber,
+      },
+      to: recipientEmail,
+      link: { module: 'Complaint', complaintId: complaint.id },
+    });
   }
 
   // Invoice lookup — the staff-facing step that turns a customer-typed,

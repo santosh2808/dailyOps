@@ -1113,6 +1113,12 @@ enum ComplaintHistoryAction {
   CONVERTED_TO_LEAD
   CONVERTED_FROM_LEAD
   CUSTOMER_REPLIED
+  // Bug fix (TC-042): logged when an invoice number given at complaint
+  // creation (manual Log Complaint's new optional field, or a web-form
+  // submitter's claimed invoice number) doesn't match any TaxInvoice — the
+  // mirror-image "no match" outcome of the existing INVOICE_LINKED action,
+  // which only ever fires on a successful match.
+  INVOICE_NOT_FOUND
 }
 
 model ComplaintHistory {

@@ -17,12 +17,14 @@ interface FormState {
   salesOrderId: string;
   subject: string;
   description: string;
+  invoiceNumber: string;
 }
 
 const emptyForm: FormState = {
   salesOrderId: "",
   subject: "",
   description: "",
+  invoiceNumber: "",
 };
 
 export default function ComplaintForm() {
@@ -51,6 +53,7 @@ export default function ComplaintForm() {
           salesOrderId: complaint.salesOrderId ?? "",
           subject: complaint.subject,
           description: complaint.description ?? "",
+          invoiceNumber: complaint.claimedInvoiceNumber ?? "",
         });
         if (complaint.salesOrder) {
           setSelectedSalesOrder(complaint.salesOrder as unknown as SalesOrder);
@@ -101,6 +104,7 @@ export default function ComplaintForm() {
           salesOrderId: form.salesOrderId,
           subject: form.subject.trim(),
           description: form.description.trim() || undefined,
+          invoiceNumber: form.invoiceNumber.trim() || undefined,
         };
         const created = await createComplaint(payload);
         toast.success("Complaint logged successfully.");
@@ -177,6 +181,23 @@ export default function ComplaintForm() {
                     />
                     {errors.subject && <p className="text-xs text-destructive">{errors.subject}</p>}
                   </div>
+
+                  {!isEdit && (
+                    <div className="space-y-2">
+                      <Label htmlFor="invoiceNumber">Invoice Number</Label>
+                      <Input
+                        id="invoiceNumber"
+                        value={form.invoiceNumber}
+                        onChange={(e) => update("invoiceNumber", e.target.value)}
+                        placeholder="e.g. TI-2026-000123 (if known)"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        If the customer has their invoice number, entering it here verifies the
+                        complaint against it automatically. Leave blank if unknown — it can be
+                        looked up later from the complaint's Details page.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>

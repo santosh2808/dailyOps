@@ -19,4 +19,17 @@ export class CreateComplaintDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // Bug fix (TC-042/TC-048): Log Complaint previously never asked for an
+  // invoice number at all, so a manually-logged complaint could only ever
+  // be verified later via the separate Invoice Verification lookup/link
+  // step on the Details page. Optional here (a complaint can still be
+  // logged before the customer has the number handy) — when supplied,
+  // ComplaintsService.create() auto-runs the same TaxInvoice lookup
+  // findInvoiceForLookup()/linkInvoice() already use, right at creation
+  // time, instead of requiring a separate manual step.
+  @ApiPropertyOptional({ example: 'TI-2026-000123' })
+  @IsOptional()
+  @IsString()
+  invoiceNumber?: string;
 }

@@ -305,23 +305,64 @@ export default function ComplaintDetails() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {complaint.taxInvoiceId ? (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Badge variant="success">
-                        <ShieldCheck className="mr-1 h-3.5 w-3.5" />
-                        Verified
-                      </Badge>
-                      <span className="text-sm text-slate-900">
-                        Tax Invoice: <span className="font-medium">{complaint.taxInvoice?.invoiceNumber}</span>
-                      </span>
-                      {complaint.taxInvoiceItem && (
-                        <span className="text-sm text-muted-foreground">
-                          Item: {complaint.taxInvoiceItem.productName}
-                          {complaint.taxInvoiceItem.productSku ? ` (${complaint.taxInvoiceItem.productSku})` : ""}
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge variant="success">
+                          <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+                          Verified
+                        </Badge>
+                        <span className="text-sm text-slate-900">
+                          Tax Invoice: <span className="font-medium">{complaint.taxInvoice?.invoiceNumber}</span>
+                          {complaint.taxInvoice?.invoiceDate && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              (dated {new Date(complaint.taxInvoice.invoiceDate).toLocaleDateString()})
+                            </span>
+                          )}
                         </span>
-                      )}
+                        {complaint.taxInvoiceItem && (
+                          <span className="text-sm text-muted-foreground">
+                            Item: {complaint.taxInvoiceItem.productName}
+                            {complaint.taxInvoiceItem.productSku ? ` (${complaint.taxInvoiceItem.productSku})` : ""}
+                          </span>
+                        )}
+                      </div>
+                      {/* Bug fix (TC-043): "warranty" has no computed status
+                          anywhere in this schema — Product.technicalSpec only
+                          ever carries it as free descriptive text. Showing
+                          that text here (once an invoice item is verified) is
+                          what this requirement can actually support without
+                          fabricating an in-warranty/expired date this data
+                          was never designed to compute. */}
+                      {(() => {
+                        const spec = complaint.taxInvoiceItem?.product?.technicalSpec;
+                        const warrantyLines = [
+                          spec?.warrantyMotor ? `Motor: ${spec.warrantyMotor}` : null,
+                          spec?.warrantyDrive ? `Drive: ${spec.warrantyDrive}` : null,
+                          spec?.warrantyOther ? `Other: ${spec.warrantyOther}` : null,
+                        ].filter((line): line is string => Boolean(line));
+                        if (warrantyLines.length === 0) return null;
+                        return (
+                          <div className="rounded-md border bg-slate-50 p-3">
+                            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Warranty
+                            </p>
+                            <ul className="space-y-0.5 text-sm text-slate-900">
+                              {warrantyLines.map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      {complaint.warrantyVerificationStatus === "NOT_FOUND" && (
+                        <Badge variant="destructive">
+                          Not Found — automatic check found no matching Tax Invoice
+                        </Badge>
+                      )}
                       {complaint.claimedInvoiceNumber && (
                         <p className="text-sm text-muted-foreground">
                           Reporter claimed invoice number:{" "}
