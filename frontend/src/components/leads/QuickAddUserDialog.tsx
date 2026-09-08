@@ -128,7 +128,7 @@ export default function QuickAddUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Add User</DialogTitle>
           <DialogDescription>

@@ -63,7 +63,7 @@ export default function ImportMaterialsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent onClose={handleClose} className="max-w-2xl">
+      <DialogContent onClose={handleClose} size="xl">
         <DialogHeader>
           <DialogTitle>Import Materials from Excel</DialogTitle>
           <DialogDescription>

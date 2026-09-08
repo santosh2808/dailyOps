@@ -105,7 +105,7 @@ export default function GenerateTaxInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Generate Tax Invoice</DialogTitle>
           <DialogDescription>

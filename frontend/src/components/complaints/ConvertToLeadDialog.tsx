@@ -65,7 +65,7 @@ export default function ConvertToLeadDialog({ open, onOpenChange, complaint }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Convert to Lead</DialogTitle>
           <DialogDescription>

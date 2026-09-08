@@ -33,7 +33,7 @@ export default function ConfirmPriceIncludesChargesDialog({
 }: ConfirmPriceIncludesChargesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Does this price include everything?</DialogTitle>
           <DialogDescription>

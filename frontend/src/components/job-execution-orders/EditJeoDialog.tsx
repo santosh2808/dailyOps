@@ -101,7 +101,7 @@ export default function EditJeoDialog({ open, onOpenChange, jeo, onSaved }: Edit
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Edit Job Execution Order</DialogTitle>
           <DialogDescription>

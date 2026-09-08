@@ -104,7 +104,7 @@ export default function EInvoiceDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>GST e-Invoice Details</DialogTitle>
           <DialogDescription>

@@ -46,7 +46,7 @@ export default function DeleteLeadConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Delete Lead</DialogTitle>
           <DialogDescription>

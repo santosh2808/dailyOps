@@ -342,7 +342,7 @@ function NewFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} className="max-w-2xl">
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Add Form</DialogTitle>
           <DialogDescription>
@@ -351,7 +351,7 @@ function NewFormDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="form-code">Code</Label>
               <Input id="form-code" placeholder="CONTACT_FORM" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -440,7 +440,7 @@ function NewVersionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} className="max-w-2xl">
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Edit Fields — {target.formName}</DialogTitle>
           <DialogDescription>
@@ -739,7 +739,7 @@ function ProductMappingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>{mapping ? "Edit Product Mapping" : "Add Product Mapping"}</DialogTitle>
           <DialogDescription>Map this website's own product code/label onto a catalog Product.</DialogDescription>
@@ -760,7 +760,7 @@ function ProductMappingDialog({
               ))}
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="pm-code">Public Code</Label>
               <Input id="pm-code" placeholder="SPYRO-24" value={publicCode} onChange={(e) => setPublicCode(e.target.value)} />
@@ -1056,7 +1056,7 @@ function SubjectRouteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} className="max-w-xl">
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>{route ? "Edit Subject Route" : "Add Subject Route"}</DialogTitle>
           <DialogDescription>
@@ -1065,7 +1065,7 @@ function SubjectRouteDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="route-code">Subject Code</Label>
               <Input
@@ -1092,7 +1092,7 @@ function SubjectRouteDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="route-destination">Destination</Label>
               <Select
@@ -1114,7 +1114,7 @@ function SubjectRouteDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="route-product">Product</Label>
               <Select id="route-product" value={productId} onChange={(e) => setProductId(e.target.value)}>

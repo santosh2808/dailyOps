@@ -65,7 +65,7 @@ export default function ConvertToComplaintDialog({ open, onOpenChange, lead }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Convert to Complaint</DialogTitle>
           <DialogDescription>

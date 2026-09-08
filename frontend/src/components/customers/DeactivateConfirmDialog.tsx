@@ -46,7 +46,7 @@ export default function DeactivateConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Deactivate Customer</DialogTitle>
           <DialogDescription>

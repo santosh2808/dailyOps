@@ -29,16 +29,39 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   );
 }
 
+// Bug fix (consistency pass): every dialog in the app used to pick its own
+// one-off max-w-* class by hand (or none, silently falling back to a bare
+// default) — the result was popups that were visibly different widths for
+// no content reason, drifting further apart every time a new one got added.
+// This is now the one place dialog width comes from — pick a `size` below
+// instead of passing a max-w-* className:
+//   sm  (384px)  — confirmations / single yes-or-no or one-field actions
+//   md  (512px)  — default; everyday single-column forms (unchanged from
+//                  this component's old hardcoded width, so anything that
+//                  doesn't pass `size` looks exactly as it did before)
+//   lg  (672px)  — forms with a two-column field grid (needs the extra
+//                  width so the grid doesn't cram itself into a narrow
+//                  dialog — see ProductFormDialog/CustomerFormDialog/etc.)
+//   xl  (768px)  — import/bulk dialogs with a data preview table
+const dialogSizes = {
+  sm: "max-w-sm",
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-3xl",
+} as const;
+
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void;
+  size?: keyof typeof dialogSizes;
 }
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, onClose, ...props }, ref) => (
+  ({ className, children, onClose, size = "md", ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        "relative mx-auto w-full max-w-lg rounded-lg border bg-card p-6 shadow-lg",
+        "relative mx-auto w-full rounded-lg border bg-card p-6 shadow-lg",
+        dialogSizes[size],
         className
       )}
       {...props}

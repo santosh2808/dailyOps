@@ -113,7 +113,7 @@ export default function EditProformaInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="lg">
         <DialogHeader>
           <DialogTitle>Edit Proforma Invoice</DialogTitle>
           <DialogDescription>

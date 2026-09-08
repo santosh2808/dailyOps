@@ -50,7 +50,7 @@ export default function ConfirmQuotationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Confirm Before Quoting</DialogTitle>
           <DialogDescription>

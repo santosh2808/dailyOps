@@ -153,7 +153,7 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent onClose={handleClose} className="max-w-3xl">
+      <DialogContent onClose={handleClose} size="xl">
         <DialogHeader>
           <DialogTitle>Import Leads</DialogTitle>
           <DialogDescription>

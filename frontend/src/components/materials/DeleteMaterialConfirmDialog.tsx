@@ -46,7 +46,7 @@ export default function DeleteMaterialConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Delete Material</DialogTitle>
           <DialogDescription>
