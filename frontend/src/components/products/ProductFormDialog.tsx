@@ -269,7 +269,7 @@ export default function ProductFormDialog({
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="category">Category *</Label>
               <Input
@@ -360,7 +360,7 @@ export default function ProductFormDialog({
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Price Validation (Quotation approval)
             </p>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="standardPrice">Standard Price</Label>
                 <Input
@@ -414,7 +414,7 @@ export default function ProductFormDialog({
               Fills the Annexure-I spec table on this fan size's Quotation PDF. Leave anything
               blank if it doesn't apply — the PDF just shows an empty cell.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {SPEC_FIELDS.map(({ key, label, placeholder }) => (
                 <div key={key} className="space-y-1">
                   <Label htmlFor={`spec-${key}`} className="text-xs">

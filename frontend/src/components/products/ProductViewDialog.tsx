@@ -50,7 +50,7 @@ export default function ProductViewDialog({
           <DialogTitle>Product Details</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Product Name" value={product.name} />
           <Field label="Category" value={<Badge variant="orange">{product.category}</Badge>} />
           <Field label="SKU / Model Code" value={product.sku} />

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -172,7 +173,7 @@ export default function UserFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="userName">Name *</Label>
               <Input
@@ -194,7 +195,7 @@ export default function UserFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="userEmail">Email *</Label>
               <Input
@@ -225,9 +226,8 @@ export default function UserFormDialog({
           {!isEdit && (
             <div className="space-y-2">
               <Label htmlFor="userPassword">Initial Password *</Label>
-              <Input
+              <PasswordInput
                 id="userPassword"
-                type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />

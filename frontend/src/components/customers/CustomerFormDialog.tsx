@@ -175,7 +175,7 @@ export default function CustomerFormDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="phone">Phone *</Label>
               <Input
@@ -213,7 +213,7 @@ export default function CustomerFormDialog({
             </Label>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="gstNumber">
                 GST Number{form.isGstRegistered ? " *" : ""}

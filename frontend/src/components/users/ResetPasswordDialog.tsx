@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -83,9 +83,8 @@ export default function ResetPasswordDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="resetPassword">New Password</Label>
-            <Input
+            <PasswordInput
               id="resetPassword"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoFocus
