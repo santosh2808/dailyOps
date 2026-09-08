@@ -29,6 +29,7 @@ export const PRIORITY_OPTIONS: { value: LeadPriority; label: string; badge: Badg
 export const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: "WEBSITE", label: "Website" },
   { value: "LINKEDIN", label: "LinkedIn" },
+  { value: "META", label: "Meta" },
   { value: "REFERENCE", label: "Reference" },
   { value: "TRADE_SHOW", label: "Trade Show" },
   { value: "COLD_CALL", label: "Cold Call" },

@@ -351,12 +351,19 @@ export default function LeadList() {
                       <TruncatedText text={lead.email || "-"} />
                     </TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-1.5">
-                        {sourceLabel(lead.source)}
-                        {lead.source === "WEBSITE" && lead.sourceWebsiteId && (
-                          <Badge variant="info">Website</Badge>
-                        )}
-                      </span>
+                      {/* Bug fix (TC-040): this used to show the source
+                          label ("Website") and then a static "Website"
+                          badge right next to it — literally repeating the
+                          same word. When the lead actually has a linked
+                          source website, show that website's own name
+                          (more useful than the redundant label) instead of
+                          a duplicate "Website" badge; otherwise just the
+                          plain source label. */}
+                      {lead.source === "WEBSITE" && lead.sourceWebsite ? (
+                        <Badge variant="info">{lead.sourceWebsite.name}</Badge>
+                      ) : (
+                        sourceLabel(lead.source)
+                      )}
                     </TableCell>
                     <TableCell>{lead.state || "—"}</TableCell>
                     {/* Full name only — never the role — with an explicit

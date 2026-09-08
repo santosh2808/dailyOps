@@ -12,7 +12,6 @@ import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
-import ConvertToComplaintDialog from "@/components/leads/ConvertToComplaintDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +65,6 @@ export default function LeadDetails() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [confirmQuoteOpen, setConfirmQuoteOpen] = useState(false);
-  const [convertToComplaintOpen, setConvertToComplaintOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -210,14 +208,6 @@ export default function LeadDetails() {
                       Convert to Customer
                     </Button>
                   )}
-                  {!lead.convertedToComplaintId &&
-                    hasPermission("Lead", "Edit") &&
-                    hasPermission("Complaint", "Create") && (
-                      <Button variant="outline" onClick={() => setConvertToComplaintOpen(true)}>
-                        <ArrowRightCircle className="mr-2 h-4 w-4" />
-                        Convert to Complaint
-                      </Button>
-                    )}
                   <Button variant="outline" onClick={() => setStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -506,7 +496,6 @@ export default function LeadDetails() {
         lead={lead}
         onConfirm={handleGenerateQuotation}
       />
-      <ConvertToComplaintDialog open={convertToComplaintOpen} onOpenChange={setConvertToComplaintOpen} lead={lead} />
     </div>
   );
 }

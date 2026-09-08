@@ -325,6 +325,7 @@ export const LEAD_SOURCES = [
   "WALK_IN",
   "EMAIL",
   "PHONE",
+  "META",
   "OTHER",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];

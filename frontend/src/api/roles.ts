@@ -12,6 +12,14 @@ export async function listRoles() {
   return res.data;
 }
 
+// Lead Assignment "+ Add User" modal (QuickAddUserDialog) — Sales
+// Executive/Sales Manager only, gated by User:Create rather than Role:View.
+// See RolesController#findAssignable.
+export async function listAssignableRoles() {
+  const res = await api.get<Pick<Role, "id" | "name">[]>("/api/v1/roles/assignable");
+  return res.data;
+}
+
 export async function getRole(id: string) {
   const res = await api.get<Role>(`/api/v1/roles/${id}`);
   return res.data;

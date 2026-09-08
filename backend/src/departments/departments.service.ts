@@ -14,6 +14,14 @@ export class DepartmentsService {
     });
   }
 
+  // Deliberately minimal fields (id/name only) — see DepartmentsController#findBasic.
+  findBasic() {
+    return this.prisma.department.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findOne(id: string) {
     const department = await this.prisma.department.findUnique({
       where: { id },

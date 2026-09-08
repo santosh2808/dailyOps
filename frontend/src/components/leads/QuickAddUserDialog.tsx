@@ -13,8 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { listDepartments } from "@/api/departments";
-import { listRoles } from "@/api/roles";
+import { listDepartmentsBasic } from "@/api/departments";
+import { listAssignableRoles } from "@/api/roles";
 import { quickCreateUser } from "@/api/users";
 import type { Department, RbacUser, Role } from "@/types";
 
@@ -25,7 +25,14 @@ import type { Department, RbacUser, Role } from "@/types";
 // every existing User invariant still holds. Role is a single select,
 // restricted to Sales Executive / Sales Manager, since this modal exists
 // only to populate the Lead Assignment dropdown.
-const ASSIGNABLE_ROLE_NAMES = ["Sales Executive", "Sales Manager"];
+//
+// Bug fix (TC-039/TC-046): this dialog used to call the full
+// listDepartments()/listRoles() (Department:View / Role:View) — permissions
+// no Sales role holds, so for anyone but an Administrator the selects never
+// populated and the whole dialog was effectively broken. Now calls the
+// dedicated listDepartmentsBasic()/listAssignableRoles() lookups, both
+// scoped to the same User:Create permission that already gates this
+// button's visibility (see AssignedToPicker.tsx).
 
 interface QuickAddUserDialogProps {
   open: boolean;
@@ -59,14 +66,12 @@ export default function QuickAddUserDialog({
   onCreated,
 }: QuickAddUserDialogProps) {
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Pick<Department, "id" | "name">[]>([]);
+  const [assignableRoles, setAssignableRoles] = useState<Pick<Role, "id" | "name">[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
-
-  const assignableRoles = roles.filter((r) => ASSIGNABLE_ROLE_NAMES.includes(r.name));
 
   useEffect(() => {
     if (!open) return;
@@ -75,10 +80,10 @@ export default function QuickAddUserDialog({
     setSubmitError("");
 
     setLoadingOptions(true);
-    Promise.all([listDepartments(), listRoles()])
+    Promise.all([listDepartmentsBasic(), listAssignableRoles()])
       .then(([deps, rls]) => {
         setDepartments(deps);
-        setRoles(rls);
+        setAssignableRoles(rls);
       })
       .catch(() => setSubmitError("Failed to load departments/roles."))
       .finally(() => setLoadingOptions(false));

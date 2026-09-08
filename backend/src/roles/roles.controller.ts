@@ -20,6 +20,19 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
+  // Lead Assignment "+ Add User" modal (QuickAddUserDialog) — deliberately
+  // gated by User:Create rather than Role:View, since Role:View also
+  // controls whether the full Administration -> Roles screen shows up in
+  // the sidebar (see Sidebar.tsx), which this lookup has no business
+  // exposing to whichever role holds User:Create (Sales Manager). Must be
+  // declared before the ':id' route below or Nest would try to resolve
+  // "assignable" as a role id.
+  @Get('assignable')
+  @RequirePermission('User', 'Create')
+  findAssignable() {
+    return this.rolesService.findAssignable();
+  }
+
   @Get(':id')
   @RequirePermission('Role', 'View')
   findOne(@Param('id') id: string) {

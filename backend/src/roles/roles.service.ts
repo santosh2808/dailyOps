@@ -8,6 +8,12 @@ const ROLE_INCLUDE = {
   _count: { select: { users: true } },
 };
 
+// Lead Assignment dropdown / "+ Add User" quick-create modal is scoped to
+// exactly these two roles — mirrors UsersService's own ASSIGNABLE_ROLE_NAMES
+// (kept as a separate small constant here rather than a cross-module import,
+// same convention as other tiny shared literals in this codebase).
+const ASSIGNABLE_ROLE_NAMES = ['Sales Executive', 'Sales Manager'];
+
 @Injectable()
 export class RolesService {
   constructor(private prisma: PrismaService) {}
@@ -15,6 +21,15 @@ export class RolesService {
   findAll() {
     return this.prisma.role.findMany({
       include: ROLE_INCLUDE,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // Deliberately minimal fields (id/name only) — see RolesController#findAssignable.
+  findAssignable() {
+    return this.prisma.role.findMany({
+      where: { name: { in: ASSIGNABLE_ROLE_NAMES } },
+      select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
   }

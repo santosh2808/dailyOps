@@ -143,6 +143,23 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     // Complaint permissions above); this only gates the admin config screen
     // (websites, forms, product mappings, subject routing).
     ...permissionsForModule('FormConfiguration'),
+    // Bug fix (TC-039/TC-046): the "+ Add User" quick-create button on the
+    // Lead Assignment picker (Create Lead form) is gated by user.create —
+    // with no Sales role holding it, only an Administrator could ever see
+    // the button, so a Sales Manager creating a lead had no working way to
+    // add a colleague on the fly (the button simply never rendered for
+    // them). Deliberately NOT granting role.view/department.view/user.view
+    // here — those gate the full Administration -> Roles/Departments/Users
+    // screens in the sidebar (see Sidebar.tsx), which this fix has no
+    // business exposing to a Sales Manager. QuickAddUserDialog's department/
+    // role dropdowns instead call two lookup endpoints scoped to this same
+    // user.create permission (RolesController#assignable,
+    // DepartmentsController#basic) rather than the full View endpoints.
+    // Scoped to Sales Manager only (not Sales Executive) — same convention
+    // as user administration being a manager-level action elsewhere in this
+    // app. UsersService.quickCreate() itself already restricts the role
+    // choice server-side to Sales Executive/Sales Manager regardless.
+    'user.create',
   ],
   'Sales Executive': [
     'lead.view',

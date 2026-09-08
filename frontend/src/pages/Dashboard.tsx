@@ -18,7 +18,6 @@ import {
   PackageSearch,
   PackageCheck,
   X,
-  MessageSquareWarning,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -642,17 +641,6 @@ export default function Dashboard() {
               icon={ClipboardList}
               loading={loading}
               onClick={() => navigate("/sales-orders")}
-            />
-            {/* Additive: Complaints module — replaces the old Revenue (This
-                Month) KPI card (revenue is already covered by the Revenue
-                Trend chart below, so this slot now surfaces customer-service
-                visibility instead). */}
-            <KpiCard
-              label="Open Complaints"
-              value={stats?.openComplaintsCount ?? 0}
-              icon={MessageSquareWarning}
-              loading={loading}
-              onClick={() => navigate("/complaints?status=OPEN")}
             />
             {/* Ready for Dispatch: this is what moves when production
                 finishes a Sales Order's JEO(s) on the Production Dashboard

@@ -20,6 +20,17 @@ export class DepartmentsController {
     return this.departmentsService.findAll();
   }
 
+  // Lead Assignment "+ Add User" modal (QuickAddUserDialog) — same reasoning
+  // as RolesController#findAssignable: gated by User:Create rather than
+  // Department:View, so this lookup doesn't also expose the full
+  // Administration -> Departments screen. Must be declared before the ':id'
+  // route below or Nest would try to resolve "basic" as a department id.
+  @Get('basic')
+  @RequirePermission('User', 'Create')
+  findBasic() {
+    return this.departmentsService.findBasic();
+  }
+
   @Get(':id')
   @RequirePermission('Department', 'View')
   findOne(@Param('id') id: string) {

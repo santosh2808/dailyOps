@@ -67,7 +67,9 @@ const emptyForm: FormState = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^\d{10,15}$/;
+// Indian mobile numbers are exactly 10 digits — previously accepted 10-15,
+// which let obviously-wrong 11-15 digit entries through.
+const PHONE_REGEX = /^\d{10}$/;
 
 // Dates come back from the API as full ISO timestamps; <input type="date">
 // needs just the yyyy-mm-dd portion.
@@ -158,10 +160,10 @@ export default function LeadForm() {
     if (!form.phone.trim()) {
       next.phone = "Phone is required";
     } else if (!PHONE_REGEX.test(form.phone.trim())) {
-      next.phone = "Phone must be 10-15 digits";
+      next.phone = "Phone must be exactly 10 digits";
     }
     if (form.alternatePhone.trim() && !PHONE_REGEX.test(form.alternatePhone.trim())) {
-      next.alternatePhone = "Alternate phone must be 10-15 digits";
+      next.alternatePhone = "Alternate phone must be exactly 10 digits";
     }
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
       next.email = "Enter a valid email address";

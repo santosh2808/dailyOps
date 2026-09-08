@@ -20,7 +20,10 @@ import {
 import { INDIA_STATES } from '../../common/india-states';
 import { LeadProductInputDto } from './lead-product-input.dto';
 
-const PHONE_REGEX = /^\d{10,15}$/;
+// Indian mobile numbers are exactly 10 digits — previously accepted 10-15,
+// which let obviously-wrong 11-15 digit entries through the backend even
+// though the message said "10-15 digits" (see TC-037).
+const PHONE_REGEX = /^\d{10}$/;
 
 export class CreateLeadDto {
   @ApiProperty({ example: 'Acme Corp' })
@@ -45,12 +48,12 @@ export class CreateLeadDto {
 
   @ApiProperty({ example: '9876543210' })
   @IsString()
-  @Matches(PHONE_REGEX, { message: 'Phone must be 10-15 digits' })
+  @Matches(PHONE_REGEX, { message: 'Phone must be exactly 10 digits' })
   phone: string;
 
   @ApiPropertyOptional({ example: '9123456780' })
   @IsOptional()
-  @Matches(PHONE_REGEX, { message: 'Alternate phone must be 10-15 digits' })
+  @Matches(PHONE_REGEX, { message: 'Alternate phone must be exactly 10 digits' })
   alternatePhone?: string;
 
   @ApiPropertyOptional({ example: 'Pune' })

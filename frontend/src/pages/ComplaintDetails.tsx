@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowRightCircle,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -21,7 +20,6 @@ import { Textarea } from "@/components/ui/textarea";
 import ComplaintStatusBadge from "@/components/complaints/ComplaintStatusBadge";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
 import ChangeComplaintStatusDialog from "@/components/complaints/ChangeComplaintStatusDialog";
-import ConvertToLeadDialog from "@/components/complaints/ConvertToLeadDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/context/AuthContext";
@@ -66,7 +64,6 @@ export default function ComplaintDetails() {
   const [error, setError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
-  const [convertToLeadOpen, setConvertToLeadOpen] = useState(false);
 
   // Invoice Verification — search-then-link flow.
   const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
@@ -190,7 +187,6 @@ export default function ComplaintDetails() {
   const salesOrder = complaint?.salesOrder;
   const customer = salesOrder?.customer;
   const invoice = salesOrder?.proformaInvoices?.[0];
-  const canConvertToLead = hasPermission("Complaint", "Edit") && hasPermission("Lead", "Create");
   const recipientEmail = complaint?.reporterEmail || customer?.email || null;
 
   return (
@@ -219,12 +215,6 @@ export default function ComplaintDetails() {
                   <p className="mt-0.5 truncate text-sm text-muted-foreground">{complaint.subject}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!complaint.convertedToLeadId && canConvertToLead && (
-                    <Button variant="outline" onClick={() => setConvertToLeadOpen(true)}>
-                      <ArrowRightCircle className="mr-2 h-4 w-4" />
-                      Convert to Lead
-                    </Button>
-                  )}
                   <DropdownMenu
                     trigger={
                       <Button variant="outline" size="icon" aria-label="More actions">
@@ -549,7 +539,6 @@ export default function ComplaintDetails() {
         complaint={complaint}
         onConfirm={handleStatusConfirm}
       />
-      <ConvertToLeadDialog open={convertToLeadOpen} onOpenChange={setConvertToLeadOpen} complaint={complaint} />
     </div>
   );
 }
