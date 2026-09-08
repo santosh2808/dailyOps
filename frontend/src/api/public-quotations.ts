@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import type { TransportScope } from "@/types";
 
 // Customer Quotation Acceptance workflow — the unauthenticated counterpart
 // to api/quotations.ts, used only by PublicQuotation.tsx (the /quote/:token
@@ -27,6 +28,8 @@ export interface PublicQuotationView {
   gstAmount: number;
   installationCharge: number;
   transportationCharge: number;
+  transportScope: TransportScope;
+  pricesIncludeChargesAndGst: boolean;
   grandTotal: number;
   paymentTerms?: string | null;
   deliveryTerms?: string | null;

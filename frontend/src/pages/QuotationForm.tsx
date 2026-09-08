@@ -606,7 +606,9 @@ export default function QuotationForm() {
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
                         GST ({gstPercentNum || 0}%){form.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
-                      <p className="font-medium text-slate-900">{formatCurrency(gstAmount)}</p>
+                      <p className="font-medium text-slate-900">
+                        {form.pricesIncludeChargesAndGst ? "Included" : formatCurrency(gstAmount)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>

@@ -308,8 +308,12 @@ export default function PublicQuotation() {
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">GST ({quotation.gstPercent}%)</span>
-                <span>{formatCurrency(quotation.gstAmount)}</span>
+                <span className="text-muted-foreground">
+                  GST ({quotation.gstPercent}%){quotation.pricesIncludeChargesAndGst ? " — Included" : ""}
+                </span>
+                <span>
+                  {quotation.pricesIncludeChargesAndGst ? "Included" : formatCurrency(quotation.gstAmount)}
+                </span>
               </div>
               <div className="flex justify-between border-t pt-1 text-base font-semibold text-slate-900">
                 <span>Grand Total</span>
