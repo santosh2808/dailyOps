@@ -59,9 +59,11 @@ function formatCurrency(value: number) {
 // totals, subtotal, GST, and grand total from the submitted items, so this
 // never needs to be the source of truth.
 export function lineTotal(item: QuotationItemPayload) {
-  // Color/hanging-structure charges are a flat extra amount for this line
-  // (not multiplied by quantity) — mirrors QuotationsService.computeTotals().
-  return item.quantity * (item.unitPrice ?? 0) + (item.colorCharge ?? 0) + (item.hangingStructureCharge ?? 0);
+  // Color/hanging-structure charges are a per-unit (per-fan) rate, scaled by
+  // quantity just like unitPrice — mirrors QuotationsService.computeTotals().
+  return (
+    item.quantity * ((item.unitPrice ?? 0) + (item.colorCharge ?? 0) + (item.hangingStructureCharge ?? 0))
+  );
 }
 
 export function computeSubtotal(items: QuotationItemPayload[]) {
@@ -85,6 +87,23 @@ export default function QuotationItemsEditor({
 
   function addProduct() {
     if (!pendingProductId) return;
+    // Bug fix: adding a product that's already on this quotation used to
+    // append a second, separate line for the same product instead of just
+    // bumping its quantity — two rows both showing "SPYRO Fan 1400mm" reads
+    // as a mistake and doubles up the color/hanging-structure inputs too.
+    // Combine into the existing row's quantity instead, matching how a
+    // customer actually orders "2 of this fan," not two half-configured
+    // lines for the same item.
+    const existingIndex = value.findIndex((row) => row.productId === pendingProductId);
+    if (existingIndex !== -1) {
+      onChange(
+        value.map((row, i) =>
+          i === existingIndex ? { ...row, quantity: (row.quantity ?? 0) + 1 } : row,
+        ),
+      );
+      setPendingProductId("");
+      return;
+    }
     const product = productMap.get(pendingProductId);
     onChange([
       ...value,

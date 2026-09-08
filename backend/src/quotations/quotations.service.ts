@@ -1532,10 +1532,15 @@ export class QuotationsService {
     const computedItems: ComputedItem[] = items.map((item) => {
       const unitPrice = item.unitPrice ?? productMap.get(item.productId)?.price ?? 0;
       const quantity = item.quantity;
-      // Additive: color/hanging-structure charges are a flat extra amount
-      // for this line (not multiplied by quantity) — folded straight into
-      // lineTotal, same convention as installationCharge/transportationCharge
-      // being flat quotation-wide amounts.
+      // colorCharge/hangingStructureCharge are a PER-UNIT (per-fan) rate —
+      // same convention as installationCharge's own Rs.8,000-per-fan rate
+      // (see STANDARD_PAINT_EXTRA_CHARGE on the frontend, prefilled as a
+      // per-fan surcharge). Bug fix: previously folded into lineTotal as a
+      // flat amount regardless of quantity, so a 2-fan line only ever
+      // charged the color/structure surcharge once instead of twice. The
+      // stored colorCharge/hangingStructureCharge fields keep meaning "the
+      // per-unit rate" (what staff typed in) — only lineTotal multiplies by
+      // quantity, matching how unitPrice itself is multiplied.
       const colorCharge = item.colorCharge ?? 0;
       const hangingStructureCharge = item.hangingStructureCharge ?? 0;
       return {
@@ -1543,7 +1548,8 @@ export class QuotationsService {
         description: item.description,
         quantity,
         unitPrice,
-        lineTotal: Math.round((quantity * unitPrice + colorCharge + hangingStructureCharge) * 100) / 100,
+        lineTotal:
+          Math.round((quantity * (unitPrice + colorCharge + hangingStructureCharge)) * 100) / 100,
         color: item.color,
         colorCharge,
         hangingStructureType: item.hangingStructureType,
