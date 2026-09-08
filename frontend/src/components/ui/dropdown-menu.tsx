@@ -87,6 +87,6 @@ export function DropdownMenuItem({ onSelect, icon: Icon, destructive, disabled, 
   );
 }
 
-export function DropdownMenuSeparator() {
-  return <div className="my-1 h-px bg-border" />;
+export function DropdownMenuSeparator({ className }: { className?: string } = {}) {
+  return <div className={cn("my-1 h-px bg-border", className)} />;
 }

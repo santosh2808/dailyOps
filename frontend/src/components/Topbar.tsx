@@ -1,7 +1,8 @@
-import { ArrowLeft, Menu } from "lucide-react";
+import { ArrowLeft, LogOut, Menu, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
+import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 interface TopbarProps {
   title?: string;
@@ -14,7 +15,7 @@ interface TopbarProps {
 }
 
 export default function Topbar({ title = "Dashboard", showBackButton = false }: TopbarProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toggle } = useSidebar();
   const navigate = useNavigate();
 
@@ -27,9 +28,25 @@ export default function Topbar({ title = "Dashboard", showBackButton = false }: 
         .toUpperCase()
     : "?";
 
+  // Bug fix (TC-047): `user.role` is a legacy free-text column that
+  // defaults to "admin" in the schema and is never set by
+  // UsersService.create()/quickCreate() — every user created since
+  // Enterprise RBAC replaced it (Sales Manager, Sales Executive,
+  // Production, Finance, Stores...) silently kept that stale default, so
+  // the profile section showed "admin" for everyone. `user.roles` holds
+  // the real RBAC role name(s) computed from UserRole/Role at login time —
+  // that's what's actually correct to display. Falls back to the legacy
+  // field only for the rare case roles is empty (no role assigned yet).
+  const displayRole = user?.roles?.length ? user.roles.join(", ") : user?.role;
+
   function goBack() {
     if (window.history.length > 1) navigate(-1);
     else navigate("/dashboard");
+  }
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
   }
 
   return (
@@ -67,14 +84,38 @@ export default function Topbar({ title = "Dashboard", showBackButton = false }: 
           <p className="text-sm font-medium text-slate-900">
             {user?.name ?? "Loading..."}
           </p>
-          <p className="text-xs text-muted-foreground">{user?.role}</p>
+          <p className="text-xs text-muted-foreground">{displayRole}</p>
         </div>
-        <div
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
-          title={user ? `${user.name} — ${user.role}` : undefined}
+        {/* Bug fix (TC-041): Settings and Logout are now reachable from a
+            profile menu on the avatar itself, not just the separate Logout
+            button at the bottom of the sidebar. "Settings" goes to the
+            existing self-service Change Password page — there's no other
+            per-user settings screen in this app yet. */}
+        <DropdownMenu
+          trigger={
+            <button
+              type="button"
+              aria-label="Profile menu"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              title={user ? `${user.name} — ${displayRole}` : undefined}
+            >
+              {initials}
+            </button>
+          }
         >
-          {initials}
-        </div>
+          <div className="px-2 py-1.5 sm:hidden">
+            <p className="text-sm font-medium text-slate-900">{user?.name ?? "Loading..."}</p>
+            <p className="text-xs text-muted-foreground">{displayRole}</p>
+          </div>
+          <DropdownMenuSeparator className="sm:hidden" />
+          <DropdownMenuItem icon={Settings} onSelect={() => navigate("/change-password")}>
+            Settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem icon={LogOut} destructive onSelect={handleLogout}>
+            Logout
+          </DropdownMenuItem>
+        </DropdownMenu>
       </div>
     </header>
   );
