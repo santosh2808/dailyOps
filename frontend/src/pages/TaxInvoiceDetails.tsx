@@ -16,6 +16,7 @@ import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
@@ -25,9 +26,11 @@ import ConfirmSendMissingQrDialog from "@/components/tax-invoices/ConfirmSendMis
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { openWhatsAppShare } from "@/lib/whatsapp";
 import {
   getTaxInvoice,
   getTaxInvoiceEmailHistory,
+  getTaxInvoiceWhatsAppLink,
   openTaxInvoicePdf,
   updateTaxInvoiceStatus,
 } from "@/api/tax-invoices";
@@ -177,6 +180,25 @@ export default function TaxInvoiceDetails() {
                       }
                     >
                       View PDF
+                    </DropdownMenuItem>
+                    {/* Additive: WhatsApp Share — same lazily-generated
+                        public link pattern as Proforma Invoice's. */}
+                    <DropdownMenuItem
+                      icon={WhatsAppIcon}
+                      onSelect={async () => {
+                        try {
+                          const link = await getTaxInvoiceWhatsAppLink(invoice.id);
+                          const name = invoice.customer?.contactPerson ?? "there";
+                          const message = `Hi ${name}, please find your tax invoice ${invoice.invoiceNumber} from SRM here: ${link}`;
+                          if (!openWhatsAppShare(invoice.customer?.phone, message)) {
+                            toast.error("No valid phone number on file for this customer.");
+                          }
+                        } catch {
+                          toast.error("Could not create the WhatsApp share link. Please try again.");
+                        }
+                      }}
+                    >
+                      Share via WhatsApp
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       icon={ExternalLink}

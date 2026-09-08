@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
@@ -311,6 +312,44 @@ export class ProformaInvoicesService {
   async getPdf(id: string): Promise<Buffer> {
     const invoice = await this.findOne(id);
     return this.proformaInvoicePdfService.render(this.toPdfInput(invoice));
+  }
+
+  // Additive: WhatsApp Share. publicToken isn't part of the generated
+  // Prisma Client types in this environment (schema was hand-migrated —
+  // see the migration's own comment), so it's read/written with raw SQL
+  // rather than the typed client, same as ProformaInvoice.publicToken's
+  // schema comment describes. Lazily generates the token the first time
+  // it's needed (staff clicks "Share via WhatsApp") and reuses it on every
+  // later click — one stable link per invoice, not regenerated per share
+  // like Quotation's (which regenerates on every resend for its own
+  // negotiation-workflow reasons that don't apply here).
+  async getOrCreatePublicToken(id: string): Promise<string> {
+    const rows = await this.prisma.$queryRaw<{ publicToken: string | null }[]>`
+      SELECT "publicToken" FROM "ProformaInvoice" WHERE id = ${id}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException(`Proforma Invoice ${id} not found`);
+    }
+    if (rows[0].publicToken) {
+      return rows[0].publicToken;
+    }
+    const token = crypto.randomBytes(24).toString('base64url');
+    await this.prisma.$executeRaw`
+      UPDATE "ProformaInvoice" SET "publicToken" = ${token} WHERE id = ${id}
+    `;
+    return token;
+  }
+
+  // The no-guard counterpart to getPdf(id) above, reached via publicToken
+  // instead of the record's own id/JWT — see PublicProformaInvoicesController.
+  async getPublicPdf(token: string): Promise<Buffer> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "ProformaInvoice" WHERE "publicToken" = ${token}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException('Invalid or expired link');
+    }
+    return this.getPdf(rows[0].id);
   }
 
   private toPdfInput(

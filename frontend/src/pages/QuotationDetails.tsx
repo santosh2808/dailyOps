@@ -20,6 +20,8 @@ import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
+import { openWhatsAppShare } from "@/lib/whatsapp";
 import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import ChangeQuotationStatusDialog from "@/components/quotations/ChangeQuotationStatusDialog";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
@@ -274,6 +276,28 @@ export default function QuotationDetails() {
                     {(quotation.status === "SENT" || quotation.status === "VIEWED") && (
                       <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
                         Resend Quotation
+                      </DropdownMenuItem>
+                    )}
+                    {/* Additive: WhatsApp Share. Reuses the same secure
+                        public link the customer was already emailed (only
+                        exists once the quotation has been sent at least
+                        once) rather than minting a second, separately
+                        tracked link — one link, tracked the same way
+                        regardless of which channel carried it. */}
+                    {quotation.publicToken && (
+                      <DropdownMenuItem
+                        icon={WhatsAppIcon}
+                        onSelect={() => {
+                          const phone = quotation.customer?.phone ?? quotation.lead?.phone;
+                          const name = quotation.customer?.contactPerson ?? quotation.lead?.contactPerson ?? "there";
+                          const link = `${window.location.origin}/quote/${quotation.publicToken}`;
+                          const message = `Hi ${name}, please find your quotation ${quotation.quotationNumber} from SRM here: ${link}`;
+                          if (!openWhatsAppShare(phone, message)) {
+                            toast.error("No valid phone number on file for this customer.");
+                          }
+                        }}
+                      >
+                        Share via WhatsApp
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>

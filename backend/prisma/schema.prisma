@@ -832,6 +832,15 @@ model ProformaInvoice {
   branch          String?
   notes           String?
   status          ProformaInvoiceStatus @default(DRAFT)
+  // Additive: WhatsApp Share — a lightweight public link so the PDF can be
+  // opened from a wa.me click-to-chat message without a DailyOps login.
+  // Unlike Quotation.publicToken there is no expiry or frozen snapshot: the
+  // PDF is simply re-rendered from live data on every request (same as the
+  // authenticated :id/pdf route), since there's no negotiation/acceptance
+  // workflow here that a stale link could undermine. Generated lazily, once,
+  // the first time a "Share via WhatsApp" button is used — see
+  // ProformaInvoicesService.getOrCreatePublicToken().
+  publicToken     String?               @unique
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
@@ -916,6 +925,11 @@ model TaxInvoice {
   qrCodeImage       String?
   eInvoiceUpdatedBy String?
   eInvoiceUpdatedAt DateTime?
+
+  // Additive: WhatsApp Share — same lazily-generated, non-expiring public
+  // PDF link pattern as ProformaInvoice.publicToken (see its comment for
+  // rationale). See TaxInvoicesService.getOrCreatePublicToken().
+  publicToken String? @unique
 
   // Additive: emailed to the customer once explicitly sent (see sentAt above).
   emailHistory EmailHistory[]
@@ -1482,6 +1496,13 @@ model JobExecutionOrder {
   color                String                @default("Aluminium")
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+
+  // Additive: WhatsApp Share — same lazily-generated, non-expiring public
+  // PDF link pattern as ProformaInvoice.publicToken (see its comment for
+  // rationale). Customer-facing (jeo.customer), distinct from the internal
+  // "Resend to Factory" email action. See
+  // JobExecutionOrdersService.getOrCreatePublicToken().
+  publicToken String? @unique
 
   // One Production Checklist per JEO, created alongside it.
   checklist ProductionChecklist?

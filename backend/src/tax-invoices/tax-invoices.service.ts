@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
@@ -333,6 +334,39 @@ export class TaxInvoicesService {
   async getPdf(id: string): Promise<Buffer> {
     const invoice = await this.findOne(id);
     return this.taxInvoicePdfService.render(this.toPdfInput(invoice));
+  }
+
+  // Additive: WhatsApp Share — same lazily-generated, non-expiring public
+  // token pattern as ProformaInvoicesService.getOrCreatePublicToken() (see
+  // its comment for the rationale on raw SQL here instead of the typed
+  // client).
+  async getOrCreatePublicToken(id: string): Promise<string> {
+    const rows = await this.prisma.$queryRaw<{ publicToken: string | null }[]>`
+      SELECT "publicToken" FROM "TaxInvoice" WHERE id = ${id}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException(`Tax Invoice ${id} not found`);
+    }
+    if (rows[0].publicToken) {
+      return rows[0].publicToken;
+    }
+    const token = crypto.randomBytes(24).toString('base64url');
+    await this.prisma.$executeRaw`
+      UPDATE "TaxInvoice" SET "publicToken" = ${token} WHERE id = ${id}
+    `;
+    return token;
+  }
+
+  // The no-guard counterpart to getPdf(id) above, reached via publicToken
+  // instead of the record's own id/JWT — see PublicTaxInvoicesController.
+  async getPublicPdf(token: string): Promise<Buffer> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "TaxInvoice" WHERE "publicToken" = ${token}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException('Invalid or expired link');
+    }
+    return this.getPdf(rows[0].id);
   }
 
   private toPdfInput(invoice: Prisma.TaxInvoiceGetPayload<{ include: typeof TAX_INVOICE_DETAIL_INCLUDE }>) {

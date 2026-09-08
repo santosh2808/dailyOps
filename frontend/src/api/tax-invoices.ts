@@ -104,3 +104,10 @@ export async function openTaxInvoicePdf(id: string) {
   window.open(url, "_blank");
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
+
+// Additive: WhatsApp Share — see the identical helper in
+// api/proforma-invoices.ts for the full rationale.
+export async function getTaxInvoiceWhatsAppLink(id: string): Promise<string> {
+  const res = await api.post<{ token: string }>(`/api/v1/tax-invoices/${id}/whatsapp-link`);
+  return `${api.defaults.baseURL}/api/v1/public/tax-invoices/${res.data.token}/pdf`;
+}

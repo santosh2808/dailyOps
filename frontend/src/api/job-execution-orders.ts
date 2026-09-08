@@ -126,3 +126,12 @@ export async function openJeoPdf(id: string) {
   // to actually load the blob URL before it's invalidated.
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
+
+// Additive: WhatsApp Share — customer-facing, see the identical helper in
+// api/proforma-invoices.ts for the full rationale. Distinct from
+// sendJeoFactoryNotification() above, which targets the internal
+// Production Team rather than the customer.
+export async function getJeoWhatsAppLink(id: string): Promise<string> {
+  const res = await api.post<{ token: string }>(`/api/v1/job-execution-orders/${id}/whatsapp-link`);
+  return `${api.defaults.baseURL}/api/v1/public/job-execution-orders/${res.data.token}/pdf`;
+}

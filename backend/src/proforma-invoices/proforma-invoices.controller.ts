@@ -74,4 +74,14 @@ export class ProformaInvoicesController {
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
     res.send(pdf);
   }
+
+  // Additive: WhatsApp Share. Returns (generating on first use) the public
+  // token used to build the no-login PDF link at
+  // /api/v1/public/proforma-invoices/:token/pdf.
+  @Post(':id/whatsapp-link')
+  @RequirePermission('ProformaInvoice', 'View')
+  async getWhatsAppLink(@Param('id') id: string) {
+    const token = await this.proformaInvoicesService.getOrCreatePublicToken(id);
+    return { token };
+  }
 }

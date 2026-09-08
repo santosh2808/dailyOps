@@ -6,6 +6,7 @@ import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
 import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaInvoiceStatusBadge";
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
 import EditProformaInvoiceDialog from "@/components/proforma-invoices/EditProformaInvoiceDialog";
@@ -13,9 +14,11 @@ import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProfor
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { openWhatsAppShare } from "@/lib/whatsapp";
 import {
   getProformaInvoice,
   getProformaInvoiceEmailHistory,
+  getProformaInvoiceWhatsAppLink,
   openProformaInvoicePdf,
   updateProformaInvoiceStatus,
 } from "@/api/proforma-invoices";
@@ -158,6 +161,29 @@ export default function ProformaInvoiceDetails() {
                       }
                     >
                       View PDF
+                    </DropdownMenuItem>
+                    {/* Additive: WhatsApp Share. Unlike Quotation (which
+                        reuses an already-emailed link), this document has
+                        no prior "sent" link to reuse, so the token is
+                        generated lazily right here on first click and
+                        reused on every later one — see
+                        ProformaInvoicesService.getOrCreatePublicToken(). */}
+                    <DropdownMenuItem
+                      icon={WhatsAppIcon}
+                      onSelect={async () => {
+                        try {
+                          const link = await getProformaInvoiceWhatsAppLink(invoice.id);
+                          const name = invoice.customer?.contactPerson ?? "there";
+                          const message = `Hi ${name}, please find your proforma invoice ${invoice.invoiceNumber} from SRM here: ${link}`;
+                          if (!openWhatsAppShare(invoice.customer?.phone, message)) {
+                            toast.error("No valid phone number on file for this customer.");
+                          }
+                        } catch {
+                          toast.error("Could not create the WhatsApp share link. Please try again.");
+                        }
+                      }}
+                    >
+                      Share via WhatsApp
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       icon={ExternalLink}

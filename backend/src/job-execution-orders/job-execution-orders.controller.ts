@@ -102,6 +102,18 @@ export class JobExecutionOrdersController {
     res.send(pdf);
   }
 
+  // Additive: WhatsApp Share. Returns (generating on first use) the public
+  // token used to build the no-login PDF link at
+  // /api/v1/public/job-execution-orders/:token/pdf. Customer-facing,
+  // distinct from :id/send above (which notifies the internal Production
+  // Team, not the customer).
+  @Post(':id/whatsapp-link')
+  @RequirePermission('JEO', 'View')
+  async getWhatsAppLink(@Param('id') id: string) {
+    const token = await this.jobExecutionOrdersService.getOrCreatePublicToken(id);
+    return { token };
+  }
+
   // No delete endpoint — JobExecutionOrder has no deletedAt column (per the
   // given field list), so there is no delete capability for this module at
   // all. (Edit now exists — see update() above — but delete remains out of

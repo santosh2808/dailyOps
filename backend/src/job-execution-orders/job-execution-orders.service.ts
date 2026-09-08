@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, SalesOrderStatus } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
@@ -397,6 +398,41 @@ export class JobExecutionOrdersService {
   async getPdf(id: string, actorName?: string): Promise<Buffer> {
     const jeo = await this.findOne(id);
     return this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+  }
+
+  // Additive: WhatsApp Share — customer-facing (jeo.customer), distinct
+  // from sendFactoryNotificationEmail() above which targets the internal
+  // Production Team. Same lazily-generated, non-expiring public token
+  // pattern as ProformaInvoicesService.getOrCreatePublicToken() (see its
+  // comment for the raw-SQL rationale).
+  async getOrCreatePublicToken(id: string): Promise<string> {
+    const rows = await this.prisma.$queryRaw<{ publicToken: string | null }[]>`
+      SELECT "publicToken" FROM "JobExecutionOrder" WHERE id = ${id}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException(`Job Execution Order ${id} not found`);
+    }
+    if (rows[0].publicToken) {
+      return rows[0].publicToken;
+    }
+    const token = crypto.randomBytes(24).toString('base64url');
+    await this.prisma.$executeRaw`
+      UPDATE "JobExecutionOrder" SET "publicToken" = ${token} WHERE id = ${id}
+    `;
+    return token;
+  }
+
+  // The no-guard counterpart to getPdf(id) above, reached via publicToken
+  // instead of the record's own id/JWT — see PublicJobExecutionOrdersController.
+  // No actorName (anonymous customer, not a logged-in staff member).
+  async getPublicPdf(token: string): Promise<Buffer> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "JobExecutionOrder" WHERE "publicToken" = ${token}
+    `;
+    if (!rows.length) {
+      throw new NotFoundException('Invalid or expired link');
+    }
+    return this.getPdf(rows[0].id);
   }
 
   private toPdfInput(

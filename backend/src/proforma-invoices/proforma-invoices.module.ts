@@ -3,11 +3,16 @@ import { MailerModule } from '../mailer/mailer.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ProformaInvoicesController } from './proforma-invoices.controller';
+import { PublicProformaInvoicesController } from './public-proforma-invoices.controller';
 import { ProformaInvoicesService } from './proforma-invoices.service';
 
 @Module({
   imports: [MailerModule, PdfModule, AuditLogModule],
-  controllers: [ProformaInvoicesController],
+  // PublicProformaInvoicesController: WhatsApp Share's unauthenticated
+  // /api/v1/public/proforma-invoices/:token/pdf route. Shares this module's
+  // ProformaInvoicesService instance — same pattern as
+  // QuotationsModule/PublicQuotationsController.
+  controllers: [ProformaInvoicesController, PublicProformaInvoicesController],
   providers: [ProformaInvoicesService],
   // Exported so QuotationsModule can call createFromSalesOrder() as part
   // of the Accepted-Quotation cascade.
