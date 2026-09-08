@@ -14,7 +14,6 @@ import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog"
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import { Spinner } from "@/components/ui/spinner";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/context/AuthContext";
 import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
@@ -221,23 +220,6 @@ export default function LeadDetails() {
                   </Button>
                 </div>
               </div>
-
-              {lead.convertedToComplaintId && (
-                <Card>
-                  <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="warning">Converted to Complaint</Badge>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/complaints/${lead.convertedToComplaintId}`)}
-                    >
-                      View Complaint
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Lead Management Phase 1 (requirement #12) — always show the
                   next available action so nobody has to wonder what to do. */}
