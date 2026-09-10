@@ -1,8 +1,12 @@
 import api from "@/lib/api";
 import type {
+  AiLeadStatus,
+  AiQualification,
   Customer,
   EmailHistoryEntry,
+  LanguageSource,
   Lead,
+  LeadAiCallLog,
   LeadAssignmentHistory,
   LeadHistoryEntry,
   LeadImportSummary,
@@ -12,6 +16,7 @@ import type {
   LeadStatus,
   LeadStatusHistoryEntry,
   PaginatedResponse,
+  PreferredLanguage,
 } from "@/types";
 
 export interface LeadListParams {
@@ -62,6 +67,44 @@ export interface LeadPayload {
   // Lead Assignment enhancement: send null to explicitly unassign; omit to
   // leave the current assignment untouched on a PATCH.
   assignedToUserId?: string | null;
+  // D.O.T. AI Lead Assistant Phase 1: an explicit choice here always wins
+  // over the state-based default the backend would otherwise compute.
+  preferredLanguage?: PreferredLanguage;
+}
+
+// D.O.T. AI Lead Assistant Phase 1 — AI-specific fields, updated only
+// through updateLeadAi() below, never through updateLead() above.
+export interface LeadAiPayload {
+  aiStatus?: AiLeadStatus;
+  aiQualification?: AiQualification;
+  aiSummary?: string;
+  preferredLanguage?: PreferredLanguage;
+  languageSource?: LanguageSource;
+  aiCallAttempts?: number;
+  lastAiCallAt?: string;
+  nextAiCallAt?: string;
+  aiSiteVisitRequested?: boolean;
+  aiCallbackRequested?: boolean;
+  aiCallbackAt?: string;
+}
+
+// D.O.T. AI Lead Assistant Phase 1 — records one D.O.T. call attempt. Only
+// ever called manually in Phase 1 (no telephony provider); see
+// backend CreateLeadAiCallLogDto for the full field-by-field rationale.
+export interface LeadAiCallLogPayload {
+  status: AiLeadStatus;
+  externalCallId?: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  language?: PreferredLanguage;
+  qualification?: AiQualification;
+  summary?: string;
+  transcriptRef?: string;
+  recordingRef?: string;
+  siteVisitRequested?: boolean;
+  callbackRequested?: boolean;
+  callbackAt?: string;
 }
 
 export async function listLeads(params: LeadListParams) {
@@ -158,5 +201,24 @@ export async function previewLeadImport(file: File) {
 // on every row anyway, rather than trusting this filtering blindly.
 export async function importLeads(rows: LeadImportSummary["rows"]) {
   const res = await api.post<LeadImportSummary>("/api/v1/leads/import", { rows });
+  return res.data;
+}
+
+// D.O.T. AI Lead Assistant Phase 1 — "D.O.T. AI Follow-up" section + Call
+// History list on Lead Details.
+export async function getLeadAiCallHistory(id: string) {
+  const res = await api.get<LeadAiCallLog[]>(`/api/v1/leads/${id}/ai-call-history`);
+  return res.data;
+}
+
+export async function updateLeadAi(id: string, payload: LeadAiPayload) {
+  const res = await api.patch<Lead>(`/api/v1/leads/${id}/ai`, payload);
+  return res.data;
+}
+
+// Manual/dev-test call logging in Phase 1 — no telephony provider calls
+// this; see LeadAiCallLogPayload.
+export async function addLeadAiCallLog(id: string, payload: LeadAiCallLogPayload) {
+  const res = await api.post<Lead>(`/api/v1/leads/${id}/ai-call-history`, payload);
   return res.data;
 }

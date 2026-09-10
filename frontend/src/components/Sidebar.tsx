@@ -23,6 +23,7 @@ import {
   Hash,
   Globe,
   X,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
@@ -170,6 +171,13 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/administration/web-form-config",
         icon: Globe,
         permission: { module: "FormConfiguration", action: "View" },
+      },
+      // D.O.T. AI Lead Assistant Phase 1 — foundation-only settings.
+      {
+        label: "AI Settings",
+        to: "/admin/ai-settings",
+        icon: Bot,
+        permission: { module: "AiSettings", action: "View" },
       },
     ],
   },

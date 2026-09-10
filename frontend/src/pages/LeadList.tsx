@@ -23,6 +23,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import LeadStatusBadge from "@/components/leads/LeadStatusBadge";
+import AiStatusBadge from "@/components/leads/AiStatusBadge";
+import AiQualificationBadge from "@/components/leads/AiQualificationBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
@@ -320,13 +322,18 @@ export default function LeadList() {
                   </button>
                 </TableHead>
                 <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
+                {/* D.O.T. AI Lead Assistant Phase 1 (Step 10) — kept behind
+                    the widest breakpoint only, per "don't clutter the main
+                    Leads table"; full detail lives on Lead Details. */}
+                <TableHead className="hidden 2xl:table-cell">AI Status</TableHead>
+                <TableHead className="hidden 2xl:table-cell">AI Interest</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading leads...
                     </span>
@@ -334,7 +341,7 @@ export default function LeadList() {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
                     No leads found. Click "Create Lead" to add one.
                   </TableCell>
                 </TableRow>
@@ -384,6 +391,12 @@ export default function LeadList() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
                     <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
+                    <TableCell className="hidden 2xl:table-cell">
+                      <AiStatusBadge status={lead.aiStatus} />
+                    </TableCell>
+                    <TableCell className="hidden 2xl:table-cell">
+                      {lead.aiQualification ? <AiQualificationBadge qualification={lead.aiQualification} /> : "—"}
+                    </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button

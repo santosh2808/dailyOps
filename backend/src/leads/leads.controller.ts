@@ -29,6 +29,8 @@ import { QueryLeadDto } from './dto/query-lead.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 import { ConvertToComplaintDto } from './dto/convert-to-complaint.dto';
+import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
+import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 
 @ApiTags('leads')
 @ApiBearerAuth()
@@ -160,5 +162,30 @@ export class LeadsController {
   @RequirePermission('Lead', 'View')
   getEmailHistory(@Param('id') id: string) {
     return this.leadsService.getEmailHistory(id);
+  }
+
+  // D.O.T. AI Lead Assistant Phase 1 — internal-only endpoints (existing
+  // Lead.View/Lead.Edit permissions, same JwtAuthGuard/PermissionsGuard as
+  // every other route on this controller). No public/customer-facing route
+  // exposes any of this. See LeadsService for what each does.
+  @Get(':id/ai-call-history')
+  @RequirePermission('Lead', 'View')
+  getAiCallHistory(@Param('id') id: string) {
+    return this.leadsService.getAiCallHistory(id);
+  }
+
+  @Patch(':id/ai')
+  @RequirePermission('Lead', 'Edit')
+  updateAi(@Param('id') id: string, @Body() dto: UpdateLeadAiDto, @Req() req: any) {
+    return this.leadsService.updateAi(id, dto, req.user?.name);
+  }
+
+  // Manual/dev-test call logging in Phase 1 — no telephony provider calls
+  // this (see CreateLeadAiCallLogDto). Gated by Lead.Edit like every other
+  // Lead-mutating route on this controller.
+  @Post(':id/ai-call-history')
+  @RequirePermission('Lead', 'Edit')
+  addAiCallLog(@Param('id') id: string, @Body() dto: CreateLeadAiCallLogDto, @Req() req: any) {
+    return this.leadsService.addAiCallLog(id, dto, req.user?.name);
   }
 }

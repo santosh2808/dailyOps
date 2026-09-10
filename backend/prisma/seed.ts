@@ -113,6 +113,16 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'FormConfiguration', action: 'Create', description: 'Create websites, forms, product mappings, and subject routes' },
   { module: 'FormConfiguration', action: 'Edit', description: 'Edit websites/forms, publish form versions, edit product mappings and routing' },
   { module: 'FormConfiguration', action: 'Delete', description: 'Delete product mappings and subject routes' },
+
+  // Additive: D.O.T. AI Lead Assistant Phase 1 (Administration -> AI
+  // Settings) — foundation-only configuration for the future AI calling
+  // engine (enabled flags, attempt limits, calling hours, supported
+  // languages). Administrator-only, same as EmailTemplate above; not
+  // granted to any other role's ROLE_PERMISSIONS list below. AI-specific
+  // fields on a Lead itself (aiStatus/aiQualification/call log/etc.) are
+  // gated by the existing Lead.View/Lead.Edit permissions, not this module.
+  { module: 'AiSettings', action: 'View', description: 'View D.O.T. AI calling settings' },
+  { module: 'AiSettings', action: 'Edit', description: 'Edit D.O.T. AI calling settings' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -706,6 +716,70 @@ async function main() {
         displayOrder: SPYRO_MODELS.indexOf(modelName),
       },
     });
+  }
+
+  // 9. D.O.T. AI Lead Assistant Phase 1 — AiSettings singleton row (always
+  // seeded, every environment: it's just config defaults, identical to what
+  // AiSettingsService.get() would upsert into existence on first read
+  // anyway) plus one dev-only test Lead with AI fields pre-populated, so the
+  // "D.O.T. AI Follow-up" UI has something to show without needing a real
+  // call — no telephony provider is used to produce this data, it's just
+  // seeded rows. Gated to non-production so a real deployment never gets
+  // fake lead data.
+  await prisma.aiSettings.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: { id: 'default' },
+  });
+
+  if (process.env.NODE_ENV !== 'production') {
+    const adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
+    if (adminUser) {
+      const testLead = await prisma.lead.upsert({
+        where: { leadNumber: 'LD-AITEST1' },
+        update: {},
+        create: {
+          leadNumber: 'LD-AITEST1',
+          companyName: 'Test Customer',
+          contactPerson: 'Test Customer',
+          phone: '9999999999',
+          title: 'HVLS fans for warehouse (D.O.T. test lead)',
+          description: 'Dev-only seed lead for exercising the D.O.T. AI Follow-up UI — not a real lead.',
+          status: 'NEW',
+          source: 'OTHER',
+          state: 'Telangana',
+          city: 'Hyderabad',
+          country: 'India',
+          assignedToUserId: adminUser.id,
+          // AI fields — as if D.O.T. had already called and qualified this
+          // lead. Lead.status stays NEW: AI qualification is additional
+          // information, never a trigger that moves the sales pipeline
+          // stage by itself (see feature spec).
+          aiStatus: 'QUALIFIED',
+          aiQualification: 'HOT',
+          aiSummary: 'Test AI-qualified lead. Customer wants 8 HVLS fans for a warehouse in Hyderabad, timeline ~30 days.',
+          aiCallAttempts: 1,
+          lastAiCallAt: new Date(),
+          aiSiteVisitRequested: true,
+          preferredLanguage: 'TELUGU',
+          languageSource: 'AI_DETECTED',
+        },
+      });
+      await prisma.leadAiCallLog.deleteMany({ where: { leadId: testLead.id } });
+      await prisma.leadAiCallLog.create({
+        data: {
+          leadId: testLead.id,
+          status: 'QUALIFIED',
+          startedAt: new Date(Date.now() - 3 * 60 * 1000),
+          endedAt: new Date(),
+          durationSeconds: 198,
+          language: 'TELUGU',
+          qualification: 'HOT',
+          summary: 'Test AI-qualified lead. Customer wants 8 HVLS fans for a warehouse in Hyderabad, timeline ~30 days.',
+          performedBy: 'Seed (dev test data)',
+        },
+      });
+    }
   }
 
   console.log('Seed complete. Default user (username / email / password / role):');

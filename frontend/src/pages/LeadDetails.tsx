@@ -13,6 +13,7 @@ import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog"
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
+import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/context/AuthContext";
@@ -307,6 +308,10 @@ export default function LeadDetails() {
                       <Field label="Created" value={formatDate(lead.createdAt)} />
                     </CardContent>
                   </Card>
+
+                  {/* D.O.T. AI Lead Assistant Phase 1 (Step 8/9) — additive
+                      section, doesn't touch anything else on this page. */}
+                  <LeadAiFollowUpCard lead={lead} />
 
                   <Card>
                     <CardHeader>

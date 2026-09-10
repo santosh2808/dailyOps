@@ -330,6 +330,45 @@ export const LEAD_SOURCES = [
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
+// D.O.T. AI Lead Assistant Phase 1 — mirrors backend AiLeadStatus/
+// AiQualification/PreferredLanguage/LanguageSource enums exactly (see
+// schema.prisma). Deliberately separate from LeadStatus above: the AI's
+// read on a lead and the human sales pipeline stage are two different
+// concepts and must not be conflated.
+export const AI_LEAD_STATUSES = [
+  "NOT_STARTED",
+  "CALL_SCHEDULED",
+  "CALLING",
+  "ANSWERED",
+  "NO_ANSWER",
+  "CALLBACK_REQUESTED",
+  "QUALIFIED",
+  "NOT_QUALIFIED",
+  "NOT_INTERESTED",
+  "FAILED",
+] as const;
+export type AiLeadStatus = (typeof AI_LEAD_STATUSES)[number];
+
+export const AI_QUALIFICATIONS = ["HOT", "WARM", "COLD", "NOT_INTERESTED"] as const;
+export type AiQualification = (typeof AI_QUALIFICATIONS)[number];
+
+export const PREFERRED_LANGUAGES = [
+  "AUTO",
+  "ENGLISH",
+  "TELUGU",
+  "HINDI",
+  "KANNADA",
+  "TAMIL",
+  "MALAYALAM",
+  "MARATHI",
+  "GUJARATI",
+  "BENGALI",
+] as const;
+export type PreferredLanguage = (typeof PREFERRED_LANGUAGES)[number];
+
+export const LANGUAGE_SOURCES = ["CUSTOMER", "AI_DETECTED", "STATE_DEFAULT", "MANUAL", "AUTO"] as const;
+export type LanguageSource = (typeof LANGUAGE_SOURCES)[number];
+
 export interface LeadProduct {
   id: string;
   leadId: string;
@@ -397,6 +436,56 @@ export interface Lead {
   // Additive: Lead <-> Complaint conversion — set once this lead has been
   // converted into a Complaint (never both this and isConverted at once).
   convertedToComplaintId?: string | null;
+  // Additive: D.O.T. AI Lead Assistant Phase 1. Independent of status
+  // above — see the enum comments for AiLeadStatus/AiQualification.
+  preferredLanguage: PreferredLanguage;
+  languageSource: LanguageSource;
+  aiStatus: AiLeadStatus;
+  aiQualification?: AiQualification | null;
+  aiSummary?: string | null;
+  aiCallAttempts: number;
+  lastAiCallAt?: string | null;
+  nextAiCallAt?: string | null;
+  aiSiteVisitRequested: boolean;
+  aiCallbackRequested: boolean;
+  aiCallbackAt?: string | null;
+}
+
+// D.O.T. AI Lead Assistant Phase 1 — one row per D.O.T. call attempt
+// against a lead. externalCallId/transcriptRef/recordingRef are reserved
+// for Phase 2's telephony integration; always null in Phase 1.
+export interface LeadAiCallLog {
+  id: string;
+  leadId: string;
+  externalCallId?: string | null;
+  status: AiLeadStatus;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationSeconds?: number | null;
+  language?: PreferredLanguage | null;
+  qualification?: AiQualification | null;
+  summary?: string | null;
+  transcriptRef?: string | null;
+  recordingRef?: string | null;
+  performedBy?: string | null;
+  createdAt: string;
+}
+
+// D.O.T. AI Lead Assistant Phase 1 — foundation-only settings singleton.
+// Editing this never places a call by itself; aiCallingEnabled/
+// callNewMarketingLeadsEnabled are switches Phase 2's calling engine will
+// check.
+export interface AiSettings {
+  id: string;
+  aiCallingEnabled: boolean;
+  callNewMarketingLeadsEnabled: boolean;
+  maxCallAttempts: number;
+  callingHoursStart: string;
+  callingHoursEnd: string;
+  defaultDelayMinutes: number;
+  supportedLanguages: PreferredLanguage[];
+  updatedBy?: string | null;
+  updatedAt: string;
 }
 
 // Lead History / Notes — additive. QUOTATION_CREATED entries are
@@ -424,6 +513,9 @@ export const LEAD_HISTORY_ACTIONS = [
   // LeadsService when the customer decides via the secure public link.
   "QUOTATION_ACCEPTED",
   "QUOTATION_REJECTED",
+  // Additive: D.O.T. AI Lead Assistant Phase 1 — written directly whenever
+  // a D.O.T. call is logged (see LeadAiCallLog).
+  "AI_CALL_LOGGED",
 ] as const;
 export type LeadHistoryAction = (typeof LEAD_HISTORY_ACTIONS)[number];
 

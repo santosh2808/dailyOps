@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { LeadPriority, LeadSource } from '@prisma/client';
+import { LeadPriority, LeadSource, PreferredLanguage } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -151,4 +151,16 @@ export class CreateLeadDto {
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   @IsUUID(undefined, { message: 'Assigning this lead to a user is required' })
   assignedToUserId: string;
+
+  // D.O.T. AI Lead Assistant Phase 1: an explicit choice here always wins
+  // over the state-based default LeadsService would otherwise compute (see
+  // common/state-language-defaults.ts) — e.g. set by a future public
+  // lead-capture form that asks the customer directly, or by a salesperson
+  // who already knows the customer's preference. Left unset on most leads
+  // created via the ordinary form today; LeadsService.create() derives a
+  // default from `state` whenever this is omitted.
+  @ApiPropertyOptional({ enum: PreferredLanguage })
+  @IsOptional()
+  @IsEnum(PreferredLanguage)
+  preferredLanguage?: PreferredLanguage;
 }

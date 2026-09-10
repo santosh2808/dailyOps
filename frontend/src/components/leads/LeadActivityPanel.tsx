@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  Bot,
   CheckCircle2,
   Factory,
   FileText,
@@ -47,6 +48,7 @@ const ACTION_ICON: Record<LeadHistoryAction, LucideIcon> = {
   JEO_GENERATED: Factory,
   QUOTATION_ACCEPTED: CheckCircle2,
   QUOTATION_REJECTED: XCircle,
+  AI_CALL_LOGGED: Bot,
 };
 
 const ACTION_LABEL: Record<LeadHistoryAction, string> = {
@@ -64,6 +66,7 @@ const ACTION_LABEL: Record<LeadHistoryAction, string> = {
   JEO_GENERATED: "JEO Generated",
   QUOTATION_ACCEPTED: "Quotation Accepted",
   QUOTATION_REJECTED: "Quotation Rejected",
+  AI_CALL_LOGGED: "D.O.T. Call Logged",
 };
 
 function formatDateTime(value: string) {

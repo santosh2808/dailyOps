@@ -269,6 +269,69 @@ enum LeadSource {
   OTHER
 }
 
+// ===========================================================================
+// D.O.T. AI Lead Assistant — Phase 1 (foundation only, no telephony
+// integration). D.O.T. will eventually place outbound AI calls to qualify
+// new leads; this phase only adds the data model + manual/admin surfaces it
+// needs. Deliberately kept separate from Lead.status/LeadStatus — the AI's
+// read on a lead ("is this person interested?") and the sales pipeline
+// stage ("where is this lead in our process?") are two different concepts
+// that must not be conflated, per the feature spec.
+// ===========================================================================
+
+// State of D.O.T.'s own interaction with a lead — distinct from
+// Lead.status (the human sales pipeline stage). A lead can be
+// AI status QUALIFIED while its Lead.status is still NEW; moving the Lead
+// through the sales pipeline remains a separate, human-driven action.
+enum AiLeadStatus {
+  NOT_STARTED
+  CALL_SCHEDULED
+  CALLING
+  ANSWERED
+  NO_ANSWER
+  CALLBACK_REQUESTED
+  QUALIFIED
+  NOT_QUALIFIED
+  NOT_INTERESTED
+  FAILED
+}
+
+// D.O.T.'s own interest/qualification read on a lead, captured after a call.
+// Distinct from AiLeadStatus (which tracks the interaction's progress, not
+// its outcome) and from Lead.status (the sales pipeline stage).
+enum AiQualification {
+  HOT
+  WARM
+  COLD
+  NOT_INTERESTED
+}
+
+// Language D.O.T. should use (or did use) to speak with this lead.
+enum PreferredLanguage {
+  AUTO
+  ENGLISH
+  TELUGU
+  HINDI
+  KANNADA
+  TAMIL
+  MALAYALAM
+  MARATHI
+  GUJARATI
+  BENGALI
+}
+
+// Where Lead.preferredLanguage came from — matters because a customer's
+// explicit choice must always outrank a state-derived default. See
+// common/state-language-defaults.ts for the state -> default-language
+// mapping that produces STATE_DEFAULT.
+enum LanguageSource {
+  CUSTOMER
+  AI_DETECTED
+  STATE_DEFAULT
+  MANUAL
+  AUTO
+}
+
 model Lead {
   id                String        @id @default(uuid())
   leadNumber        String        @unique
@@ -378,6 +441,25 @@ model Lead {
   // through yet (that conversion is explicitly out of scope this phase).
   quotations        Quotation[]
 
+  // Additive: D.O.T. AI Lead Assistant Phase 1. All nullable/defaulted so
+  // every existing Lead row remains valid without a backfill. preferredLanguage
+  // defaults to AUTO (no language chosen/detected yet) rather than guessing —
+  // LeadsService derives a state-based default (languageSource=STATE_DEFAULT)
+  // only when the caller hasn't already set an explicit preference, and never
+  // overwrites a CUSTOMER/MANUAL/AI_DETECTED source.
+  preferredLanguage    PreferredLanguage @default(AUTO)
+  languageSource       LanguageSource    @default(AUTO)
+  aiStatus             AiLeadStatus      @default(NOT_STARTED)
+  aiQualification      AiQualification?
+  aiSummary            String?
+  aiCallAttempts       Int               @default(0)
+  lastAiCallAt         DateTime?
+  nextAiCallAt         DateTime?
+  aiSiteVisitRequested Boolean           @default(false)
+  aiCallbackRequested  Boolean           @default(false)
+  aiCallbackAt         DateTime?
+  aiCallHistory        LeadAiCallLog[]
+
   @@index([status])
   @@index([priority])
   @@index([source])
@@ -385,6 +467,7 @@ model Lead {
   @@index([deletedAt])
   @@index([sourceWebsiteId])
   @@index([webFormIntakeId])
+  @@index([aiStatus])
 }
 
 // Tracks every action listed in the Lead History requirement. "Quotation
@@ -419,6 +502,11 @@ enum LeadHistoryAction {
   // the customer decides via the secure public quotation link.
   QUOTATION_ACCEPTED
   QUOTATION_REJECTED
+  // Additive: D.O.T. AI Lead Assistant Phase 1 — written directly by
+  // LeadsService.addAiCallLog() alongside the LeadAiCallLog row it creates,
+  // so a call event shows up on the same Timeline as every other Lead
+  // action rather than requiring a separate UI surface.
+  AI_CALL_LOGGED
 }
 
 model LeadHistory {
@@ -473,6 +561,42 @@ model LeadStatusHistory {
   createdAt DateTime    @default(now())
 
   @@index([leadId])
+}
+
+// Additive: D.O.T. AI Lead Assistant Phase 1. One row per D.O.T. call
+// attempt against a lead — a dedicated model (rather than overloading
+// LeadHistory.description with free text) because a call carries
+// structured, queryable data (duration, language, qualification outcome).
+// Mirrors the LeadAssignmentHistory/LeadStatusHistory convention: its own
+// small append-only table, cascade-deleted with the parent Lead. No
+// telephony provider is integrated in Phase 1 — externalCallId/
+// transcriptRef/recordingRef are just reserved columns for Phase 2 to
+// populate; nothing writes them yet. Recordings/transcripts themselves are
+// never stored in Postgres, only a reference (e.g. a provider URL) to
+// where the voice provider keeps them.
+model LeadAiCallLog {
+  id              String            @id @default(uuid())
+  leadId          String
+  lead            Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Reserved for Phase 2 — the calling provider's own call/session ID, so a
+  // DailyOps call log row can be cross-referenced back to the provider side.
+  externalCallId  String?
+  status          AiLeadStatus
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
+  language        PreferredLanguage?
+  qualification   AiQualification?
+  summary         String?
+  // Reference only (e.g. a provider-hosted URL/ID) — never the raw
+  // transcript/audio content itself. Null in Phase 1 since no calls happen.
+  transcriptRef   String?
+  recordingRef    String?
+  performedBy     String?
+  createdAt       DateTime          @default(now())
+
+  @@index([leadId])
+  @@index([externalCallId])
 }
 
 model LeadProduct {
@@ -1676,6 +1800,29 @@ model Supplier {
 // Administrators edit the subject/body of the existing rows rather than
 // invent new keys, though the model itself doesn't hardcode the set of keys
 // (no enum), so a future template can be added without a schema change.
+// Additive: D.O.T. AI Lead Assistant Phase 1 — foundation-only settings row.
+// No existing generic Settings/AppSetting model exists in this schema (the
+// nearest precedents, EmailTemplate/StateSeriesCode, are both per-key admin
+// tables), so this is a new, deliberately minimal singleton: exactly one row
+// (id = 'default'), upserted rather than inserted, following the same
+// idempotent-seed convention as EmailTemplate below. aiCallingEnabled and
+// callNewMarketingLeadsEnabled both default to false — Phase 1 must never
+// place a real call, so there is no code path yet that even reads these
+// flags to trigger anything; they only exist so the Phase 2 calling engine
+// has a switch to check.
+model AiSettings {
+  id                           String              @id @default("default")
+  aiCallingEnabled             Boolean             @default(false)
+  callNewMarketingLeadsEnabled Boolean             @default(false)
+  maxCallAttempts              Int                 @default(3)
+  callingHoursStart            String              @default("09:00")
+  callingHoursEnd              String              @default("18:00")
+  defaultDelayMinutes          Int                 @default(60)
+  supportedLanguages           PreferredLanguage[] @default([ENGLISH, HINDI, TELUGU, KANNADA, TAMIL, MALAYALAM, MARATHI, GUJARATI, BENGALI])
+  updatedBy                    String?
+  updatedAt                    DateTime            @updatedAt
+}
+
 model EmailTemplate {
   id        String   @id @default(uuid())
   key       String   @unique

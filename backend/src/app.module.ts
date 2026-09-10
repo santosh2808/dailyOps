@@ -29,6 +29,7 @@ import { ComplaintsModule } from './complaints/complaints.module';
 import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.module';
 import { FormConfigurationModule } from './form-configuration/form-configuration.module';
 import { PublicFormsModule } from './public-forms/public-forms.module';
+import { AiSettingsModule } from './ai-settings/ai-settings.module';
 
 @Module({
   imports: [
@@ -64,6 +65,9 @@ import { PublicFormsModule } from './public-forms/public-forms.module';
     // Website Enquiries -> Lead/Complaint refactor — additive.
     FormConfigurationModule,
     PublicFormsModule,
+    // D.O.T. AI Lead Assistant Phase 1 — foundation only, no telephony
+    // integration. See ai-settings/ai-settings.module.ts.
+    AiSettingsModule,
   ],
 })
 export class AppModule {}

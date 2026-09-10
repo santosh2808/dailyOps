@@ -41,6 +41,7 @@ import Roles from "@/pages/Roles";
 import Permissions from "@/pages/Permissions";
 import Departments from "@/pages/Departments";
 import StateSeriesCodes from "@/pages/StateSeriesCodes";
+import AiSettings from "@/pages/AiSettings";
 import PublicQuotation from "@/pages/PublicQuotation";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
 
@@ -397,6 +398,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StateSeriesCodes />
+              </ProtectedRoute>
+            }
+          />
+          {/* D.O.T. AI Lead Assistant Phase 1 — foundation-only settings. */}
+          <Route
+            path="/admin/ai-settings"
+            element={
+              <ProtectedRoute>
+                <AiSettings />
               </ProtectedRoute>
             }
           />

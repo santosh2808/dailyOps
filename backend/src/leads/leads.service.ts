@@ -5,15 +5,26 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { LeadHistoryAction, LeadPriority, LeadSource, LeadStatus, Prisma } from '@prisma/client';
+import {
+  LeadHistoryAction,
+  LeadPriority,
+  LeadSource,
+  LeadStatus,
+  LanguageSource,
+  PreferredLanguage,
+  Prisma,
+} from '@prisma/client';
 import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { getDefaultLanguageForState } from '../common/state-language-defaults';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
+import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
+import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
@@ -236,6 +247,52 @@ export class LeadsService {
     }
   }
 
+  // D.O.T. AI Lead Assistant Phase 1 — language default resolution. Used by
+  // create() only. An explicit preferredLanguage on the DTO always wins
+  // (languageSource MANUAL — a human, not the state map, chose it); with
+  // none given, falls back to the state's default (languageSource
+  // STATE_DEFAULT) or AUTO if the state has no reliable single-language
+  // default (see common/state-language-defaults.ts).
+  private resolveLanguageOnCreate(
+    explicit: PreferredLanguage | undefined,
+    state: string | undefined,
+  ): { preferredLanguage: PreferredLanguage; languageSource: LanguageSource } {
+    if (explicit) {
+      return { preferredLanguage: explicit, languageSource: LanguageSource.MANUAL };
+    }
+    const stateDefault = getDefaultLanguageForState(state);
+    return stateDefault === PreferredLanguage.AUTO
+      ? { preferredLanguage: PreferredLanguage.AUTO, languageSource: LanguageSource.AUTO }
+      : { preferredLanguage: stateDefault, languageSource: LanguageSource.STATE_DEFAULT };
+  }
+
+  // Used by update() only. An explicit preferredLanguage on the DTO always
+  // wins (languageSource MANUAL). Otherwise, only recomputes the state
+  // default when (a) the lead's current languageSource is itself just a
+  // default (AUTO/STATE_DEFAULT — never overwrites a CUSTOMER/MANUAL/
+  // AI_DETECTED source) and (b) the state actually changed in this patch.
+  // Returns undefined when nothing should change, so the caller can spread
+  // it straight into the Prisma update without an extra branch.
+  private resolveLanguageOnUpdate(
+    existing: { preferredLanguage: PreferredLanguage; languageSource: LanguageSource; state: string | null },
+    explicit: PreferredLanguage | undefined,
+    stateInPatch: string | undefined,
+  ): { preferredLanguage: PreferredLanguage; languageSource: LanguageSource } | undefined {
+    if (explicit) {
+      return { preferredLanguage: explicit, languageSource: LanguageSource.MANUAL };
+    }
+    const isOverridableSource =
+      existing.languageSource === LanguageSource.AUTO || existing.languageSource === LanguageSource.STATE_DEFAULT;
+    if (!isOverridableSource) return undefined;
+
+    const newState = stateInPatch !== undefined ? stateInPatch : existing.state;
+    if (newState === existing.state) return undefined;
+
+    const stateDefault = getDefaultLanguageForState(newState);
+    if (stateDefault === PreferredLanguage.AUTO) return undefined;
+    return { preferredLanguage: stateDefault, languageSource: LanguageSource.STATE_DEFAULT };
+  }
+
   async findAll(query: QueryLeadDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -317,7 +374,13 @@ export class LeadsService {
     // but Lead.companyName stays a NOT NULL column (see schema.prisma) to
     // avoid a migration, so default to '' here — same fallback
     // createFromPublicForm() already uses for the public lead-capture path.
-    const { products, expectedCloseDate, nextFollowUp, companyName, ...leadData } = dto;
+    const { products, expectedCloseDate, nextFollowUp, companyName, preferredLanguage, ...leadData } = dto;
+
+    // D.O.T. AI Lead Assistant Phase 1: derive a default language from
+    // state whenever the caller didn't already supply one — see
+    // resolveLanguageOnCreate() below. Never guesses for states with no
+    // reliable single-language default (falls back to AUTO).
+    const language = this.resolveLanguageOnCreate(preferredLanguage, dto.state);
 
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
@@ -331,6 +394,8 @@ export class LeadsService {
               expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
               nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : undefined,
               products: this.buildProductsCreateInput(products),
+              preferredLanguage: language.preferredLanguage,
+              languageSource: language.languageSource,
             },
             include: LEAD_DETAIL_INCLUDE,
           });
@@ -355,7 +420,13 @@ export class LeadsService {
 
   async update(id: string, dto: UpdateLeadDto, actorName?: string) {
     const existing = await this.findOne(id);
-    const { products, expectedCloseDate, nextFollowUp, assignedToUserId, ...leadData } = dto;
+    const { products, expectedCloseDate, nextFollowUp, assignedToUserId, preferredLanguage, ...leadData } = dto;
+
+    // D.O.T. AI Lead Assistant Phase 1: recompute the state-based language
+    // default only when appropriate — see resolveLanguageOnUpdate() below.
+    // An explicit preferredLanguage always wins; a state change never
+    // overwrites a CUSTOMER/MANUAL/AI_DETECTED source.
+    const languageUpdate = this.resolveLanguageOnUpdate(existing, preferredLanguage, leadData.state);
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (products) {
@@ -374,6 +445,7 @@ export class LeadsService {
             ? { nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : null }
             : {}),
           products: this.buildProductsCreateInput(products),
+          ...(languageUpdate ?? {}),
         },
         include: LEAD_DETAIL_INCLUDE,
       });
@@ -1088,6 +1160,102 @@ export class LeadsService {
         ],
       },
       orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  // D.O.T. AI Lead Assistant Phase 1 — "D.O.T. AI Follow-up" section +
+  // Call History list on Lead Details. Read-only; the AI-interaction fields
+  // themselves are written only by updateAi()/addAiCallLog() below.
+  async getAiCallHistory(id: string) {
+    await this.findOne(id);
+    return this.prisma.leadAiCallLog.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Direct write path for AI-specific fields (aiStatus/aiQualification/
+  // aiSummary/language/call scheduling/site-visit-callback flags).
+  // Deliberately never touches Lead.status — the AI's read on a lead and
+  // the human sales pipeline stage stay fully independent fields, per the
+  // feature spec ("Do not automatically change existing Lead status to
+  // QUALIFIED merely because AI status is QUALIFIED"). In Phase 1 this is
+  // only ever called manually (e.g. from Lead Details as a test action) —
+  // no telephony provider is integrated, so nothing calls it automatically.
+  async updateAi(id: string, dto: UpdateLeadAiDto, actorName?: string) {
+    await this.findOne(id);
+    const { lastAiCallAt, nextAiCallAt, aiCallbackAt, ...rest } = dto;
+    return this.prisma.lead.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(lastAiCallAt !== undefined ? { lastAiCallAt: lastAiCallAt ? new Date(lastAiCallAt) : null } : {}),
+        ...(nextAiCallAt !== undefined ? { nextAiCallAt: nextAiCallAt ? new Date(nextAiCallAt) : null } : {}),
+        ...(aiCallbackAt !== undefined ? { aiCallbackAt: aiCallbackAt ? new Date(aiCallbackAt) : null } : {}),
+      },
+      include: LEAD_DETAIL_INCLUDE,
+    });
+  }
+
+  // Records one D.O.T. call attempt (LeadAiCallLog) and rolls its outcome
+  // up onto the Lead's own AI summary fields + a Timeline entry, all in one
+  // transaction. This is the single write path Phase 2's calling engine is
+  // expected to call once a real call completes; in Phase 1 nothing calls
+  // it automatically (see CreateLeadAiCallLogDto's comment) — it exists so
+  // the AI Follow-up UI + Timeline can be exercised end-to-end with
+  // manually-entered test data ahead of the actual telephony integration.
+  async addAiCallLog(id: string, dto: CreateLeadAiCallLogDto, actorName?: string) {
+    await this.findOne(id);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.leadAiCallLog.create({
+        data: {
+          leadId: id,
+          externalCallId: dto.externalCallId,
+          status: dto.status,
+          startedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
+          endedAt: dto.endedAt ? new Date(dto.endedAt) : undefined,
+          durationSeconds: dto.durationSeconds,
+          language: dto.language,
+          qualification: dto.qualification,
+          summary: dto.summary,
+          transcriptRef: dto.transcriptRef,
+          recordingRef: dto.recordingRef,
+          performedBy: actorName,
+        },
+      });
+
+      const updated = await tx.lead.update({
+        where: { id },
+        data: {
+          aiStatus: dto.status,
+          aiCallAttempts: { increment: 1 },
+          lastAiCallAt: dto.startedAt ? new Date(dto.startedAt) : new Date(),
+          ...(dto.qualification !== undefined ? { aiQualification: dto.qualification } : {}),
+          ...(dto.summary !== undefined ? { aiSummary: dto.summary } : {}),
+          ...(dto.siteVisitRequested !== undefined ? { aiSiteVisitRequested: dto.siteVisitRequested } : {}),
+          ...(dto.callbackRequested !== undefined ? { aiCallbackRequested: dto.callbackRequested } : {}),
+          ...(dto.callbackAt !== undefined ? { aiCallbackAt: dto.callbackAt ? new Date(dto.callbackAt) : null } : {}),
+          // A language the call was actually conducted in is a direct
+          // customer signal — always outranks the state-based default, and
+          // is recorded as AI_DETECTED (not CUSTOMER — nobody typed this in
+          // directly) so a later explicit customer statement can still
+          // override it via updateAi()'s languageSource passthrough.
+          ...(dto.language !== undefined
+            ? { preferredLanguage: dto.language, languageSource: LanguageSource.AI_DETECTED }
+            : {}),
+        },
+        include: LEAD_DETAIL_INCLUDE,
+      });
+
+      await this.logHistory(
+        tx,
+        id,
+        'AI_CALL_LOGGED',
+        `D.O.T. call logged — status ${dto.status}${dto.qualification ? `, qualification ${dto.qualification}` : ''}`,
+        actorName,
+      );
+
+      return updated;
     });
   }
 
