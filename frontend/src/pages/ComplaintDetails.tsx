@@ -327,13 +327,22 @@ export default function ComplaintDetails() {
                           </span>
                         )}
                       </div>
-                      {/* Bug fix (TC-043): "warranty" has no computed status
-                          anywhere in this schema — Product.technicalSpec only
-                          ever carries it as free descriptive text. Showing
-                          that text here (once an invoice item is verified) is
-                          what this requirement can actually support without
-                          fabricating an in-warranty/expired date this data
-                          was never designed to compute. */}
+                      {/* Bug fix (TC-043): warranty status is computed
+                          server-side (ComplaintsService.attachWarranty) as
+                          the verified invoice's own invoiceDate + 3 years —
+                          not from the complaint's createdAt, and only shown
+                          once an invoice is actually matched. */}
+                      {complaint.warranty && (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge variant={complaint.warranty.isUnderWarranty ? "success" : "destructive"}>
+                            {complaint.warranty.isUnderWarranty ? "Under Warranty" : "Warranty Expired"}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            Warranty until {new Date(complaint.warranty.expiryDate).toLocaleDateString()} (invoice
+                            date + 3 years)
+                          </span>
+                        </div>
+                      )}
                       {(() => {
                         const spec = complaint.taxInvoiceItem?.product?.technicalSpec;
                         const warrantyLines = [

@@ -76,6 +76,28 @@ const COMPLAINT_DETAIL_INCLUDE = {
 
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'complaintNumber', 'status'] as const;
 
+type ComplaintWithDetail = Prisma.ComplaintGetPayload<{ include: typeof COMPLAINT_DETAIL_INCLUDE }>;
+
+const WARRANTY_YEARS = 3;
+
+// Bug fix (TC-043): warranty status must be computed as the VERIFIED
+// invoice's own invoiceDate + 3 years — never from the complaint's
+// createdAt, and never shown at all when the invoice hasn't been matched
+// (taxInvoice is null for UNVERIFIED/NOT_FOUND complaints, so `warranty`
+// naturally comes back null for those). Prisma has no portable computed-
+// column feature, so this is a cheap, pure post-query map applied at every
+// endpoint that returns a Complaint to the frontend.
+function attachWarranty<T extends ComplaintWithDetail>(
+  complaint: T,
+): T & { warranty: { expiryDate: Date; isUnderWarranty: boolean } | null } {
+  if (!complaint.taxInvoice) {
+    return { ...complaint, warranty: null };
+  }
+  const expiryDate = new Date(complaint.taxInvoice.invoiceDate);
+  expiryDate.setFullYear(expiryDate.getFullYear() + WARRANTY_YEARS);
+  return { ...complaint, warranty: { expiryDate, isUnderWarranty: expiryDate.getTime() > Date.now() } };
+}
+
 @Injectable()
 export class ComplaintsService {
   private readonly logger = new Logger(ComplaintsService.name);
@@ -124,7 +146,7 @@ export class ComplaintsService {
     ]);
 
     return {
-      data,
+      data: data.map(attachWarranty),
       total,
       page,
       limit,
@@ -143,7 +165,7 @@ export class ComplaintsService {
     if (!complaint) {
       throw new NotFoundException('Complaint not found');
     }
-    return complaint;
+    return attachWarranty(complaint);
   }
 
   async create(dto: CreateComplaintDto, createdBy?: string) {
@@ -198,7 +220,7 @@ export class ComplaintsService {
           this.logger.error('Complaint confirmation email failed', error),
         );
 
-        return created;
+        return attachWarranty(created);
       } catch (error) {
         if (this.isComplaintNumberConflict(error) && attempt < MAX_COMPLAINT_NUMBER_ATTEMPTS) {
           continue; // Another request took this number first — retry with a fresh one.
@@ -213,11 +235,12 @@ export class ComplaintsService {
 
   async update(id: string, dto: UpdateComplaintDto) {
     await this.findOne(id);
-    return this.prisma.complaint.update({
+    const updated = await this.prisma.complaint.update({
       where: { id },
       data: dto,
       include: COMPLAINT_DETAIL_INCLUDE,
     });
+    return attachWarranty(updated);
   }
 
   async updateStatus(id: string, dto: UpdateComplaintStatusDto, actorName?: string) {
@@ -247,7 +270,7 @@ export class ComplaintsService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
-    return updated;
+    return attachWarranty(updated);
   }
 
   async remove(id: string, actorName?: string) {
@@ -481,7 +504,7 @@ export class ComplaintsService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
-    return updated;
+    return attachWarranty(updated);
   }
 
   // Staff-facing reply to whoever reported this complaint — covers exactly

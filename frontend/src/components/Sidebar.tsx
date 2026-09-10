@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -8,7 +8,6 @@ import {
   FileText,
   ClipboardList,
   Receipt,
-  Settings,
   TrendingUp,
   Landmark,
   Factory,
@@ -28,11 +27,6 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { cn } from "@/lib/utils";
-// .volt-btn/.volt-btn-bolt are the exact same classes the login page's
-// "LOG ME IN" button uses (see LoginRobot.css) — imported here too so the
-// Logout button below can reuse them verbatim, animations included, even
-// though this file never renders inside LoginRobot's .volt-scene wrapper.
-import "./LoginRobot.css";
 
 interface NavItem {
   label: string;
@@ -54,6 +48,11 @@ interface NavItem {
 const topNavItems: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Customers", to: "/customers", icon: Users, permission: { module: "Customer", action: "View" } },
+  // TC-055: Complaints was previously a child item under the Sales group;
+  // QA flagged it as needing to be its own top-level nav entry (it's a
+  // single page with no sub-items, same shape as Dashboard/Customers
+  // above, not a collapsible group like Sales/Finance/etc.).
+  { label: "Complaints", to: "/complaints", icon: AlertCircle, permission: { module: "Complaint", action: "View" } },
 ];
 
 interface NavGroup {
@@ -85,12 +84,6 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/quotations/approvals",
         icon: CheckSquare,
         permission: { module: "Quotation", action: "View" },
-      },
-      {
-        label: "Complaints",
-        to: "/complaints",
-        icon: AlertCircle,
-        permission: { module: "Complaint", action: "View" },
       },
     ],
   },
@@ -182,10 +175,13 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// TC-041: "Settings" used to live here (pointing at a route, /settings,
+// that doesn't even exist — App.tsx only registers /change-password) and
+// duplicated Topbar's own profile-menu Settings entry. Removed; Settings
+// is now reachable only via the profile dropdown in Topbar.
 const bottomNavItems: NavItem[] = [
   { label: "Products", to: "/products", icon: Package, permission: { module: "Product", action: "View" } },
   { label: "Quotations", to: "/quotations", icon: FileText, permission: { module: "Quotation", action: "View" } },
-  { label: "Settings", to: "/settings", icon: Settings },
 ];
 
 function navLinkClasses(isActive: boolean) {
@@ -198,9 +194,8 @@ function navLinkClasses(isActive: boolean) {
 }
 
 export default function Sidebar() {
-  const { logout, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const { isOpen, close } = useSidebar();
-  const navigate = useNavigate();
   const location = useLocation();
 
   function visible(item: NavItem) {
@@ -225,11 +220,6 @@ export default function Sidebar() {
 
   function toggleGroup(key: string) {
     setOpenGroups((open) => ({ ...open, [key]: !open[key] }));
-  }
-
-  function handleLogout() {
-    logout();
-    navigate("/login");
   }
 
   return (
@@ -316,33 +306,9 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <div className="border-t border-slate-200 px-3 py-4">
-        {/* Exact same markup/classes as the login page's "LOG ME IN" button
-            (LoginRobot.tsx's .volt-btn), including its hover/active/focus
-            animations — the CSS vars it depends on are normally inherited
-            from .volt-scene, so they're supplied inline here instead since
-            this button isn't rendered inside that wrapper. */}
-        <button
-          onClick={handleLogout}
-          className="volt-btn"
-          style={
-            {
-              "--ink": "#23252d",
-              "--accent": "#ED3525",
-              "--accent-deep": "#c22a1c",
-              "--line": "2px solid #23252d",
-              marginTop: 0,
-              fontFamily: "'Sora', 'Segoe UI', system-ui, sans-serif",
-            } as React.CSSProperties
-          }
-        >
-          <span className="volt-btn-bolt" aria-hidden="true">
-            ⚡
-          </span>
-          <span className="volt-btn-label">LOGOUT</span>
-        </button>
-      </div>
+      {/* TC-041: the standalone LOGOUT button that used to live here has
+          been removed — logout is now only in Topbar's profile dropdown,
+          so there's a single place to log out instead of two. */}
       </aside>
     </>
   );

@@ -47,11 +47,16 @@ export class CreateQuotationDto {
   @Type(() => QuotationItemInputDto)
   items?: QuotationItemInputDto[];
 
-  @ApiPropertyOptional({ example: 18, default: 18, description: 'GST percentage applied to the subtotal' })
+  // TC-054: 0% is not a valid GST rate for this business (every quotation
+  // is taxable) — @Min(0) previously let 0 (and only 0, since anything
+  // below it was already rejected) slip through as "positive". Requiring
+  // > 0 here is what actually enforces "GST percent must be a positive
+  // number", not just non-negative.
+  @ApiPropertyOptional({ example: 18, default: 18, description: 'GST percentage applied to the subtotal (must be greater than 0)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0, { message: 'GST percent must be a positive number' })
+  @Min(0.01, { message: 'GST percent must be greater than 0' })
   gstPercent?: number;
 
   // Real currency amounts feeding into grandTotal (not just Annexure-II

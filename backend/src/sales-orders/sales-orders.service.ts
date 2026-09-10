@@ -604,10 +604,32 @@ export class SalesOrdersService {
   // scale with a changed quantity is a business decision, not something to
   // guess here, so that case keeps using the recompute exactly as before
   // (unchanged, pre-existing behavior, not a regression).
+  //
+  // Bug fix (TC-049): freezing the order-level totals above was already
+  // enough to fix the headline "Grand Total doesn't match" symptom, but
+  // left each SalesOrderItem's own unitPrice/tax/lineTotal as a plain
+  // qty x unitPrice computation — silently dropping the quotation item's
+  // colorCharge/hangingStructureCharge from the per-item breakdown (they
+  // were only ever reflected in the order-level aggregate, not attributed
+  // to any line). Since QuotationItem.lineTotal is already stored as
+  // qty x (unitPrice + colorCharge + hangingStructureCharge) — see
+  // QuotationsService.computeTotals() — copying it straight across (and
+  // backing out an equivalent per-unit price from it, quantity x
+  // effectiveUnitPrice = lineTotal) carries the color/hanging-structure
+  // charge forward exactly, without needing new schema columns. Per-item
+  // `tax` is a proportional share of the frozen order-level GST (installation
+  // /transportation charges still aren't attributed to a specific line —
+  // same "summary line, not per-item" convention the Quotation PDF itself
+  // uses for those two, see the comment above).
   private freezeToQuotationTotalsIfUnmodified(
     totals: ComputedTotals,
     rawItems: RawItem[],
-    quotation: { subtotal: number; gstAmount: number; grandTotal: number; items: { productId: string; quantity: number }[] },
+    quotation: {
+      subtotal: number;
+      gstAmount: number;
+      grandTotal: number;
+      items: { productId: string; quantity: number; lineTotal: number }[];
+    },
   ): void {
     const matchesQuotationExactly =
       rawItems.length === quotation.items.length &&
@@ -622,6 +644,16 @@ export class SalesOrdersService {
     totals.subtotal = quotation.subtotal;
     totals.tax = quotation.gstAmount;
     totals.grandTotal = quotation.grandTotal;
+
+    const lineTotalSum = quotation.items.reduce((sum, qi) => sum + qi.lineTotal, 0);
+    totals.items = totals.items.map((item) => {
+      const qi = quotation.items.find((q) => q.productId === item.productId);
+      if (!qi || item.quantity <= 0) return item;
+      const effectiveUnitPrice = Math.round((qi.lineTotal / item.quantity) * 100) / 100;
+      const tax =
+        lineTotalSum > 0 ? Math.round(((qi.lineTotal / lineTotalSum) * quotation.gstAmount) * 100) / 100 : 0;
+      return { ...item, unitPrice: effectiveUnitPrice, lineTotal: qi.lineTotal, tax };
+    });
   }
 
   private computeTotals(items: RawItem[], gstPercent: number, extraDiscount: number): ComputedTotals {

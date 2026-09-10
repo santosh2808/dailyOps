@@ -308,8 +308,11 @@ export default function QuotationForm() {
     }
     if (form.gstPercent.trim()) {
       const parsed = Number(form.gstPercent);
-      if (Number.isNaN(parsed) || parsed < 0) {
-        next.gstPercent = "GST percent must be a positive number";
+      // TC-054: 0% GST isn't valid for this business (every quotation is
+      // taxable) — `parsed < 0` let 0 itself slip through as "positive".
+      // Mirrors the backend's @Min(0.01) on gstPercent.
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        next.gstPercent = "GST percent must be greater than 0";
       }
     }
     if (form.installationCharge.trim()) {
@@ -478,6 +481,8 @@ export default function QuotationForm() {
                       <Input
                         id="gstPercent"
                         inputMode="decimal"
+                        min="0.01"
+                        step="0.01"
                         value={form.gstPercent}
                         onChange={(e) => update("gstPercent", e.target.value)}
                       />

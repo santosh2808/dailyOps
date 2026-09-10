@@ -1159,10 +1159,10 @@ export interface Complaint {
   taxInvoiceId?: string | null;
   taxInvoice?: { id: string; invoiceNumber: string; invoiceDate: string } | null;
   taxInvoiceItemId?: string | null;
-  // Bug fix (TC-043): `product.technicalSpec` is included so Complaint
-  // Details can show the matched item's warranty text (warrantyMotor/
-  // warrantyDrive/warrantyOther) — there is no computed in-warranty/expired
-  // status anywhere in this schema, only that free-text description.
+  // `product.technicalSpec` is included so Complaint Details can also show
+  // the matched item's own warranty text (warrantyMotor/warrantyDrive/
+  // warrantyOther) as supplementary detail alongside the computed `warranty`
+  // field below.
   taxInvoiceItem?: {
     id: string;
     productName: string;
@@ -1170,6 +1170,11 @@ export interface Complaint {
     product?: { id: string; name: string; technicalSpec?: ProductTechnicalSpec | null } | null;
   } | null;
   warrantyVerificationStatus: WarrantyVerificationStatus;
+  // Bug fix (TC-043): computed server-side as the verified invoice's own
+  // invoiceDate + 3 years (ComplaintsService.attachWarranty) — null when the
+  // invoice isn't verified (taxInvoice is null), never derived from
+  // complaint.createdAt.
+  warranty?: { expiryDate: string; isUnderWarranty: boolean } | null;
   // Additive: Complaint <-> Lead conversion.
   convertedToLeadId?: string | null;
 }
