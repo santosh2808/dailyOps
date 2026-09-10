@@ -47,6 +47,11 @@ interface FormState {
   notes: string;
   terms: string;
   commercialTerms: Record<keyof QuotationCommercialTerms, string>;
+  // Display-only — never sent in the payload. Used solely to compute the
+  // Offer Validity preview (days between offer date and Valid Until) the
+  // same way QuotationPdfService.resolveOfferValidity() does server-side.
+  // Blank for a brand-new quotation, meaning "today" is the offer date.
+  createdAt: string;
 }
 
 const INSTALLATION_RATE_PER_FAN = 8000;
@@ -89,8 +94,20 @@ const COMMERCIAL_TERMS_DEFAULTS: Record<keyof QuotationCommercialTerms, string> 
   offerValidity: "10 days from the date of offer",
 };
 
+// Payment used to be free text; now a fixed dropdown (short label shown in
+// the form, full sentence printed on the PDF's Payment row) so every
+// quotation uses one of exactly two approved wordings.
+const PAYMENT_OPTIONS: { label: string; value: string }[] = [
+  { label: "100%", value: "100% advance along with the Purchase order." },
+  { label: "50%", value: "50% advance along with the Purchase order, balance before dispatch." },
+];
+
+// Region/Branch Code removed from this form per QA feedback — no longer
+// user-editable here. Left out of both this list and the payload builder
+// below (which only sends keys present here); COMMERCIAL_TERMS_DEFAULTS
+// still has an empty regionCode entry so existing/legacy values loaded from
+// a quotation don't get wiped, they're just not shown or editable.
 const COMMERCIAL_TERMS_FIELDS: { key: keyof QuotationCommercialTerms; label: string; placeholder?: string; optional?: boolean }[] = [
-  { key: "regionCode", label: "Region / Branch Code", placeholder: "e.g. NCR (leave blank for none)" },
   { key: "priceBasis", label: "Price Basis", placeholder: "Auto: FOR Site / Ex-Works, Hyderabad based on Transport Scope" },
   { key: "installationCharge", label: "Installation — wording only (see Installation Charge ₹ field above)", placeholder: "e.g. Rs.8,000 per fan" },
   { key: "transportation", label: "Transportation — wording only (see Transportation Charge ₹ field above)", placeholder: "e.g. Extra at actual" },
@@ -104,6 +121,25 @@ const COMMERCIAL_TERMS_FIELDS: { key: keyof QuotationCommercialTerms; label: str
   { key: "offerValidity", label: "Offer Validity", placeholder: "e.g. 10 days from the date of offer" },
 ];
 
+// Mirrors QuotationPdfService.resolveOfferValidity() so the form preview
+// matches exactly what will print on the PDF. Returns null when there's no
+// Valid Until date to compute from (falls back to the free-text default).
+function computeOfferValidityPreview(validUntil: string, createdAt: string): string | null {
+  if (!validUntil) return null;
+  const offerDate = createdAt ? new Date(createdAt) : new Date();
+  const untilDate = new Date(`${validUntil}T00:00:00`);
+  if (Number.isNaN(offerDate.getTime()) || Number.isNaN(untilDate.getTime())) return null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const days = Math.round(
+    (Date.UTC(untilDate.getFullYear(), untilDate.getMonth(), untilDate.getDate()) -
+      Date.UTC(offerDate.getFullYear(), offerDate.getMonth(), offerDate.getDate())) /
+      msPerDay,
+  );
+  if (days <= 0) return null;
+  const untilLabel = untilDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return `${days} day${days === 1 ? "" : "s"} from the date of offer (valid until ${untilLabel})`;
+}
+
 const emptyForm: FormState = {
   customerId: "",
   gstPercent: "18",
@@ -115,6 +151,7 @@ const emptyForm: FormState = {
   notes: "",
   terms: "",
   commercialTerms: { ...COMMERCIAL_TERMS_DEFAULTS },
+  createdAt: "",
 };
 
 function formatCurrency(value: number) {
@@ -220,6 +257,7 @@ export default function QuotationForm() {
           validUntil: toDateInputValue(quotation.validUntil),
           notes: quotation.notes ?? "",
           terms: quotation.terms ?? "",
+          createdAt: quotation.createdAt,
           commercialTerms: {
             ...COMMERCIAL_TERMS_DEFAULTS,
             ...(Object.fromEntries(
@@ -663,19 +701,98 @@ export default function QuotationForm() {
                     "optional line" fields are left off the PDF entirely when blank.
                   </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {COMMERCIAL_TERMS_FIELDS.map(({ key, label, placeholder }) => (
-                      <div key={key} className="space-y-1">
-                        <Label htmlFor={`ct-${key}`} className="text-xs">
-                          {label}
-                        </Label>
-                        <Input
-                          id={`ct-${key}`}
-                          value={form.commercialTerms[key]}
-                          onChange={(e) => updateCommercialTerm(key, e.target.value)}
-                          placeholder={placeholder}
-                        />
-                      </div>
-                    ))}
+                    {COMMERCIAL_TERMS_FIELDS.map(({ key, label, placeholder }) => {
+                      // Installation/Transportation wording locks to
+                      // "Included" once prices already bake in those
+                      // charges — matches the Quotation Summary block above
+                      // and QuotationPdfService's own Annexure-II logic, so
+                      // staff can't leave a stale "Rs.8,000 per fan" line
+                      // that contradicts the all-inclusive Unit Price.
+                      if (
+                        (key === "installationCharge" || key === "transportation") &&
+                        form.pricesIncludeChargesAndGst
+                      ) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
+                          </div>
+                        );
+                      }
+                      // Payment — fixed dropdown (100% / 50%) instead of
+                      // free text, so every quotation uses one of exactly
+                      // two approved wordings.
+                      if (key === "payment") {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor="ct-payment" className="text-xs">
+                              {label}
+                            </Label>
+                            <Select
+                              id="ct-payment"
+                              value={form.commercialTerms.payment}
+                              onChange={(e) => updateCommercialTerm("payment", e.target.value)}
+                            >
+                              <option value="">Select payment terms…</option>
+                              {PAYMENT_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label} — {opt.value}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                        );
+                      }
+                      // Offer Validity — computed from Valid Until above,
+                      // read-only preview instead of free text. Falls back
+                      // to the editable free-text field only when Valid
+                      // Until isn't set yet.
+                      if (key === "offerValidity") {
+                        const preview = computeOfferValidityPreview(form.validUntil, form.createdAt);
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor="ct-offerValidity" className="text-xs">
+                              {label}
+                            </Label>
+                            {preview ? (
+                              <>
+                                <Input id="ct-offerValidity" value={preview} disabled readOnly />
+                                <p className="text-xs text-muted-foreground">
+                                  Computed automatically from Valid Until above.
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <Input
+                                  id="ct-offerValidity"
+                                  value={form.commercialTerms.offerValidity}
+                                  onChange={(e) => updateCommercialTerm("offerValidity", e.target.value)}
+                                  placeholder={placeholder}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Set Valid Until above to compute this automatically.
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={key} className="space-y-1">
+                          <Label htmlFor={`ct-${key}`} className="text-xs">
+                            {label}
+                          </Label>
+                          <Input
+                            id={`ct-${key}`}
+                            value={form.commercialTerms[key]}
+                            onChange={(e) => updateCommercialTerm(key, e.target.value)}
+                            placeholder={placeholder}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

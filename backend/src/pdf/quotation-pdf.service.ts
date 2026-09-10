@@ -117,6 +117,13 @@ export interface QuotationPdfInput {
   customer?: QuotationPdfCustomerLike | null;
   lead?: QuotationPdfCustomerLike | null;
   items: QuotationPdfItem[];
+  // Additive: Offer Validity is now computed dynamically from this date
+  // (days between createdAt and validUntil) rather than relying on a
+  // free-text commercialTerms.offerValidity string staff had to keep in
+  // sync by hand — see buildCommercialTermsRows(). Optional so any
+  // existing caller passing a plain object still type-checks; a null/unset
+  // validUntil falls back to the old free-text field.
+  validUntil?: Date | string | null;
 }
 
 const DEFAULT_COMMERCIAL_TERMS: Required<
@@ -609,6 +616,12 @@ export class QuotationPdfService {
   }
 
   private buildCommercialTermsRows(terms: QuotationCommercialTerms, quotation: QuotationPdfInput): SpecRow[] {
+    // Same treatment as buildSpecRows (Annexure-I): once item Unit Prices
+    // already bake in installation/transportation/GST, this row must read
+    // "Included" too — otherwise Annexure-II still quotes a separate
+    // transportation term that contradicts the all-inclusive price shown
+    // on Annexure-I, which is exactly the mismatch flagged for fixing.
+    const includesCharges = quotation.pricesIncludeChargesAndGst ?? false;
     const rows: SpecRow[] = [
       { label: 'Price', value: terms.priceBasis || DEFAULT_COMMERCIAL_TERMS.priceBasis },
       {
@@ -617,8 +630,9 @@ export class QuotationPdfService {
       },
       {
         label: 'Transportation',
-        value:
-          quotation.transportScope === 'CUSTOMER_SCOPE'
+        value: includesCharges
+          ? 'Included'
+          : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
@@ -629,12 +643,41 @@ export class QuotationPdfService {
       rows.push({ label: 'Unloading at site', value: terms.unloading.trim() });
     }
     rows.push({ label: 'Payment', value: terms.payment || DEFAULT_COMMERCIAL_TERMS.payment });
+    // Installation wording (mirrors Transportation just above) — same
+    // "Included" override once prices already bake in the charge, otherwise
+    // falls back to the free-text wording field / its default.
+    rows.push({
+      label: 'Installation',
+      value: includesCharges
+        ? 'Included'
+        : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+    });
     if (terms.installationSchedule && terms.installationSchedule.trim()) {
-      rows.push({ label: 'Installation', value: terms.installationSchedule.trim() });
+      rows.push({ label: 'Installation Schedule', value: terms.installationSchedule.trim() });
     }
     rows.push({ label: 'Delivery', value: terms.delivery || DEFAULT_COMMERCIAL_TERMS.delivery });
-    rows.push({ label: 'Offer Validity', value: terms.offerValidity || DEFAULT_COMMERCIAL_TERMS.offerValidity });
+    rows.push({ label: 'Offer Validity', value: this.resolveOfferValidity(terms, quotation) });
     return rows;
+  }
+
+  // Offer Validity used to be pure free text (staff had to manually type
+  // "10 days from the date of offer" and keep it in sync with Valid Until
+  // whenever that date changed). Now computed from quotation.validUntil vs
+  // quotation.createdAt whenever validUntil is present — text field stays
+  // only as a fallback for quotations with no Valid Until set.
+  private resolveOfferValidity(terms: QuotationCommercialTerms, quotation: QuotationPdfInput): string {
+    if (quotation.validUntil) {
+      const validUntil = new Date(quotation.validUntil);
+      const createdAt = new Date(quotation.createdAt);
+      if (!Number.isNaN(validUntil.getTime()) && !Number.isNaN(createdAt.getTime())) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const days = Math.round((validUntil.getTime() - createdAt.getTime()) / msPerDay);
+        if (days > 0) {
+          return `${days} day${days === 1 ? '' : 's'} from the date of offer (valid until ${this.formatDate(validUntil)})`;
+        }
+      }
+    }
+    return terms.offerValidity || DEFAULT_COMMERCIAL_TERMS.offerValidity;
   }
 
   // ---- Spec row construction ---------------------------------------------

@@ -1164,6 +1164,7 @@ export class QuotationsService {
       commercialTerms: content.commercialTerms,
       customer: content.customer,
       lead: content.lead,
+      validUntil: content.validUntil,
       items: content.items.map((item) => ({
         quantity: item.quantity,
         unitPrice: item.unitPrice,
