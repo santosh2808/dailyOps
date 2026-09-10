@@ -238,22 +238,33 @@ export class QuotationPdfService {
     const contentLeft = PAGE_MARGIN;
     const contentWidth = doc.page.width - PAGE_MARGIN * 2;
 
+    // Forces a fresh page regardless of how much space is left on the
+    // current one — used to give each major section (Contents, Exclusions,
+    // Annexure-II) its own page rather than letting it start wherever the
+    // previous section happened to end, per QA feedback. `ensureSpace`
+    // below is the softer "only break if it doesn't fit" check, still used
+    // within a section for its individual rows.
+    const startNewPage = () => {
+      this.drawFooter(doc);
+      doc.addPage();
+      this.drawHeader(doc);
+    };
+
     const ensureSpace = (height: number) => {
       if (doc.y + height > pageBottom) {
-        this.drawFooter(doc);
-        doc.addPage();
-        this.drawHeader(doc);
+        startNewPage();
       }
     };
 
     this.drawHeader(doc);
     this.drawCoverPage(doc, quotation, contentLeft, contentWidth);
 
-    this.drawFooter(doc);
-    doc.addPage();
-    this.drawHeader(doc);
+    startNewPage();
     this.drawContentsBlock(doc, contentLeft, contentWidth);
 
+    // Annexure-I (per-item spec tables) gets its own page rather than
+    // continuing right under the Contents table on the same page.
+    startNewPage();
     quotation.items.forEach((item, index) => {
       this.drawAnnexureIHeading(doc, quotation.items.length > 1 ? index + 1 : null, item, contentLeft, contentWidth, ensureSpace);
       const rows = this.buildSpecRows(item, quotation);
@@ -287,7 +298,12 @@ export class QuotationPdfService {
       doc.moveDown(0.8);
     });
 
-    ensureSpace(24);
+    // Own page — previously only checked room for the heading (ensureSpace
+    // (24)), so the fixed 8-line EXCLUSIONS list itself could still start
+    // near the bottom of a page and split across the page break partway
+    // through. Starting it fresh every time guarantees the whole list (a
+    // small, fixed length) fits on one page together.
+    startNewPage();
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('EXCLUSIONS FROM THE SCOPE', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.moveDown(0.5);
     EXCLUSIONS.forEach((text, index) => {
@@ -305,8 +321,8 @@ export class QuotationPdfService {
     // once per item, right under Quantity, inside each Annexure-I table
     // (see buildSpecRows()); Installation/Transportation/GST already print
     // there too, so nothing here duplicated only in this block.
-    doc.moveDown(0.6);
-    ensureSpace(30);
+    // Own page too, same reasoning as Exclusions above.
+    startNewPage();
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('ANNEXURE – II', contentLeft, doc.y, { width: contentWidth, align: 'left' });
     doc.font('Helvetica-Bold').fontSize(11).text('COMMERCIAL TERMS & CONDITIONS', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.moveDown(0.5);
