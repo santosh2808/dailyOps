@@ -10,6 +10,7 @@ import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
@@ -184,34 +185,55 @@ export class LeadsService {
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   // Notifies a user directly when a Lead is assigned to them — manual
   // creation/reassignment by staff (see create()/update() below); the
   // web-form-routing equivalent is PublicFormsService's own
   // WEB_SUBMISSION_ASSIGNED send, since that path never goes through here.
-  // Never throws (MailerService itself doesn't); silently no-ops if the
-  // user has no email on file rather than guessing a recipient.
+  // Email and WhatsApp are independent best-effort sends — neither is
+  // gated behind the other, so a missing email doesn't block the WhatsApp
+  // message and a missing phone doesn't block the email. Never throws
+  // (MailerService/WhatsAppService themselves don't).
   private async notifyLeadAssigned(
     userId: string,
-    lead: { id: string; leadNumber: string; title: string; companyName: string },
+    lead: { id: string; leadNumber: string; title: string; companyName: string; contactPerson: string; phone: string },
   ): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
-    if (!user?.email) return;
-    await this.mailerService.send({
-      templateKey: 'LEAD_ASSIGNED',
-      fallbackSubject: `Lead ${lead.leadNumber} assigned to you`,
-      fallbackBodyHtml:
-        '<p>Hi {{assigneeName}},</p><p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>',
-      vars: {
-        assigneeName: user.name,
-        leadNumber: lead.leadNumber,
-        title: lead.title,
-        companyName: lead.companyName,
-      },
-      to: user.email,
-      link: { module: 'Lead', leadId: lead.id },
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, phone: true },
     });
+    if (!user) return;
+
+    if (user.email) {
+      await this.mailerService.send({
+        templateKey: 'LEAD_ASSIGNED',
+        fallbackSubject: `Lead ${lead.leadNumber} assigned to you`,
+        fallbackBodyHtml:
+          '<p>Hi {{assigneeName}},</p><p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>' +
+          '<p>Contact: {{contactPerson}} — {{phone}}</p>',
+        vars: {
+          assigneeName: user.name,
+          leadNumber: lead.leadNumber,
+          title: lead.title,
+          companyName: lead.companyName,
+          contactPerson: lead.contactPerson,
+          phone: lead.phone,
+        },
+        to: user.email,
+        link: { module: 'Lead', leadId: lead.id },
+      });
+    }
+
+    if (user.phone) {
+      const templateName = process.env.INTERAKT_LEAD_ASSIGNED_TEMPLATE_NAME?.trim() || 'lead_assigned';
+      await this.whatsAppService.sendTemplateMessage({
+        phone: user.phone,
+        templateName,
+        bodyValues: [user.name, lead.leadNumber, lead.companyName, lead.contactPerson, lead.phone],
+      });
+    }
   }
 
   async findAll(query: QueryLeadDto) {

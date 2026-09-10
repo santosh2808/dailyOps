@@ -537,7 +537,8 @@ async function main() {
       subject: 'Lead {{leadNumber}} assigned to you',
       bodyHtml:
         '<p>Hi {{assigneeName}},</p>' +
-        '<p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>',
+        '<p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>' +
+        '<p>Contact: {{contactPerson}} — {{phone}}</p>',
     },
   ];
   for (const template of emailTemplateSeed) {

@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MailerModule } from '../mailer/mailer.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { LeadsController } from './leads.controller';
 import { LeadsService } from './leads.service';
 
 @Module({
-  imports: [MailerModule],
+  imports: [MailerModule, WhatsAppModule],
   controllers: [LeadsController],
   providers: [LeadsService],
   // Lead Management Phase 1: QuotationsService calls back into
