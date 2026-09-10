@@ -238,23 +238,30 @@ export class QuotationPdfService {
     const contentLeft = PAGE_MARGIN;
     const contentWidth = doc.page.width - PAGE_MARGIN * 2;
 
-    // Forces a fresh page regardless of how much space is left on the
-    // current one — used to give each major section (Contents, Exclusions,
-    // Annexure-II) its own page rather than letting it start wherever the
-    // previous section happened to end, per QA feedback. `ensureSpace`
-    // below is the softer "only break if it doesn't fit" check, still used
-    // within a section for its individual rows.
     const startNewPage = () => {
       this.drawFooter(doc);
       doc.addPage();
       this.drawHeader(doc);
     };
 
+    // Breaks to a fresh page only when `height` genuinely doesn't fit in
+    // what's left — the normal per-row check used throughout a section.
     const ensureSpace = (height: number) => {
       if (doc.y + height > pageBottom) {
         startNewPage();
       }
     };
+
+    // For a short, fixed-size block (e.g. the Exclusions list, Annexure-II)
+    // that must not split partway through: checks the *whole* block's
+    // height up front and breaks to a new page before drawing a single line
+    // of it if it wouldn't otherwise fit, instead of ensureSpace's per-row
+    // check catching the overflow only after some lines already printed.
+    // When there's room, the block simply continues right after whatever
+    // came before it on the same page — sections should share a page
+    // whenever they fit; forcing every section onto its own page just wastes
+    // space and looks sparse (see git history for that attempt).
+    const ensureBlockSpace = (height: number) => ensureSpace(height);
 
     this.drawHeader(doc);
     this.drawCoverPage(doc, quotation, contentLeft, contentWidth);
@@ -262,9 +269,6 @@ export class QuotationPdfService {
     startNewPage();
     this.drawContentsBlock(doc, contentLeft, contentWidth);
 
-    // Annexure-I (per-item spec tables) gets its own page rather than
-    // continuing right under the Contents table on the same page.
-    startNewPage();
     quotation.items.forEach((item, index) => {
       this.drawAnnexureIHeading(doc, quotation.items.length > 1 ? index + 1 : null, item, contentLeft, contentWidth, ensureSpace);
       const rows = this.buildSpecRows(item, quotation);
@@ -298,12 +302,16 @@ export class QuotationPdfService {
       doc.moveDown(0.8);
     });
 
-    // Own page — previously only checked room for the heading (ensureSpace
-    // (24)), so the fixed 8-line EXCLUSIONS list itself could still start
-    // near the bottom of a page and split across the page break partway
-    // through. Starting it fresh every time guarantees the whole list (a
-    // small, fixed length) fits on one page together.
-    startNewPage();
+    // Kept together as one block — previously only checked room for the
+    // heading (ensureSpace(24)), so the fixed 8-line EXCLUSIONS list itself
+    // could still start near the bottom of a page and split across the page
+    // break partway through. Measuring the whole list's height up front and
+    // checking it as one unit means it only jumps to a new page when it
+    // wouldn't otherwise fit — same page as whatever precedes it whenever
+    // there's room, never split once it starts.
+    const exclusionsHeight =
+      24 + 0.5 * 12 + EXCLUSIONS.reduce((sum, text) => sum + doc.heightOfString(text, { width: contentWidth - 30 }) + 8, 0);
+    ensureBlockSpace(exclusionsHeight);
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('EXCLUSIONS FROM THE SCOPE', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.moveDown(0.5);
     EXCLUSIONS.forEach((text, index) => {
@@ -321,14 +329,26 @@ export class QuotationPdfService {
     // once per item, right under Quantity, inside each Annexure-I table
     // (see buildSpecRows()); Installation/Transportation/GST already print
     // there too, so nothing here duplicated only in this block.
-    // Own page too, same reasoning as Exclusions above.
-    startNewPage();
+    // Kept together too, same reasoning as Exclusions above — the heading,
+    // the terms table, and the Bank Details block are measured as one unit
+    // so this whole section only breaks to a new page when it wouldn't
+    // otherwise fit (rather than always forcing one).
+    const terms = this.resolveCommercialTerms(quotation);
+    const commercialRows = this.buildCommercialTermsRows(terms, quotation);
+    const bankHeight = 70;
+    const annexureIIHeight =
+      24 +
+      0.5 * 12 +
+      commercialRows.reduce((sum, term) => {
+        const valueHeight = doc.heightOfString(term.value, { width: contentWidth - 200 });
+        return sum + Math.max(valueHeight, 12) + 6;
+      }, 0) +
+      bankHeight;
+    ensureBlockSpace(annexureIIHeight);
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('ANNEXURE – II', contentLeft, doc.y, { width: contentWidth, align: 'left' });
     doc.font('Helvetica-Bold').fontSize(11).text('COMMERCIAL TERMS & CONDITIONS', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.moveDown(0.5);
 
-    const terms = this.resolveCommercialTerms(quotation);
-    const commercialRows = this.buildCommercialTermsRows(terms, quotation);
     commercialRows.forEach((term, index) => {
       const valueHeight = doc.heightOfString(term.value, { width: contentWidth - 200 });
       const height = Math.max(valueHeight, 12) + 6;
@@ -341,7 +361,6 @@ export class QuotationPdfService {
       doc.y = rowTop + height;
     });
 
-    const bankHeight = 70;
     ensureSpace(bankHeight);
     const bankTop = doc.y;
     doc.font('Helvetica-Bold').fontSize(9.5).fillColor('black').text(`${commercialRows.length + 1}.`, contentLeft, bankTop, { width: 22 });
