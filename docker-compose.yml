@@ -14,5 +14,19 @@ services:
     volumes:
       - dailyops_pgdata:/var/lib/postgresql/data
 
+  # D.O.T. AI Lead Assistant Phase 2B — Spyro Fans voice agent ("Ananya").
+  # Independently deployable: no dependency on postgres or the NestJS
+  # backend above. Optional — omit this service (or don't start it) if you
+  # aren't testing the voice agent locally. Reads its own env file; never
+  # commit voice-agent/.env (see voice-agent/.env.example).
+  voice-agent:
+    build: ./voice-agent
+    container_name: dailyops-voice-agent
+    restart: unless-stopped
+    env_file:
+      - ./voice-agent/.env
+    ports:
+      - "8000:8000"
+
 volumes:
   dailyops_pgdata:
