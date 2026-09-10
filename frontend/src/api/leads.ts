@@ -36,7 +36,8 @@ export interface LeadProductPayload {
 }
 
 export interface LeadPayload {
-  companyName: string;
+  // No longer required — see CreateLeadDto.companyName.
+  companyName?: string;
   contactPerson: string;
   designation?: string;
   email?: string;

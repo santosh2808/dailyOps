@@ -290,7 +290,12 @@ export class LeadsService {
   }
 
   async create(dto: CreateLeadDto, actorName?: string) {
-    const { products, expectedCloseDate, nextFollowUp, ...leadData } = dto;
+    // companyName is no longer mandatory on the DTO (some leads genuinely
+    // have no company — an individual homeowner, or an early-stage inquiry),
+    // but Lead.companyName stays a NOT NULL column (see schema.prisma) to
+    // avoid a migration, so default to '' here — same fallback
+    // createFromPublicForm() already uses for the public lead-capture path.
+    const { products, expectedCloseDate, nextFollowUp, companyName, ...leadData } = dto;
 
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
@@ -299,6 +304,7 @@ export class LeadsService {
           const created = await tx.lead.create({
             data: {
               ...leadData,
+              companyName: companyName?.trim() || '',
               leadNumber,
               expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
               nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : undefined,

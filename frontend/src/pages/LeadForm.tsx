@@ -148,7 +148,8 @@ export default function LeadForm() {
   function validate(): boolean {
     const next: Partial<Record<keyof FormState, string>> = {};
 
-    if (!form.companyName.trim()) next.companyName = "Company name is required";
+    // No longer required — see CreateLeadDto.companyName (some leads
+    // genuinely have no company to give, e.g. an individual homeowner).
     if (!form.contactPerson.trim()) next.contactPerson = "Contact person is required";
     if (!form.title.trim()) next.title = "Title is required";
     // Required — see CreateLeadDto: every lead needs a state so it can be
@@ -258,7 +259,7 @@ export default function LeadForm() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="companyName">Company Name *</Label>
+                    <Label htmlFor="companyName">Company Name</Label>
                     <Input
                       id="companyName"
                       value={form.companyName}

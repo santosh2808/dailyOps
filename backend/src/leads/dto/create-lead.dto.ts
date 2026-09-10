@@ -26,10 +26,16 @@ import { LeadProductInputDto } from './lead-product-input.dto';
 const PHONE_REGEX = /^\d{10}$/;
 
 export class CreateLeadDto {
-  @ApiProperty({ example: 'Acme Corp' })
+  // No longer mandatory — some leads (e.g. an individual homeowner, or an
+  // early-stage inquiry with no company confirmed yet) genuinely have no
+  // company name to give. Lead.companyName stays a NOT NULL column (see
+  // schema.prisma), so LeadsService.create()/update() default this to ''
+  // when omitted rather than requiring a migration to make the column
+  // nullable — same fallback pattern createFromPublicForm() already uses.
+  @ApiPropertyOptional({ example: 'Acme Corp' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Company name is required' })
-  companyName: string;
+  companyName?: string;
 
   @ApiProperty({ example: 'John Doe' })
   @IsString()
