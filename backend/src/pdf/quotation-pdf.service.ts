@@ -402,6 +402,7 @@ export class QuotationPdfService {
     doc.text(`REF: ${quotation.quotationNumber}, DATE: ${dateStr}`, contentLeft, doc.y, {
       width: contentWidth,
       underline: true,
+      align: 'center',
     });
     doc.moveDown(1);
 
