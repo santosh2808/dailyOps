@@ -42,6 +42,7 @@ import Permissions from "@/pages/Permissions";
 import Departments from "@/pages/Departments";
 import StateSeriesCodes from "@/pages/StateSeriesCodes";
 import AiSettings from "@/pages/AiSettings";
+import TelephonyTest from "@/pages/TelephonyTest";
 import PublicQuotation from "@/pages/PublicQuotation";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
 
@@ -407,6 +408,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AiSettings />
+              </ProtectedRoute>
+            }
+          />
+          {/* D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation only. */}
+          <Route
+            path="/admin/telephony-test"
+            element={
+              <ProtectedRoute>
+                <TelephonyTest />
               </ProtectedRoute>
             }
           />

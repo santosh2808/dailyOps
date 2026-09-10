@@ -179,6 +179,15 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Bot,
         permission: { module: "AiSettings", action: "View" },
       },
+      // D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation.
+      // Deliberately not part of the main Lead workflow yet (see
+      // TelephonyTest.tsx) — an isolated admin test screen only.
+      {
+        label: "D.O.T. Telephony Test",
+        to: "/admin/telephony-test",
+        icon: Bot,
+        permission: { module: "Telephony", action: "Test" },
+      },
     ],
   },
 ];

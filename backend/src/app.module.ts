@@ -30,6 +30,7 @@ import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.
 import { FormConfigurationModule } from './form-configuration/form-configuration.module';
 import { PublicFormsModule } from './public-forms/public-forms.module';
 import { AiSettingsModule } from './ai-settings/ai-settings.module';
+import { TelephonyModule } from './telephony/telephony.module';
 
 @Module({
   imports: [
@@ -68,6 +69,10 @@ import { AiSettingsModule } from './ai-settings/ai-settings.module';
     // D.O.T. AI Lead Assistant Phase 1 — foundation only, no telephony
     // integration. See ai-settings/ai-settings.module.ts.
     AiSettingsModule,
+    // D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation only.
+    // EXOTEL_ENABLED defaults to false; no automated/Lead-triggered calling
+    // exists anywhere in this module. See telephony/telephony.module.ts.
+    TelephonyModule,
   ],
 })
 export class AppModule {}

@@ -460,6 +460,11 @@ model Lead {
   aiCallbackAt         DateTime?
   aiCallHistory        LeadAiCallLog[]
 
+  // Additive: D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation.
+  // Optional association only (a test call is never required to reference a
+  // Lead); see TelephonyTestCall model comment.
+  telephonyTestCalls   TelephonyTestCall[]
+
   @@index([status])
   @@index([priority])
   @@index([source])
@@ -597,6 +602,59 @@ model LeadAiCallLog {
 
   @@index([leadId])
   @@index([externalCallId])
+}
+
+// D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation.
+enum TelephonyTestCallStatus {
+  NOT_STARTED
+  CALLING
+  RINGING
+  ANSWERED
+  COMPLETED
+  FAILED
+  BUSY
+  NO_ANSWER
+}
+
+// One row per admin-initiated test call through Exotel — proves the
+// DailyOps -> Exotel -> Voice Agent path works, nothing more. Deliberately
+// separate from LeadAiCallLog above (Phase 1's AI-qualification call
+// history, which requires a Lead): a technical connectivity test is not
+// required to reference a Lead at all (leadId is nullable here, NOT NULL on
+// LeadAiCallLog), and populating leadId on a test call never writes to any
+// of Lead's aiStatus/aiQualification/aiSummary/status fields — see
+// TelephonyService and TelephonyController, which only ever read/associate,
+// never mutate the Lead itself.
+model TelephonyTestCall {
+  id              String                  @id @default(uuid())
+  phone           String
+  leadId          String?
+  lead            Lead?                   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  status          TelephonyTestCallStatus @default(NOT_STARTED)
+  // Exotel's own Call Sid — the cross-reference used to match an inbound
+  // status callback (Step 8) back to this row.
+  providerCallId  String?
+  // Last raw status string received from the provider callback, kept
+  // alongside the normalized `status` enum above for debugging without
+  // widening the enum for every provider-specific value Exotel might send.
+  providerStatus  String?
+  errorMessage    String?
+  // Reference only (e.g. a provider-hosted recording URL) — never the raw
+  // audio content itself, per Phase 2A Step 13. Null unless recording is
+  // enabled on the provider side.
+  recordingRef    String?
+  initiatedBy     String?
+  initiatedAt     DateTime                @default(now())
+  ringingAt       DateTime?
+  answeredAt      DateTime?
+  completedAt     DateTime?
+  durationSeconds Int?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([leadId])
+  @@index([providerCallId])
+  @@index([status])
 }
 
 model LeadProduct {

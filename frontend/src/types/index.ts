@@ -488,6 +488,51 @@ export interface AiSettings {
   updatedAt: string;
 }
 
+// D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation. Mirrors
+// backend TelephonyTestCallStatus exactly (see schema.prisma). Deliberately
+// NOT the same enum as AiLeadStatus above — these are raw technical call
+// states from the telephony provider, not AI qualification outcomes.
+export const TELEPHONY_TEST_CALL_STATUSES = [
+  "NOT_STARTED",
+  "CALLING",
+  "RINGING",
+  "ANSWERED",
+  "COMPLETED",
+  "FAILED",
+  "BUSY",
+  "NO_ANSWER",
+] as const;
+export type TelephonyTestCallStatus = (typeof TELEPHONY_TEST_CALL_STATUSES)[number];
+
+export interface TelephonyTestCall {
+  id: string;
+  phone: string;
+  leadId?: string | null;
+  lead?: { id: string; leadNumber: string; companyName: string } | null;
+  status: TelephonyTestCallStatus;
+  providerCallId?: string | null;
+  providerStatus?: string | null;
+  errorMessage?: string | null;
+  recordingRef?: string | null;
+  initiatedBy?: string | null;
+  initiatedAt: string;
+  ringingAt?: string | null;
+  answeredAt?: string | null;
+  completedAt?: string | null;
+  durationSeconds?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Never carries a credential value — see TelephonyService.getPublicStatus().
+export interface TelephonyStatus {
+  exotelEnabled: boolean;
+  exotelConfigured: boolean;
+  sarvamEnabled: boolean;
+  sarvamConfigured: boolean;
+  voiceAgentConfigured: boolean;
+}
+
 // Lead History / Notes — additive. QUOTATION_CREATED entries are
 // synthesized by the backend at read time (see leads.service.ts) rather
 // than persisted, but they're indistinguishable from stored entries in

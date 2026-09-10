@@ -123,6 +123,13 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   // gated by the existing Lead.View/Lead.Edit permissions, not this module.
   { module: 'AiSettings', action: 'View', description: 'View D.O.T. AI calling settings' },
   { module: 'AiSettings', action: 'Edit', description: 'Edit D.O.T. AI calling settings' },
+  // D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation. Gates
+  // the entire TelephonyController (status/test-calls/test-call) — like
+  // AiSettings above, Administrator-only (granted automatically via
+  // PERMISSIONS.map(...) below); not added to any other role's
+  // ROLE_PERMISSIONS list, so only an Administrator can ever place a test
+  // call or see the Telephony Test admin screen.
+  { module: 'Telephony', action: 'Test', description: 'Make D.O.T. telephony test calls (Exotel)' },
 ];
 
 const DEPARTMENTS = ['Sales', 'Production', 'Finance', 'Purchase', 'Stores', 'HR', 'Quality'];
@@ -735,36 +742,54 @@ async function main() {
   if (process.env.NODE_ENV !== 'production') {
     const adminUser = await prisma.user.findUnique({ where: { username: 'admin' } });
     if (adminUser) {
-      const testLead = await prisma.lead.upsert({
-        where: { leadNumber: 'LD-AITEST1' },
-        update: {},
-        create: {
-          leadNumber: 'LD-AITEST1',
-          companyName: 'Test Customer',
-          contactPerson: 'Test Customer',
-          phone: '9999999999',
-          title: 'HVLS fans for warehouse (D.O.T. test lead)',
-          description: 'Dev-only seed lead for exercising the D.O.T. AI Follow-up UI — not a real lead.',
-          status: 'NEW',
-          source: 'OTHER',
-          state: 'Telangana',
-          city: 'Hyderabad',
-          country: 'India',
-          assignedToUserId: adminUser.id,
-          // AI fields — as if D.O.T. had already called and qualified this
-          // lead. Lead.status stays NEW: AI qualification is additional
-          // information, never a trigger that moves the sales pipeline
-          // stage by itself (see feature spec).
-          aiStatus: 'QUALIFIED',
-          aiQualification: 'HOT',
-          aiSummary: 'Test AI-qualified lead. Customer wants 8 HVLS fans for a warehouse in Hyderabad, timeline ~30 days.',
-          aiCallAttempts: 1,
-          lastAiCallAt: new Date(),
-          aiSiteVisitRequested: true,
-          preferredLanguage: 'TELUGU',
-          languageSource: 'AI_DETECTED',
-        },
-      });
+      // Looked up by title rather than leadNumber (see below) so this stays
+      // idempotent across re-seeds without needing a fixed leadNumber.
+      const testLeadTitle = 'HVLS fans for warehouse (D.O.T. test lead)';
+      let testLead = await prisma.lead.findFirst({ where: { title: testLeadTitle } });
+      if (!testLead) {
+        // Give the test lead a real LD-###### number instead of a
+        // non-numeric placeholder. LeadsService.generateLeadNumber() looks
+        // at the most-recently-created lead and parses the digits after
+        // "LD-" to pick the next number; a placeholder like "LD-AITEST1"
+        // parses to NaN -> 0, so the next real lead created would collide
+        // with an existing "LD-000001". Mirroring that same next-number
+        // logic here keeps the sequence valid.
+        const lastLead = await prisma.lead.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { leadNumber: true },
+        });
+        const lastSeq = lastLead ? parseInt(lastLead.leadNumber.replace('LD-', ''), 10) || 0 : 0;
+        const testLeadNumber = `LD-${String(lastSeq + 1).padStart(6, '0')}`;
+        testLead = await prisma.lead.create({
+          data: {
+            leadNumber: testLeadNumber,
+            companyName: 'Test Customer',
+            contactPerson: 'Test Customer',
+            phone: '9999999999',
+            title: testLeadTitle,
+            description: 'Dev-only seed lead for exercising the D.O.T. AI Follow-up UI — not a real lead.',
+            status: 'NEW',
+            source: 'OTHER',
+            state: 'Telangana',
+            city: 'Hyderabad',
+            country: 'India',
+            assignedToUserId: adminUser.id,
+            // AI fields — as if D.O.T. had already called and qualified this
+            // lead. Lead.status stays NEW: AI qualification is additional
+            // information, never a trigger that moves the sales pipeline
+            // stage by itself (see feature spec).
+            aiStatus: 'QUALIFIED',
+            aiQualification: 'HOT',
+            aiSummary:
+              'Test AI-qualified lead. Customer wants 8 HVLS fans for a warehouse in Hyderabad, timeline ~30 days.',
+            aiCallAttempts: 1,
+            lastAiCallAt: new Date(),
+            aiSiteVisitRequested: true,
+            preferredLanguage: 'TELUGU',
+            languageSource: 'AI_DETECTED',
+          },
+        });
+      }
       await prisma.leadAiCallLog.deleteMany({ where: { leadId: testLead.id } });
       await prisma.leadAiCallLog.create({
         data: {
