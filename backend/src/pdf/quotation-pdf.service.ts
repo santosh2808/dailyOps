@@ -706,9 +706,24 @@ export class QuotationPdfService {
   // QuotationItemsEditor), this scope row must reflect that choice instead
   // of silently printing the seeded default.
   private resolveScopeRowValue(row: { item: string; quantityPerFan: string }, item: QuotationPdfItem): string {
-    const isPaintRow = row.item.trim().toLowerCase() === 'paint';
+    const rowLabel = row.item.trim().toLowerCase();
+    const isPaintRow = rowLabel === 'paint';
     const color = item.color?.trim();
     if (isPaintRow && color) return color;
+    // Same treatment as Paint above: the seeded scope row (e.g. "Customer to
+    // confirm") is only a catalog default. Once staff pick a real hanging
+    // structure on the quotation item (QuotationItem.hangingStructureType —
+    // set via the Hanging Structure field on the Quotation form), this row
+    // must reflect that actual choice instead.
+    const isHangingStructureRow = rowLabel === 'hanging structure';
+    if (isHangingStructureRow && item.hangingStructureType) {
+      const structureLabel = HANGING_STRUCTURE_LABELS[item.hangingStructureType];
+      const pipeNote =
+        item.hangingStructureType === 'PIPE_TRUSS' && item.pipeLength?.trim()
+          ? `, Pipe Length: ${item.pipeLength.trim()}`
+          : '';
+      return `${structureLabel}${pipeNote}`;
+    }
     return row.quantityPerFan;
   }
 
