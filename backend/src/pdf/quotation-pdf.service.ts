@@ -362,21 +362,8 @@ export class QuotationPdfService {
     const contentLeft = PAGE_MARGIN;
     const contentWidth = doc.page.width - PAGE_MARGIN * 2;
 
-    // Both logos are capped with `fit` (width AND height) rather than just
-    // `height` — a height-only constraint lets an image's actual width run
-    // wild if its aspect ratio ever changes (e.g. someone drops in a wider
-    // replacement logo file), which is exactly what let the Spyro Fans logo
-    // spill past the right margin. `fit` keeps it inside the box and
-    // preserves aspect ratio; the right-hand logo is additionally anchored
-    // flush against the content-right edge (not the image's own left edge)
-    // so it's always fully on-page no matter how wide it renders.
-    const logoBoxHeight = 34;
-    const spyroLogoBoxWidth = 90;
-    this.safeImage(doc, LOGO_SR, contentLeft, top, { fit: [130, logoBoxHeight] });
-    this.safeImage(doc, LOGO_SPYRO, contentLeft + contentWidth - spyroLogoBoxWidth, top, {
-      fit: [spyroLogoBoxWidth, logoBoxHeight],
-      align: 'right',
-    });
+    this.safeImage(doc, LOGO_SR, contentLeft, top, { height: 34 });
+    this.safeImage(doc, LOGO_SPYRO, contentLeft + contentWidth - 70, top, { height: 34 });
 
     doc.font('Helvetica-Bold').fontSize(9.5).fillColor(GREEN);
     doc.text(COMPANY_NAME, contentLeft, top + 40, { width: contentWidth, align: 'center' });
