@@ -64,7 +64,16 @@ class CallAgent:
                         self._sample_rate,
                     )
                     self._stt = SarvamSttSession(self._settings, sample_rate=self._sample_rate)
-                    await self._stt.start()
+                    # TEMPORARY DIAGNOSTIC (silent-failure investigation): this is
+                    # the one unaudited await between "Call started" and "Starting
+                    # greeting task" — instrumented in isolation, no behavior change.
+                    logger.info("Calling STT start")
+                    try:
+                        await self._stt.start()
+                    except BaseException as exc:  # noqa: BLE001 — diagnostic visibility only; always re-raised below
+                        logger.exception("STT start raised %s", type(exc).__name__)
+                        raise
+                    logger.info("STT start returned successfully")
                     asyncio.create_task(self._watch_stt_events(), name="stt-event-watcher")
                     asyncio.create_task(self._watch_time_budget(), name="call-time-budget")
                     # TEMPORARY DIAGNOSTIC (silent-failure investigation): confirm
