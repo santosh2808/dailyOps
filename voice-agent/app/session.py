@@ -58,6 +58,10 @@ class ExotelSession:
         self._ws = websocket
         self.stream_sid: str | None = None
         self.call_sid: str | None = None
+        # TEMPORARY DIAGNOSTIC (incoming-audio investigation): running
+        # counters for inbound `media` frames from Exotel — see events().
+        self._media_frame_count = 0
+        self._media_bytes_total = 0
 
     async def accept(self) -> None:
         await self._ws.accept()
@@ -96,8 +100,26 @@ class ExotelSession:
                     )
                 elif event == "media":
                     payload = (message.get("media") or {}).get("payload")
+                    # TEMPORARY DIAGNOSTIC (incoming-audio investigation): confirm
+                    # whether Exotel is sending inbound media frames at all, and
+                    # if so, how many / how much data — never logs the payload
+                    # itself, only its decoded length and running totals.
                     if payload:
-                        yield SessionEvent(kind="media", audio=base64.b64decode(payload))
+                        decoded = base64.b64decode(payload)
+                        self._media_frame_count += 1
+                        self._media_bytes_total += len(decoded)
+                        logger.info(
+                            "Exotel media event received: frame_bytes=%d frame_count=%d cumulative_bytes=%d",
+                            len(decoded),
+                            self._media_frame_count,
+                            self._media_bytes_total,
+                        )
+                        yield SessionEvent(kind="media", audio=decoded)
+                    else:
+                        logger.warning(
+                            "Exotel media event received with empty/missing payload (frame_count so far=%d)",
+                            self._media_frame_count,
+                        )
                 elif event == "dtmf":
                     digit = (message.get("dtmf") or {}).get("digit")
                     yield SessionEvent(kind="dtmf", digit=digit)
@@ -109,7 +131,11 @@ class ExotelSession:
                     yield SessionEvent(kind="stop", reason=reason)
                     return
                 else:
-                    logger.debug("Unhandled Exotel event type: %s", event)
+                    # TEMPORARY DIAGNOSTIC: was logger.debug(), which main.py's
+                    # INFO-level logging.basicConfig() silently filters out —
+                    # bumped to warning so an unexpected/unrecognized event type
+                    # from Exotel is actually visible while investigating.
+                    logger.warning("Unhandled Exotel event type: %s", event)
         except WebSocketDisconnect:
             yield SessionEvent(kind="closed", reason="websocket_disconnect")
 
