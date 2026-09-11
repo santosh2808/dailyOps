@@ -71,7 +71,13 @@ class ExotelSession:
         messages until the call ends or the connection drops."""
         try:
             while True:
+                # TEMPORARY DIAGNOSTIC (incoming-frame investigation): confirm
+                # whether Exotel sends ANY WebSocket frame after "start" at
+                # all, independent of our JSON parsing / event dispatch below.
+                logger.info("WAITING FOR EXOTEL FRAME")
                 raw = await self._ws.receive_text()
+                logger.info("EXOTEL FRAME RECEIVED: length=%d", len(raw))
+                logger.info("EXOTEL RAW FRAME PREFIX: %s", raw[:200])
                 try:
                     message = json.loads(raw)
                 except json.JSONDecodeError:
