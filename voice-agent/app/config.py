@@ -21,11 +21,22 @@ from dotenv import load_dotenv
 # into os.environ, and every os.environ.get(...) below silently fell back
 # to its hardcoded default instead (SARVAM_VOICE -> "anushka"). Loading the
 # .env file that sits next to this package (voice-agent/.env) before
-# load_settings() runs fixes that. override=False (python-dotenv's default)
-# means real environment variables already set — e.g. via Docker's
-# env_file: — are never clobbered by this; .env only fills in what isn't
-# already set.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# load_settings() runs fixes that.
+#
+# override=True: found via live testing that a stray, already-exported shell
+# variable (e.g. `export SARVAM_VOICE=` with an empty value, left over from
+# an earlier terminal session) silently wins over .env under dotenv's default
+# override=False, since "already set" includes an empty string — os.environ
+# still has the key, so dotenv leaves it alone, and config.py's fallback
+# chain (os.environ.get(...) or "anushka") then falls through to "anushka"
+# again despite .env being correct. For this single-purpose local service,
+# voice-agent/.env is meant to be authoritative, so override=True makes it
+# win over any pre-existing shell environment for these specific keys. This
+# does not affect the Docker deployment path: no .env file is copied into
+# the image (see Dockerfile — only app/ and requirements.txt are COPYed), so
+# load_dotenv() finds nothing there and Docker's own env_file:-supplied
+# variables are unaffected.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
