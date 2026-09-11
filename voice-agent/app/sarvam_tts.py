@@ -37,10 +37,10 @@ async def synthesize_speech(settings: Settings, text: str, sample_rate: int = 80
         model=settings.sarvam_tts_model, send_completion_event=True
     ) as ws:
         await ws.configure(
-            language_code=settings.sarvam_language,
+            target_language_code=settings.sarvam_language,
             speaker=settings.sarvam_voice,
             output_audio_codec="linear16",
-            sample_rate=sample_rate,
+            speech_sample_rate=sample_rate,
         )
         await ws.convert(text)
         await ws.flush()
