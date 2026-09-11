@@ -42,6 +42,10 @@ class SarvamSttSession:
         self.events: asyncio.Queue[SttEvent] = asyncio.Queue()
         self._reader_task: asyncio.Task | None = None
         self._closed = False
+        # TEMPORARY DIAGNOSTIC (STT pipeline investigation): running counters
+        # for inbound Exotel PCM actually reaching send_pcm() — see below.
+        self._pcm_frame_count = 0
+        self._pcm_bytes_total = 0
 
     async def start(self) -> None:
         self._ws_cm = self._client.speech_to_text_streaming.connect(
@@ -62,14 +66,48 @@ class SarvamSttSession:
         docstring for why (the SDK's per-message encoding is fixed to
         "audio/wav").
         """
+        # TEMPORARY DIAGNOSTIC (STT pipeline investigation): confirm inbound
+        # Exotel PCM actually reaches this method, and how much — never logs
+        # the audio payload itself, only byte counts.
+        self._pcm_frame_count += 1
+        self._pcm_bytes_total += len(pcm)
+        logger.info(
+            "STT send_pcm() called: frame_bytes=%d frame_count=%d cumulative_bytes=%d",
+            len(pcm),
+            self._pcm_frame_count,
+            self._pcm_bytes_total,
+        )
         if self._closed or self._ws is None:
+            # TEMPORARY DIAGNOSTIC: this early-return was previously silent —
+            # if it's firing, frames are reaching send_pcm() but never
+            # actually being sent to Sarvam at all.
+            logger.warning(
+                "STT send_pcm() dropped frame: closed=%s ws_is_none=%s frame_count=%d",
+                self._closed,
+                self._ws is None,
+                self._pcm_frame_count,
+            )
             return
         wav_bytes = wrap_pcm_as_wav(pcm, sample_rate=self._sample_rate)
         audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+        # TEMPORARY DIAGNOSTIC: exact byte counts of what's about to be sent
+        # to Sarvam, immediately before the send.
+        logger.info(
+            "STT sending chunk to Sarvam: raw_pcm_bytes=%d wav_bytes=%d base64_len=%d sample_rate=%s",
+            len(pcm),
+            len(wav_bytes),
+            len(audio_b64),
+            self._sample_rate,
+        )
         try:
             await self._ws.transcribe(audio=audio_b64, encoding="audio/wav", sample_rate=self._sample_rate)
+            # TEMPORARY DIAGNOSTIC: confirms the send call itself completed
+            # without raising — does not confirm Sarvam accepted/used it.
+            logger.info("STT chunk sent to Sarvam successfully: wav_bytes=%d", len(wav_bytes))
         except Exception as exc:  # noqa: BLE001 — surfaced as an SttEvent, never crashes the call
-            logger.error("Sarvam STT send failed: %s", exc)
+            # TEMPORARY DIAGNOSTIC: logger.exception() for the full traceback,
+            # in addition to the existing error-event behavior (unchanged).
+            logger.exception("Sarvam STT send failed (wav_bytes=%d)", len(wav_bytes))
             await self.events.put(SttEvent(kind="error", text=str(exc)))
 
     async def _read_loop(self) -> None:
@@ -77,20 +115,33 @@ class SarvamSttSession:
             async for message in self._ws:
                 msg_type = getattr(message, "type", None)
                 data = getattr(message, "data", None)
+                # TEMPORARY DIAGNOSTIC (STT pipeline investigation): confirm
+                # any response/event is coming back from Sarvam at all,
+                # regardless of shape.
+                logger.info("STT message received from Sarvam: type=%s", msg_type)
                 if msg_type == "events" and data is not None:
                     signal = getattr(data, "signal_type", None)
+                    logger.info("STT event signal_type=%s", signal)
                     if signal == "START_SPEECH":
                         await self.events.put(SttEvent(kind="speech_start"))
                     elif signal == "END_SPEECH":
                         await self.events.put(SttEvent(kind="speech_end"))
                 elif msg_type == "data" and data is not None:
                     transcript = getattr(data, "transcript", None)
+                    # TEMPORARY DIAGNOSTIC: transcript LENGTH only — never the
+                    # actual customer speech content.
+                    logger.info(
+                        "STT transcript data received: transcript_len=%d",
+                        len(transcript) if transcript else 0,
+                    )
                     if transcript:
                         await self.events.put(SttEvent(kind="transcript", text=transcript))
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — connection dropped/errored; surface, don't crash
-            logger.error("Sarvam STT read loop ended: %s", exc)
+            # TEMPORARY DIAGNOSTIC: logger.exception() for the full traceback,
+            # in addition to the existing error-event behavior (unchanged).
+            logger.exception("Sarvam STT read loop ended with an exception")
             await self.events.put(SttEvent(kind="error", text=str(exc)))
 
     async def close(self) -> None:
