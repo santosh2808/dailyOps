@@ -67,7 +67,16 @@ class CallAgent:
                     await self._stt.start()
                     asyncio.create_task(self._watch_stt_events(), name="stt-event-watcher")
                     asyncio.create_task(self._watch_time_budget(), name="call-time-budget")
+                    # TEMPORARY DIAGNOSTIC (silent-failure investigation): confirm
+                    # this line is actually reached before the greeting task is created.
+                    logger.info("Starting greeting task")
                     self._speaking_task = asyncio.create_task(self._speak(GREETING), name="speak-greeting")
+                    # TEMPORARY DIAGNOSTIC: see _log_speaking_task_result — without
+                    # this, an exception raised inside a fire-and-forget
+                    # create_task() call only ever surfaces (if at all) as an
+                    # easy-to-miss "Task exception was never retrieved" warning
+                    # whenever the Task object happens to be garbage-collected.
+                    self._speaking_task.add_done_callback(self._log_speaking_task_result)
 
                 elif event.kind == "media" and event.audio and self._stt:
                     await self._stt.send_pcm(event.audio)
@@ -141,17 +150,74 @@ class CallAgent:
             reply_text = await generate_reply(self._settings, self._history)
 
         self._history.append({"role": "assistant", "content": reply_text})
+        # TEMPORARY DIAGNOSTIC: same visibility as the greeting task below —
+        # logging before create_task() plus the done-callback below.
+        logger.info("Starting reply speaking task")
         self._speaking_task = asyncio.create_task(self._speak(reply_text), name="speak-reply")
+        self._speaking_task.add_done_callback(self._log_speaking_task_result)
 
     async def _speak(self, text: str) -> None:
+        # TEMPORARY DIAGNOSTIC (silent-failure investigation): confirm this
+        # coroutine actually starts running once its create_task() is
+        # scheduled — text content itself is not logged, only its length.
+        logger.info("TTS speak started: text_len=%d sample_rate=%s", len(text), self._sample_rate)
+
+        total_bytes = 0
+        # TEMPORARY DIAGNOSTIC: confirm synthesize_speech() is actually reached
+        # and called (as opposed to, e.g., an earlier await never returning).
+        logger.info("Calling synthesize_speech()")
         agen = synthesize_speech(self._settings, text, self._sample_rate)
         try:
             async for chunk in agen:
+                total_bytes += len(chunk)
+                # TEMPORARY DIAGNOSTIC: every chunk's size + running total —
+                # this is what should have summed to 136400 in the standalone
+                # test; here we see whether any chunk (or the loop itself)
+                # is ever actually reached on a live Exotel call.
+                logger.info(
+                    "TTS audio chunk received: chunk_bytes=%d cumulative_bytes=%d",
+                    len(chunk),
+                    total_bytes,
+                )
+                logger.info("Calling session.send_audio(): chunk_bytes=%d", len(chunk))
                 await self._session.send_audio(chunk)
+                logger.info("session.send_audio() succeeded: chunk_bytes=%d cumulative_bytes=%d", len(chunk), total_bytes)
+            # TEMPORARY DIAGNOSTIC: reached only on normal (non-cancelled,
+            # non-exception) completion of the loop above.
+            logger.info("TTS speak completed: total_bytes=%d", total_bytes)
         except asyncio.CancelledError:
+            # Expected on barge-in (see _watch_stt_events) — not an error, but
+            # still logged so a cancellation is never confused with silence.
+            logger.info("TTS speak cancelled: total_bytes_sent_so_far=%d", total_bytes)
+            raise
+        except Exception:
+            # TEMPORARY DIAGNOSTIC: this is the "any exception logged with
+            # full traceback and then re-raised" requirement — logger.exception()
+            # captures the current exception's traceback automatically.
+            logger.exception("TTS speak failed with an unhandled exception: total_bytes_sent_so_far=%d", total_bytes)
             raise
         finally:
             await agen.aclose()
+
+    def _log_speaking_task_result(self, task: asyncio.Task) -> None:
+        """TEMPORARY DIAGNOSTIC (silent-failure investigation): done-callback
+        attached to every `_speak()` create_task() call. Without this,
+        asyncio only ever surfaces an exception raised inside a
+        fire-and-forget task as a "Task exception was never retrieved"
+        warning — and only if/when that Task object is garbage-collected,
+        which may be long after the fact or never while the task is still
+        referenced (as `self._speaking_task` is here). This callback makes
+        that exception visible immediately, every time, with a full
+        traceback, without changing what the task itself does.
+        """
+        if task.cancelled():
+            logger.info("Speaking task %r ended: cancelled (expected on barge-in)", task.get_name())
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Speaking task %r ended with an unhandled exception", task.get_name(), exc_info=exc)
+        else:
+            logger.info("Speaking task %r ended normally", task.get_name())
 
     async def _end_call_gracefully(self) -> None:
         if self._ended.is_set():
