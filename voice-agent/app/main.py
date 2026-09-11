@@ -1,4 +1,4 @@
-"""D.O.T. AI Lead Assistant — Phase 2B. Spyro Fans voice agent ("Ananya").
+"""D.O.T. AI Lead Assistant — Phase 2B. Spyro Fans voice agent ("Meera").
 
 Entry point: a small FastAPI app exposing
   - GET  /health           liveness probe (Step 14)

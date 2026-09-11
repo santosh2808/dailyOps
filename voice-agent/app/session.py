@@ -122,7 +122,7 @@ class ExotelSession:
 
     async def send_clear(self) -> None:
         """Discard any audio already sent but not yet played — used on
-        barge-in (customer starts speaking while Ananya is still talking)."""
+        barge-in (customer starts speaking while Meera is still talking)."""
         if not self.stream_sid:
             return
         await self._send({"event": "clear", "stream_sid": self.stream_sid})

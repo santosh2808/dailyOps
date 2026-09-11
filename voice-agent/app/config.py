@@ -1,5 +1,5 @@
 """D.O.T. AI Lead Assistant — Phase 2B. Environment configuration for the
-Spyro Fans voice agent ("Ananya"). Every value is read from an environment
+Spyro Fans voice agent ("Meera"). Every value is read from an environment
 variable — nothing is hardcoded, nothing is committed with a real value
 (see .env.example). This module is imported once at process startup; if a
 required Sarvam credential is missing, the process still starts (so /health

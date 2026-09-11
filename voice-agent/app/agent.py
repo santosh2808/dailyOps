@@ -1,5 +1,5 @@
 """Conversation orchestration for one phone call: wires session.py's Exotel
-protocol layer to Sarvam STT/LLM/TTS. This is where "Ananya" actually talks
+protocol layer to Sarvam STT/LLM/TTS. This is where "Meera" actually talks
 — the persona/script content itself lives in prompts.py, this module just
 drives turn-taking, barge-in, and the call time budget around it.
 """
@@ -98,7 +98,7 @@ class CallAgent:
 
             if event.kind == "speech_start":
                 # Barge-in (Step 9 "handle customer interruption where
-                # supported"): stop whatever Ananya is currently saying and
+                # supported"): stop whatever Meera is currently saying and
                 # clear any audio Exotel has buffered but not yet played.
                 if self._speaking_task and not self._speaking_task.done():
                     self._speaking_task.cancel()
@@ -124,7 +124,7 @@ class CallAgent:
             return
 
         if self._speaking_task and not self._speaking_task.done():
-            # Ananya is already replying to a previous turn; let barge-in
+            # Meera is already replying to a previous turn; let barge-in
             # (speech_start) be the thing that interrupts her, not a second
             # transcript arriving mid-reply.
             return

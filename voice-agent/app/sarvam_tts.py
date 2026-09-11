@@ -26,7 +26,7 @@ logger = logging.getLogger("voice-agent.tts")
 
 
 async def synthesize_speech(settings: Settings, text: str, sample_rate: int = 8000) -> AsyncIterator[bytes]:
-    """Yield raw 16-bit PCM audio chunks for `text`, spoken as Ananya.
+    """Yield raw 16-bit PCM audio chunks for `text`, spoken as Meera.
 
     Requests linear16 (raw PCM) output at `sample_rate` so no resampling is
     needed before handing chunks straight to Exotel's `media` event — see

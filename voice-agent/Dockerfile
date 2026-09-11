@@ -1,4 +1,4 @@
-# D.O.T. AI Lead Assistant Phase 2B — Spyro Fans voice agent ("Ananya").
+# D.O.T. AI Lead Assistant Phase 2B — Spyro Fans voice agent ("Meera").
 # Independently deployable: this image has no dependency on the DailyOps
 # NestJS backend, frontend, or PostgreSQL. Does not affect any existing
 # Docker/EC2/GitHub Actions setup — this Dockerfile only builds this one

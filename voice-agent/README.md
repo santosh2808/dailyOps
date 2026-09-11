@@ -1,7 +1,7 @@
-# Spyro Fans Voice Agent ("Ananya") — Phase 2B
+# Spyro Fans Voice Agent ("Meera") — Phase 2B
 
 A small, independently deployable Python/FastAPI service that speaks to a
-customer over the phone as "Ananya from Spyro Fans", via Exotel's Voicebot
+customer over the phone as "Meera from Spyro Fans", via Exotel's Voicebot
 Applet WebSocket and Sarvam AI's streaming STT/LLM/TTS. It is not part of
 the DailyOps NestJS backend or frontend, has no shared database, and does
 not affect their build/deploy pipeline.
@@ -10,7 +10,7 @@ This is Phase 2B: a controlled, English-only, 1–2 minute test conversation,
 manually triggered from DailyOps's existing Administration → D.O.T.
 Telephony Test screen. It does not qualify leads, does not score
 HOT/WARM/COLD, does not quote pricing, and is never triggered automatically
-— see `app/prompts.py` for exactly what Ananya is (and isn't) allowed to
+— see `app/prompts.py` for exactly what Meera is (and isn't) allowed to
 say in this phase.
 
 ## Architecture
@@ -93,7 +93,7 @@ see the backend's Phase 2A report for details.
 2. Enter a **test phone number you control**.
 3. Click **Make Test Call**.
 4. Answer the phone.
-5. Speak with Ananya — she opens with the exact scripted greeting, then
+5. Speak with Meera — she opens with the exact scripted greeting, then
    responds naturally for about 1–2 minutes before wrapping up.
 6. Verify it's a genuine two-way conversation (she responds to what you
    actually say, not a canned loop).
