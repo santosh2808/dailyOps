@@ -70,10 +70,10 @@ class CallAgent:
                     logger.info("Calling STT start")
                     try:
                         await self._stt.start()
-                    except BaseException as exc:  # noqa: BLE001 — diagnostic visibility only; always re-raised below
-                        logger.exception("STT start raised %s", type(exc).__name__)
+                        logger.info("STT start returned successfully")
+                    except BaseException:  # noqa: BLE001 — diagnostic visibility only; always re-raised below
+                        logger.exception("STT start failed")
                         raise
-                    logger.info("STT start returned successfully")
                     asyncio.create_task(self._watch_stt_events(), name="stt-event-watcher")
                     asyncio.create_task(self._watch_time_budget(), name="call-time-budget")
                     # TEMPORARY DIAGNOSTIC (silent-failure investigation): confirm
