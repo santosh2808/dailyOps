@@ -11,6 +11,21 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# BUG FIX: nothing in this codebase was ever calling load_dotenv(), despite
+# python-dotenv being listed in requirements.txt — so a local `.env` file
+# (e.g. voice-agent/.env with SARVAM_VOICE=priya) was never actually read
+# into os.environ, and every os.environ.get(...) below silently fell back
+# to its hardcoded default instead (SARVAM_VOICE -> "anushka"). Loading the
+# .env file that sits next to this package (voice-agent/.env) before
+# load_settings() runs fixes that. override=False (python-dotenv's default)
+# means real environment variables already set — e.g. via Docker's
+# env_file: — are never clobbered by this; .env only fills in what isn't
+# already set.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
