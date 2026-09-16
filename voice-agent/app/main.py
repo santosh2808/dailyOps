@@ -47,6 +47,10 @@ async def on_startup() -> None:
         settings.port,
         settings.websocket_url or "<unset>",
     )
+    # BUG FIX (sarvam-m deprecation): safe startup diagnostic — model name
+    # only, never the API key — so a stale/deprecated LLM model is visible
+    # in the logs at process start without needing a live call first.
+    logger.info("LLM model configured: %s", settings.sarvam_llm_model)
 
 
 @app.websocket("/ws/exotel")

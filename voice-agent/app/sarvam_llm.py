@@ -1,5 +1,6 @@
-"""Chat completion against Sarvam's LLM (sarvam-m by default), via the
-officially documented `sarvamai` Python SDK method `client.chat.completions(
+"""Chat completion against Sarvam's LLM (sarvam-105b-conversations by
+default — "sarvam-m" was deprecated by Sarvam), via the officially
+documented `sarvamai` Python SDK method `client.chat.completions(
 messages=..., model=...)` — note this is NOT `client.chat.completions.
 create(...)` (the OpenAI SDK convention); the sarvamai SDK's method name is
 `completions()` itself.

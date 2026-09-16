@@ -84,7 +84,11 @@ def load_settings() -> Settings:
     return Settings(
         sarvam_api_key=os.environ.get("SARVAM_API_KEY", "").strip() or None,
         sarvam_stt_model=os.environ.get("SARVAM_STT_MODEL", "saaras:v3").strip(),
-        sarvam_llm_model=os.environ.get("SARVAM_LLM_MODEL", "sarvam-m").strip(),
+        # BUG FIX: "sarvam-m" is deprecated by Sarvam (HTTP 400 on chat
+        # completions) — replaced with "sarvam-105b-conversations", one of
+        # the models Sarvam's own error response listed as its replacement.
+        sarvam_llm_model=os.environ.get("SARVAM_LLM_MODEL", "sarvam-105b-conversations").strip()
+        or "sarvam-105b-conversations",
         sarvam_tts_model=os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip(),
         # Phase 2B is English-only (Step 7) — en-IN is the only supported
         # value in this phase; multilingual selection is explicitly future
