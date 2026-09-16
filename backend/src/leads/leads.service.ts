@@ -1218,6 +1218,9 @@ export class LeadsService {
           language: dto.language,
           qualification: dto.qualification,
           summary: dto.summary,
+          quantity: dto.quantity,
+          application: dto.application,
+          timeline: dto.timeline,
           transcriptRef: dto.transcriptRef,
           recordingRef: dto.recordingRef,
           performedBy: actorName,
@@ -1232,6 +1235,15 @@ export class LeadsService {
           lastAiCallAt: dto.startedAt ? new Date(dto.startedAt) : new Date(),
           ...(dto.qualification !== undefined ? { aiQualification: dto.qualification } : {}),
           ...(dto.summary !== undefined ? { aiSummary: dto.summary } : {}),
+          // Phase 3A — structured requirement rollup, same "only write if the
+          // caller actually sent it" pattern as every field in this block.
+          // city/state deliberately go to the existing Lead.city/Lead.state
+          // columns (no new duplicate fields) rather than anywhere else.
+          ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
+          ...(dto.application !== undefined ? { application: dto.application } : {}),
+          ...(dto.timeline !== undefined ? { timeline: dto.timeline } : {}),
+          ...(dto.city !== undefined ? { city: dto.city } : {}),
+          ...(dto.state !== undefined ? { state: dto.state } : {}),
           ...(dto.siteVisitRequested !== undefined ? { aiSiteVisitRequested: dto.siteVisitRequested } : {}),
           ...(dto.callbackRequested !== undefined ? { aiCallbackRequested: dto.callbackRequested } : {}),
           ...(dto.callbackAt !== undefined ? { aiCallbackAt: dto.callbackAt ? new Date(dto.callbackAt) : null } : {}),
@@ -1251,7 +1263,7 @@ export class LeadsService {
         tx,
         id,
         'AI_CALL_LOGGED',
-        `D.O.T. call logged — status ${dto.status}${dto.qualification ? `, qualification ${dto.qualification}` : ''}`,
+        `D.O.T. call logged — status ${dto.status}${dto.qualification ? `, qualification ${dto.qualification}` : ''}${dto.quantity ? `, quantity ${dto.quantity}` : ''}`,
         actorName,
       );
 

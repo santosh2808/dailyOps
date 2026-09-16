@@ -460,6 +460,18 @@ model Lead {
   aiCallbackAt         DateTime?
   aiCallHistory        LeadAiCallLog[]
 
+  // Additive: D.O.T. AI Lead Assistant Phase 3A — the structured requirement
+  // info Meera collects during a qualification call. city/state are NOT
+  // duplicated here — the AI call log rolls up into the existing Lead.city/
+  // Lead.state columns above instead (see LeadsService.addAiCallLog()).
+  // Nullable/no default: unset until an AI call actually reports them, same
+  // convention as aiSummary above. quantity is the fan count discussed, not
+  // a duplicate of LeadProduct.quantity (that's the sales-side line-item
+  // quantity on an actual quotation, a separate concept).
+  quantity             Int?
+  application          String?
+  timeline             String?
+
   // Additive: D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation.
   // Optional association only (a test call is never required to reference a
   // Lead); see TelephonyTestCall model comment.
@@ -593,6 +605,14 @@ model LeadAiCallLog {
   language        PreferredLanguage?
   qualification   AiQualification?
   summary         String?
+  // Additive: D.O.T. AI Lead Assistant Phase 3A — per-call snapshot of the
+  // structured requirement Meera reported on THIS call, mirroring how
+  // qualification/summary above are kept per-call as well as rolled up onto
+  // the parent Lead. city/state are deliberately not duplicated here — see
+  // Lead.quantity/application/timeline comment above.
+  quantity        Int?
+  application     String?
+  timeline        String?
   // Reference only (e.g. a provider-hosted URL/ID) — never the raw
   // transcript/audio content itself. Null in Phase 1 since no calls happen.
   transcriptRef   String?

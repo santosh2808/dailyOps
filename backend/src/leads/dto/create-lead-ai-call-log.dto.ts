@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AiLeadStatus, AiQualification, PreferredLanguage } from '@prisma/client';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { INDIA_STATES } from '../../common/india-states';
 
 // Records one D.O.T. call attempt against a lead. In Phase 1 this is only
 // ever invoked manually — via Administration/Lead Details as a dev/test
@@ -55,6 +56,40 @@ export class CreateLeadAiCallLogDto {
   @IsOptional()
   @IsString()
   summary?: string;
+
+  // Phase 3A — the structured requirement Meera collects during the call.
+  // Rolled up onto Lead.quantity/application/timeline (see addAiCallLog())
+  // and also kept here as a per-call snapshot, same treatment as
+  // qualification/summary above. Never touches Lead.status.
+  @ApiPropertyOptional({ example: 5, description: 'Number of HVLS fans discussed on this call.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 'Manufacturing warehouse' })
+  @IsOptional()
+  @IsString()
+  application?: string;
+
+  @ApiPropertyOptional({ example: 'Within 30 days' })
+  @IsOptional()
+  @IsString()
+  timeline?: string;
+
+  // city/state reuse the existing Lead.city/Lead.state columns (no
+  // duplicate fields) — see CreateLeadDto for the same INDIA_STATES
+  // validation on state. Optional here: only overwrites the Lead's
+  // existing value when the AI call actually reports one.
+  @ApiPropertyOptional({ example: 'Hyderabad' })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ example: 'Telangana', enum: INDIA_STATES })
+  @IsOptional()
+  @IsIn(INDIA_STATES)
+  state?: string;
 
   @ApiPropertyOptional({ description: 'Reference only (e.g. a provider-hosted URL/ID) — never the raw transcript.' })
   @IsOptional()
