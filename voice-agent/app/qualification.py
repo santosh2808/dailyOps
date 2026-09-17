@@ -41,7 +41,9 @@ with exactly these keys:
 
 {
   "qualification": one of "HOT", "WARM", "COLD", "NOT_INTERESTED",
-  "summary": a short factual 1-3 sentence summary of what the customer said,
+  "summary": a short factual 1-3 sentence summary of what the customer said \
+— including whether they asked for a quotation, since there is no separate \
+field for that,
   "quantity": integer number of fans discussed, or null if never stated,
   "application": short text describing where/how the fans will be used \
 (e.g. "Manufacturing warehouse"), or null if never stated,
@@ -59,14 +61,18 @@ be called back later,
 callback time, otherwise null
 }
 
-QUALIFICATION RULES:
-- "HOT": the customer has a clear, current requirement (fan count and/or \
-application known), sounds ready to move forward soon, and agreed to a \
-site visit or a quotation/callback.
-- "WARM": genuine interest and some real requirement detail, but no \
-concrete near-term commitment yet (e.g. "just exploring", vague timeline).
-- "COLD": very little real interest or detail — vague, non-committal, or \
-mostly small talk with no real requirement surfaced.
+QUALIFICATION RULES — judge the whole conversation, not any single detail \
+(a stated quantity alone does NOT make a call HOT):
+- "HOT": a genuine active requirement with meaningful buying intent — a \
+specific requirement, quantity known or reasonably estimated, installation \
+location known, a near-term need (especially within 30-60 days), and \
+interest in a quotation and/or site visit, or actively comparing/evaluating \
+suppliers with real urgency.
+- "WARM": a genuine requirement, but not ready to buy immediately — e.g. \
+"planning a project in about three months", or "comparing a few suppliers, \
+haven't decided yet".
+- "COLD": primarily researching, with no defined immediate requirement — \
+e.g. "just researching HVLS fans, haven't decided anything".
 - "NOT_INTERESTED": the customer explicitly said they are not interested, \
 already bought elsewhere, or asked not to be contacted again.
 
