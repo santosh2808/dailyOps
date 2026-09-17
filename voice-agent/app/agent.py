@@ -9,17 +9,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 
 from .config import Settings
-from .prompts import AFFIRMATIVE_FOLLOWUP, CLOSING, GREETING
+from .dailyops_client import DailyOpsClient
+from .prompts import CLOSING, GREETING
+from .qualification import extract_qualification
 from .sarvam_llm import generate_reply
 from .sarvam_stt import SarvamSttSession
 from .sarvam_tts import synthesize_speech
 from .session import ExotelSession
 
 logger = logging.getLogger("voice-agent.agent")
-
-_AFFIRMATIVE_WORDS = ("yes", "yeah", "yep", "yup", "clearly", "sure", "i can hear", "loud and clear")
 
 _GOODBYE_MARK = "goodbye_complete"
 _MARK_WAIT_TIMEOUT_SECONDS = 5
@@ -35,10 +36,17 @@ class CallAgent:
         self._stt: SarvamSttSession | None = None
         self._history: list[dict[str, str]] = []
         self._speaking_task: asyncio.Task | None = None
-        self._greeting_answered = False
         self._call_start: float | None = None
         self._ended = asyncio.Event()
         self._mark_events: dict[str, asyncio.Event] = {}
+
+        # Phase 3B: captured from Exotel's "start" event, used only at
+        # end-of-call to look up the Lead and log the call — never used to
+        # change how the live conversation itself behaves.
+        self._from_number: str | None = None
+        self._call_sid: str | None = None
+        self._call_started_at: datetime | None = None
+        self._qualification_submitted = False
 
     async def run(self) -> None:
         if not self._settings.sarvam_configured:
@@ -57,6 +65,12 @@ class CallAgent:
                 elif event.kind == "start" and event.start:
                     self._sample_rate = event.start.sample_rate or 8000
                     self._call_start = time.monotonic()
+                    self._call_started_at = datetime.now(timezone.utc)
+                    # Phase 3B: kept only for the end-of-call DailyOps lookup/
+                    # log — never logged with the actual number, and never
+                    # used anywhere in the live conversation logic below.
+                    self._from_number = event.start.from_number
+                    self._call_sid = event.start.call_sid
                     logger.info(
                         "Call started: call_sid=%s stream_sid=%s sample_rate=%s",
                         event.start.call_sid,
@@ -149,14 +163,12 @@ class CallAgent:
 
         self._history.append({"role": "user", "content": transcript})
 
-        if not self._greeting_answered:
-            self._greeting_answered = True
-            if any(word in transcript.lower() for word in _AFFIRMATIVE_WORDS):
-                reply_text = AFFIRMATIVE_FOLLOWUP
-            else:
-                reply_text = await generate_reply(self._settings, self._history)
-        else:
-            reply_text = await generate_reply(self._settings, self._history)
+        # Phase 3B: the new opening line is a natural qualification opener,
+        # not a yes/no "can you hear me?" question, so every turn (including
+        # the first) goes straight to the LLM — the old canned
+        # affirmative-word special case was specific to the Phase 2B test
+        # script's yes/no opener and no longer applies.
+        reply_text = await generate_reply(self._settings, self._history)
 
         self._history.append({"role": "assistant", "content": reply_text})
         # TEMPORARY DIAGNOSTIC: same visibility as the greeting task below —
@@ -254,4 +266,64 @@ class CallAgent:
             self._speaking_task.cancel()
         if self._stt:
             await self._stt.close()
+        await self._submit_qualification()
         logger.info("Call session cleaned up")
+
+    async def _submit_qualification(self) -> None:
+        """Phase 3B: best-effort, run-once, end-of-call report to the
+        existing DailyOps Phase 3A endpoint. Never raises — any failure
+        here is logged and swallowed, since by this point the call is
+        already over and there is nothing left to protect. This never
+        touches Lead.status (the DailyOps endpoint itself never writes
+        that field — see leads.service.ts's addAiCallLog()).
+        """
+        if self._qualification_submitted:
+            return
+        self._qualification_submitted = True
+
+        if not self._settings.dailyops_configured:
+            logger.info("DailyOps API not configured — skipping qualification submission")
+            return
+
+        if not self._from_number:
+            logger.info("No caller phone number captured for this call — skipping DailyOps submission")
+            return
+
+        try:
+            client = DailyOpsClient(self._settings)
+
+            if not self._history:
+                # Call connected but no conversation happened (e.g. dropped
+                # immediately) — nothing to qualify, but still worth a
+                # minimal log entry using the existing ANSWERED status
+                # rather than inventing a new one.
+                payload = {
+                    "status": "ANSWERED",
+                    "externalCallId": self._call_sid,
+                    "startedAt": self._call_started_at.isoformat() if self._call_started_at else None,
+                    "endedAt": datetime.now(timezone.utc).isoformat(),
+                }
+            else:
+                result = await extract_qualification(self._settings, self._history)
+                payload = {
+                    **result,
+                    "externalCallId": self._call_sid,
+                    "startedAt": self._call_started_at.isoformat() if self._call_started_at else None,
+                    "endedAt": datetime.now(timezone.utc).isoformat(),
+                }
+
+            # Drop keys with a None value entirely rather than sending
+            # explicit nulls for optional DTO fields — smaller diff from
+            # "field simply not provided", and avoids any ambiguity around
+            # how an optional-but-present-as-null field is handled server
+            # side.
+            payload = {k: v for k, v in payload.items() if v is not None}
+
+            lead_id = await client.find_lead_by_phone(self._from_number)
+            if not lead_id:
+                logger.info("No matching Lead found for this call's phone number — skipping DailyOps submission")
+                return
+
+            await client.submit_ai_qualification(lead_id, payload)
+        except Exception:  # noqa: BLE001 — end-of-call reporting must never raise out of _cleanup()
+            logger.exception("Unhandled error while submitting qualification to DailyOps")

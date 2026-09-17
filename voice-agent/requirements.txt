@@ -3,3 +3,7 @@ uvicorn[standard]==0.32.1
 websockets==13.1
 sarvamai==0.1.33
 python-dotenv==1.0.1
+# Phase 3B: was already installed transitively (via sarvamai) but never
+# declared directly — pinned now that dailyops_client.py imports it
+# explicitly to call the DailyOps backend API.
+httpx==0.28.1
