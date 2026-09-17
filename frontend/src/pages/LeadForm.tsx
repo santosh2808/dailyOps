@@ -15,6 +15,8 @@ import { INDIA_STATES } from "@/lib/indiaStates";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
+import { normalizePhone } from "@/lib/phone";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { createLead, getLead, updateLead, type LeadPayload, type LeadProductPayload } from "@/api/leads";
 import type { LeadPriority, LeadSource } from "@/types";
 
@@ -67,9 +69,6 @@ const emptyForm: FormState = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Indian mobile numbers are exactly 10 digits — previously accepted 10-15,
-// which let obviously-wrong 11-15 digit entries through.
-const PHONE_REGEX = /^\d{10}$/;
 
 // Dates come back from the API as full ISO timestamps; <input type="date">
 // needs just the yyyy-mm-dd portion.
@@ -158,13 +157,17 @@ export default function LeadForm() {
     // unassigned.
     if (!form.state.trim()) next.state = "State is required";
     if (!form.assignedToUserId) next.assignedToUserId = "Assigning this lead to a user is required";
+    // QA bug-fix pass, Group B (TC-083/097): normalize before validating,
+    // so "+91 98765 43210" / "+91-9876543210" typed the way a staff member
+    // would naturally read it off a card is accepted instead of rejected —
+    // matches CreateLeadDto's own normalize-then-validate treatment.
     if (!form.phone.trim()) {
       next.phone = "Phone is required";
-    } else if (!PHONE_REGEX.test(form.phone.trim())) {
-      next.phone = "Phone must be exactly 10 digits";
+    } else if (!normalizePhone(form.phone.trim())) {
+      next.phone = "Enter a valid 10-digit Indian mobile number";
     }
-    if (form.alternatePhone.trim() && !PHONE_REGEX.test(form.alternatePhone.trim())) {
-      next.alternatePhone = "Alternate phone must be exactly 10 digits";
+    if (form.alternatePhone.trim() && !normalizePhone(form.alternatePhone.trim())) {
+      next.alternatePhone = "Enter a valid 10-digit Indian mobile number";
     }
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
       next.email = "Enter a valid email address";
@@ -186,6 +189,9 @@ export default function LeadForm() {
       next.nextFollowUp = "Next Follow-up cannot be before today";
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -200,8 +206,10 @@ export default function LeadForm() {
       contactPerson: form.contactPerson.trim(),
       designation: form.designation.trim() || undefined,
       email: form.email.trim() || undefined,
-      phone: form.phone.trim(),
-      alternatePhone: form.alternatePhone.trim() || undefined,
+      phone: normalizePhone(form.phone.trim()) ?? form.phone.trim(),
+      alternatePhone: form.alternatePhone.trim()
+        ? normalizePhone(form.alternatePhone.trim()) ?? form.alternatePhone.trim()
+        : undefined,
       city: form.city.trim() || undefined,
       state: form.state,
       country: form.country.trim() || undefined,

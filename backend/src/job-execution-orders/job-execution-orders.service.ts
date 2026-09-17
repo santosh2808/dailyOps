@@ -1,9 +1,15 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma, SalesOrderStatus } from '@prisma/client';
+import { JeoStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
+import { assertForwardOnlyTransition } from '../common/status-transition.util';
+
+// QA bug-fix pass (TC-080): the linear production sequence a JEO moves
+// through. COMPLETED is terminal — no further status change allowed once
+// reached (there is no separate "reopen" action for a JEO today).
+const JEO_SEQUENCE: JeoStatus[] = ['PENDING', 'MATERIAL_READY', 'ASSEMBLY_STARTED', 'QC', 'READY_FOR_DISPATCH', 'COMPLETED'];
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
@@ -333,6 +339,18 @@ export class JobExecutionOrdersService {
 
   async updateStatus(id: string, dto: UpdateJeoStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+
+    // QA bug-fix pass (TC-080): reject skipped/backward stages (e.g.
+    // PENDING -> COMPLETED directly) — only a move to the very next stage,
+    // or a no-op, is allowed.
+    assertForwardOnlyTransition({
+      current: existing.status,
+      target: dto.status,
+      order: JEO_SEQUENCE,
+      terminal: ['COMPLETED'],
+      entityLabel: 'Job Execution Order',
+    });
+
     const updated = await this.prisma.jobExecutionOrder.update({
       where: { id },
       data: {

@@ -12,10 +12,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import type { Product, ProductTechnicalSpec } from "@/types";
 import type { ProductPayload } from "@/api/products";
+
+// TC-066: the fixed set of SPYRO HVLS fan sizes this business actually
+// sells — taken from the canonical Annexure-I spec sheets seeded in
+// prisma/seed-hvls-products.ts (all 8 sizes: 8/10/12/14/16/18/20/24 ft).
+// Fan Size is a physical catalog attribute, not customer-chosen free text,
+// so it's a fixed dropdown rather than an <Input> like the other spec
+// fields (mirrors PAINT_COLOR_OPTIONS in quotationOptions.ts).
+const FAN_SIZE_OPTIONS = [
+  "8 ft. (2.5 M)",
+  "10 ft. (3 M)",
+  "12 ft. (3.7 M)",
+  "14 ft. (4.3 M)",
+  "16 ft. (4.9 M)",
+  "18 ft. (5.5 M)",
+  "20 ft. (6.1 M) Dia",
+  "24 ft. (7.3 M)",
+] as const;
 
 // Techno-Commercial Offer PDF (branded Quotation template) — Annexure-I
 // spec sheet fields, keyed exactly like ProductTechnicalSpec. Rendered as a
@@ -211,6 +230,9 @@ export default function ProductFormDialog({
       }
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -420,14 +442,41 @@ export default function ProductFormDialog({
                   <Label htmlFor={`spec-${key}`} className="text-xs">
                     {label}
                   </Label>
-                  <Input
-                    id={`spec-${key}`}
-                    value={form.spec[key] ?? ""}
-                    onChange={(e) =>
-                      setForm({ ...form, spec: { ...form.spec, [key]: e.target.value } })
-                    }
-                    placeholder={placeholder}
-                  />
+                  {key === "fanSize" ? (
+                    // TC-066: fixed dropdown, not free text — see
+                    // FAN_SIZE_OPTIONS above.
+                    <Select
+                      id={`spec-${key}`}
+                      value={form.spec.fanSize ?? ""}
+                      onChange={(e) =>
+                        setForm({ ...form, spec: { ...form.spec, fanSize: e.target.value } })
+                      }
+                    >
+                      <option value="">Select fan size</option>
+                      {FAN_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                      {form.spec.fanSize &&
+                        !FAN_SIZE_OPTIONS.includes(
+                          form.spec.fanSize as (typeof FAN_SIZE_OPTIONS)[number]
+                        ) && (
+                          <option value={form.spec.fanSize}>
+                            {form.spec.fanSize} (existing value, not in fixed list)
+                          </option>
+                        )}
+                    </Select>
+                  ) : (
+                    <Input
+                      id={`spec-${key}`}
+                      value={form.spec[key] ?? ""}
+                      onChange={(e) =>
+                        setForm({ ...form, spec: { ...form.spec, [key]: e.target.value } })
+                      }
+                      placeholder={placeholder}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -456,7 +505,7 @@ export default function ProductFormDialog({
               ) : (
                 <div className="space-y-2">
                   {form.scopeRows.map((row, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <Input
                         value={row.item}
                         onChange={(e) => {
@@ -465,7 +514,7 @@ export default function ProductFormDialog({
                           setForm({ ...form, scopeRows: next });
                         }}
                         placeholder="Item (e.g. Hanging Pipe)"
-                        className="flex-1"
+                        className="min-w-0 flex-1"
                       />
                       <Input
                         value={row.quantityPerFan}
@@ -475,12 +524,13 @@ export default function ProductFormDialog({
                           setForm({ ...form, scopeRows: next });
                         }}
                         placeholder="Qty / Fan (e.g. 01 No.)"
-                        className="w-40"
+                        className="w-full sm:w-40"
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="self-end sm:self-auto"
                         onClick={() =>
                           setForm({
                             ...form,

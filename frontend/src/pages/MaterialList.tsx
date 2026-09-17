@@ -23,6 +23,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
 import type { Material } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
@@ -49,6 +50,10 @@ const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
 export default function MaterialList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // QA bug-fix pass (TC-078/082/095): the backend already rejects
+  // unauthorized Material creation (MaterialsController's @RequirePermission
+  // guard) — this just stops the UI from showing an action a role can't use.
+  const { hasPermission } = useAuth();
 
   const [materials, setMaterials] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
@@ -173,7 +178,9 @@ export default function MaterialList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Materials" showBackButton />
+        {/* Bug fix (TC-087): top-level Sidebar destination — see
+            ComplaintList.tsx's identical fix for the full reasoning. */}
+        <Topbar title="Materials" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
@@ -211,10 +218,12 @@ export default function MaterialList() {
                 )}
                 {exporting ? "Exporting..." : "Export Excel"}
               </Button>
-              <Button onClick={() => navigate("/materials/new")}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Material
-              </Button>
+              {hasPermission("Material", "Create") && (
+                <Button onClick={() => navigate("/materials/new")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Material
+                </Button>
+              )}
             </div>
           </div>
 

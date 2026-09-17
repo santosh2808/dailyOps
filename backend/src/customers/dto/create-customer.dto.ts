@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -10,6 +11,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { INDIA_STATES } from '../../common/india-states';
+import { normalizePhoneForValidation } from '../../common/phone.util';
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Acme Corp' })
@@ -22,7 +24,12 @@ export class CreateCustomerDto {
   @IsNotEmpty({ message: 'Contact person is required' })
   contactPerson: string;
 
+  // QA bug-fix pass, Group B (TC-083/097): same normalize-before-validate
+  // treatment as Lead's phone/alternatePhone (see CreateLeadDto) — a
+  // customer's number pasted as "+91 98765 43210" now normalizes down to
+  // the bare digits instead of being rejected by this regex outright.
   @ApiProperty({ example: '9876543210' })
+  @Transform(({ value }) => normalizePhoneForValidation(value))
   @IsString()
   @Matches(/^\d{10,15}$/, { message: 'Phone must be 10-15 digits' })
   phone: string;

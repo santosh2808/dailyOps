@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { listDepartments } from "@/api/departments";
 import { listRoles } from "@/api/roles";
 import type { RbacUser, Department, Role } from "@/types";
@@ -125,6 +126,9 @@ export default function UserFormDialog({
     if (!isEdit && form.password.length < 6) {
       next.password = "Password must be at least 6 characters";
     }
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -178,6 +182,7 @@ export default function UserFormDialog({
               <Label htmlFor="userName">Name *</Label>
               <Input
                 id="userName"
+                data-error-key="name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
@@ -187,6 +192,7 @@ export default function UserFormDialog({
               <Label htmlFor="userUsername">Username *</Label>
               <Input
                 id="userUsername"
+                data-error-key="username"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
                 placeholder="jane.doe"
@@ -200,6 +206,7 @@ export default function UserFormDialog({
               <Label htmlFor="userEmail">Email *</Label>
               <Input
                 id="userEmail"
+                data-error-key="email"
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -228,6 +235,7 @@ export default function UserFormDialog({
               <Label htmlFor="userPassword">Initial Password *</Label>
               <PasswordInput
                 id="userPassword"
+                data-error-key="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />

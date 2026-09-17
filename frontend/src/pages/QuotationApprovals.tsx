@@ -18,13 +18,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { decideQuotationApproval, listQuotationApprovalRequests } from "@/api/quotations";
 import type { QuotationApprovalRequest } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 // Requirement #9's "reusable approval engine" surfaces here as the
 // Approvals inbox: every QuotationApprovalRequest the Approval Matrix (or
 // the below-minimum-price hard floor) has ever produced, with Approve /
-// Reject actions. Deciding "Approve" performs the full ACCEPTED cascade
-// server-side (see QuotationsService.decideApprovalRequest()) — this page
-// never has to separately create the Sales Order etc. itself.
+// Reject actions. Deciding "Approve" only moves the quotation to ACCEPTED
+// (see QuotationsService.decideApprovalRequest()/performAccept()) — per the
+// QA bug-fix pass (TC-088), it no longer auto-creates a Sales Order; that's
+// now always the separate "Create Sales Order" action on Quotation/Customer
+// Details, same as every other acceptance route.
 
 const STATUS_FILTERS = ["PENDING", "APPROVED", "REJECTED", ""] as const;
 
@@ -35,6 +38,14 @@ function formatDateTime(value?: string | null) {
 
 export default function QuotationApprovals() {
   const navigate = useNavigate();
+  // QA bug-fix pass (TC-095): the Sidebar entry that links here is already
+  // gated on Quotation.Approve (see Sidebar.tsx), and the backend's decide
+  // endpoint enforces it too — this adds the same check directly in front
+  // of the Approve/Reject buttons themselves, so a user who reaches this
+  // page any other way (direct URL, browser back/forward) still can't see
+  // action buttons they have no permission to use.
+  const { hasPermission } = useAuth();
+  const canApprove = hasPermission("Quotation", "Approve");
   const [statusFilter, setStatusFilter] = useState<string>("PENDING");
   const [requests, setRequests] = useState<QuotationApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,7 +169,7 @@ export default function QuotationApprovals() {
                       </Badge>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      {request.status === "PENDING" ? (
+                      {request.status === "PENDING" && canApprove ? (
                         <div className="flex justify-end gap-1">
                           <Button
                             variant="ghost"

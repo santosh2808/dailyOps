@@ -16,6 +16,21 @@ import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
 import { DISPATCH_OVERRIDE_APPROVERS } from './dispatch-override-approvers';
+import { assertForwardOnlyTransition } from '../common/status-transition.util';
+
+// QA bug-fix pass (TC-080): the linear production sequence a Sales Order
+// moves through. CANCELLED is a side-terminal reachable from any of these
+// (an order can be cancelled at any pre-completion stage) but is not part
+// of the forward sequence itself. COMPLETED is the one true end-of-sequence
+// terminal — like CANCELLED, no further status change is allowed from it.
+const SALES_ORDER_SEQUENCE: SalesOrderStatus[] = [
+  'DRAFT',
+  'CONFIRMED',
+  'PRODUCTION_STARTED',
+  'READY_FOR_DISPATCH',
+  'DISPATCHED',
+  'COMPLETED',
+];
 
 const SALES_ORDER_NUMBER_PREFIX = 'SO-';
 const SALES_ORDER_NUMBER_PAD = 6;
@@ -430,6 +445,19 @@ export class SalesOrdersService {
   async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actor: SalesOrderActor = {}) {
     const actorName = actor.name;
     const existing = await this.findOne(id);
+
+    // QA bug-fix pass (TC-080): reject any transition that isn't a legal
+    // one-stage-forward move (or a move into CANCELLED) BEFORE the
+    // dispatch-advance-payment gate below runs, so an already-invalid
+    // transition never even gets to that check.
+    assertForwardOnlyTransition({
+      current: existing.status,
+      target: dto.status,
+      order: SALES_ORDER_SEQUENCE,
+      terminal: ['COMPLETED'],
+      sideTerminal: ['CANCELLED'],
+      entityLabel: 'Sales Order',
+    });
 
     let dispatchOverrideNote: string | null = null;
     let dispatchOverrideBy: string | null = null;

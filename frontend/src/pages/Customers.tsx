@@ -27,11 +27,15 @@ import {
   type CustomerPayload,
 } from "@/api/customers";
 import type { Customer } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
 export default function Customers() {
   const navigate = useNavigate();
+  // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
+  // Customer creation — this just hides the action from a role that can't use it.
+  const { hasPermission } = useAuth();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
@@ -122,10 +126,12 @@ export default function Customers() {
                 onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
-            <Button onClick={openAddDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Customer
-            </Button>
+            {hasPermission("Customer", "Create") && (
+              <Button onClick={openAddDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            )}
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

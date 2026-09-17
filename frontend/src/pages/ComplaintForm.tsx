@@ -6,11 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SalesOrderPicker from "@/components/complaints/SalesOrderPicker";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { createComplaint, getComplaint, updateComplaint, type ComplaintPayload } from "@/api/complaints";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
+import {
+  createComplaint,
+  getComplaint,
+  lookupInvoiceStandalone,
+  updateComplaint,
+  type ComplaintPayload,
+  type InvoiceLookupResult,
+} from "@/api/complaints";
 import type { SalesOrder } from "@/types";
 
 interface FormState {
@@ -18,6 +27,9 @@ interface FormState {
   subject: string;
   description: string;
   invoiceNumber: string;
+  // Bug fix (TC-063): create-only — lets staff skip the acknowledgement
+  // email the backend would otherwise send.
+  sendConfirmationEmail: boolean;
 }
 
 const emptyForm: FormState = {
@@ -25,6 +37,7 @@ const emptyForm: FormState = {
   subject: "",
   description: "",
   invoiceNumber: "",
+  sendConfirmationEmail: true,
 };
 
 export default function ComplaintForm() {
@@ -40,6 +53,11 @@ export default function ComplaintForm() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Bug fix (TC-062): live pre-creation invoice lookup — informational
+  // only, never blocks submission either way.
+  const [invoiceLookupResult, setInvoiceLookupResult] = useState<InvoiceLookupResult | null>(null);
+  const [invoiceLookupLoading, setInvoiceLookupLoading] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -54,6 +72,7 @@ export default function ComplaintForm() {
           subject: complaint.subject,
           description: complaint.description ?? "",
           invoiceNumber: complaint.claimedInvoiceNumber ?? "",
+          sendConfirmationEmail: true,
         });
         if (complaint.salesOrder) {
           setSelectedSalesOrder(complaint.salesOrder as unknown as SalesOrder);
@@ -71,6 +90,35 @@ export default function ComplaintForm() {
     };
   }, [isEdit, id]);
 
+  // Bug fix (TC-062): debounced (~500ms) live lookup as the user types the
+  // invoice number, create-mode only — purely informational, matching the
+  // existing help text below the field (replaced once there's a result).
+  useEffect(() => {
+    if (isEdit) return;
+    const trimmed = form.invoiceNumber.trim();
+    if (!trimmed) {
+      setInvoiceLookupResult(null);
+      setInvoiceLookupLoading(false);
+      return;
+    }
+    setInvoiceLookupLoading(true);
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const result = await lookupInvoiceStandalone(trimmed);
+        if (!cancelled) setInvoiceLookupResult(result);
+      } catch {
+        if (!cancelled) setInvoiceLookupResult(null);
+      } finally {
+        if (!cancelled) setInvoiceLookupLoading(false);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [isEdit, form.invoiceNumber]);
+
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -81,6 +129,9 @@ export default function ComplaintForm() {
     if (!isEdit && !form.salesOrderId) next.salesOrderId = "Please select a sales order";
     if (!form.subject.trim()) next.subject = "Subject is required";
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -105,6 +156,7 @@ export default function ComplaintForm() {
           subject: form.subject.trim(),
           description: form.description.trim() || undefined,
           invoiceNumber: form.invoiceNumber.trim() || undefined,
+          sendConfirmationEmail: form.sendConfirmationEmail,
         };
         const created = await createComplaint(payload);
         toast.success("Complaint logged successfully.");
@@ -191,11 +243,44 @@ export default function ComplaintForm() {
                         onChange={(e) => update("invoiceNumber", e.target.value)}
                         placeholder="e.g. TI-2026-000123 (if known)"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        If the customer has their invoice number, entering it here verifies the
-                        complaint against it automatically. Leave blank if unknown — it can be
-                        looked up later from the complaint's Details page.
-                      </p>
+                      {/* Bug fix (TC-062): live pre-creation lookup — purely
+                          informational, doesn't block submission either
+                          way. Falls back to the original static help text
+                          until the user has typed something. */}
+                      {form.invoiceNumber.trim() ? (
+                        invoiceLookupLoading ? (
+                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Spinner className="h-3 w-3" /> Checking...
+                          </p>
+                        ) : invoiceLookupResult?.found ? (
+                          <p className="text-xs text-emerald-600">
+                            ✓ Matches Tax Invoice {invoiceLookupResult.invoice.invoiceNumber}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-amber-600">
+                            Not found — will be logged as unverified; you can look it up again later.
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          If the customer has their invoice number, entering it here verifies the
+                          complaint against it automatically. Leave blank if unknown — it can be
+                          looked up later from the complaint's Details page.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {!isEdit && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="sendConfirmationEmail"
+                        checked={form.sendConfirmationEmail}
+                        onChange={(e) => update("sendConfirmationEmail", e.target.checked)}
+                      />
+                      <Label htmlFor="sendConfirmationEmail" className="cursor-pointer font-normal">
+                        Send acknowledgement email to customer
+                      </Label>
                     </div>
                   )}
 

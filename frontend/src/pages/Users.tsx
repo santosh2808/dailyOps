@@ -43,6 +43,7 @@ export default function Users() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [disableOpen, setDisableOpen] = useState(false);
+  const [enableOpen, setEnableOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [selected, setSelected] = useState<RbacUser | null>(null);
 
@@ -89,6 +90,14 @@ export default function Users() {
     setDisableOpen(true);
   }
 
+  // TC-071: same confirm-before-action pattern as Disable — Enable used to
+  // fire immediately on click with no confirmation, unlike every other
+  // confirm-before-action button in this app.
+  function openEnableDialog(user: RbacUser) {
+    setSelected(user);
+    setEnableOpen(true);
+  }
+
   function openResetDialog(user: RbacUser) {
     setSelected(user);
     setResetOpen(true);
@@ -105,9 +114,10 @@ export default function Users() {
 
   // Enabling a disabled user reuses the same update endpoint — there's no
   // separate "enable" route, just isActive: true.
-  async function handleEnable(user: RbacUser) {
-    await updateUser(user.id, { isActive: true });
-    toast.success(`User "${user.name}" enabled.`);
+  async function handleEnableConfirm() {
+    if (!selected) return;
+    await updateUser(selected.id, { isActive: true });
+    toast.success(`User "${selected.name}" enabled.`);
     await fetchUsers();
   }
 
@@ -238,7 +248,7 @@ export default function Users() {
                             variant="ghost"
                             size="icon"
                             title="Enable user"
-                            onClick={() => handleEnable(user)}
+                            onClick={() => openEnableDialog(user)}
                           >
                             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                           </Button>
@@ -309,6 +319,22 @@ export default function Users() {
         confirmingLabel="Disabling..."
         errorMessage="Could not disable this user. Please try again."
         onConfirm={handleDisableConfirm}
+      />
+      <ConfirmDialog
+        open={enableOpen}
+        onOpenChange={setEnableOpen}
+        title="Enable User"
+        description={
+          <>
+            Enable{" "}
+            <span className="font-medium text-slate-900">{selected?.name}</span>? They
+            will regain access to the system.
+          </>
+        }
+        confirmLabel="Enable"
+        confirmingLabel="Enabling..."
+        errorMessage="Could not enable this user. Please try again."
+        onConfirm={handleEnableConfirm}
       />
     </div>
   );

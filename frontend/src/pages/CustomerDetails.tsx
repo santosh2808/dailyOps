@@ -135,24 +135,25 @@ export default function CustomerDetails() {
   }, [checkActiveJeo]);
 
   // "Generate Sales Order" — Accepting the quotation reuses the existing
-  // PATCH .../status endpoint, which already (a) refuses the transition if
+  // PATCH .../status endpoint, which already refuses the transition if
   // Price Validation / Approval Matrix blocks it, returning the same
-  // structured error QuotationDetails already knows how to explain, and
-  // (b) auto-creates the Sales Order (and best-effort the Proforma Invoice
-  // / JEO) the moment it succeeds — exactly the same cascade every other
-  // Accepted quotation already goes through. Nothing new is introduced
-  // server-side; this just triggers the same existing action from here.
+  // structured error QuotationDetails already knows how to explain.
+  //
+  // QA bug-fix pass (TC-088): accepting a quotation no longer
+  // auto-creates the Sales Order as a side effect (see
+  // QuotationsService.performAccept()) — creating it is always the
+  // separate, explicit "Create Sales Order" step now, same as the button
+  // shown just below this one for an already-accepted quotation. So once
+  // Accept succeeds here, send the user straight into that same manual
+  // creation form instead of expecting a Sales Order to already exist.
   async function handleGenerateSalesOrder(quotationId: string) {
     setGeneratingSalesOrder(true);
     setSalesOrderError(null);
     try {
-      const result = await updateQuotationStatus(quotationId, "ACCEPTED");
-      if (result.salesOrder?.id) {
-        toast.success("Sales Order generated.");
-        navigate(`/sales-orders/${result.salesOrder.id}`);
-        return;
-      }
-      await fetchAll();
+      await updateQuotationStatus(quotationId, "ACCEPTED");
+      toast.success("Quotation accepted. Review and create the Sales Order.");
+      navigate(`/sales-orders/new?quotationId=${quotationId}`);
+      return;
     } catch (err: any) {
       const body: QuotationApprovalErrorBody | { message?: string } | undefined = err?.response?.data;
       if (body && "code" in body && (body.code === "PRICE_BELOW_MINIMUM" || body.code === "APPROVAL_REQUIRED")) {

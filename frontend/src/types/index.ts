@@ -705,6 +705,12 @@ export interface Quotation {
   // staff when a sent link will/did expire.
   publicToken?: string | null;
   tokenExpiresAt?: string | null;
+  // Bug fix (TC-025/TC-075): the exact totals frozen at Send Quotation time
+  // (see QuotationsService.resolveOfferContent()) — this is what the
+  // customer's public link/PDF actually shows. Only the fields Quotation
+  // Details needs to detect drift are typed here; the full snapshot has
+  // many more (items, terms, etc.) that the frontend has no use for yet.
+  sentSnapshot?: { subtotal: number; grandTotal: number } | null;
   firstViewedAt?: string | null;
   lastViewedAt?: string | null;
   viewCount?: number;
@@ -1312,6 +1318,15 @@ export interface Complaint {
   // invoice isn't verified (taxInvoice is null), never derived from
   // complaint.createdAt.
   warranty?: { expiryDate: string; isUnderWarranty: boolean } | null;
+  // Bug fix (TC-059): who/which department this complaint is assigned to —
+  // both relations already existed on the schema, just weren't fetched.
+  assignedToUserId?: string | null;
+  assignedToUser?: { id: string; name: string } | null;
+  departmentId?: string | null;
+  department?: { id: string; name: string } | null;
+  // Bug fix (TC-059): whole days between createdAt and (resolvedAt if
+  // resolved, else now) — computed server-side (ComplaintsService.attachWarranty).
+  ageInDays: number;
   // Additive: Complaint <-> Lead conversion.
   convertedToLeadId?: string | null;
 }

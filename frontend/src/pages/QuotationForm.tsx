@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
@@ -194,6 +195,10 @@ export default function QuotationForm() {
   const [loading, setLoading] = useState(isEdit);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // QA bug-fix pass (TC-084): passed down to QuotationItemsEditor so its
+  // per-row "Color is required" message only shows after a real save
+  // attempt, not the instant a fan row is added with no color chosen yet.
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   // Lead-sourced quotation being edited — no Customer field to show/require,
   // and the Customer must never be overwritten by this form.
   const [leadOrigin, setLeadOrigin] = useState<{ id: string; companyName: string; contactPerson: string } | null>(
@@ -207,6 +212,16 @@ export default function QuotationForm() {
   // confirmed Color choice, not just QuotationItemsEditor's own rendering.
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [catalogError, setCatalogError] = useState("");
+  // Bug fix (TC-025/TC-075): the customer's copy of a SENT/VIEWED quotation
+  // is frozen at Quotation.sentSnapshot (see quotations.service.ts's
+  // resolveOfferContent()) — editing here never updates it until someone
+  // explicitly resends. Previously nothing told the person editing that,
+  // so a price change here could silently drift out of sync with what the
+  // customer already has. Null once the quotation isn't SENT/VIEWED (a
+  // DRAFT/ACCEPTED/etc. quotation has no "already sent" concern to flag).
+  const [existingSentInfo, setExistingSentInfo] = useState<{ status: string; sentAt: string | null } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -272,6 +287,13 @@ export default function QuotationForm() {
                 companyName: quotation.lead.companyName,
                 contactPerson: quotation.lead.contactPerson,
               }
+            : null,
+        );
+        // Bug fix (TC-025/TC-075): flag up front, before any edits are
+        // made, that this quotation has already gone out to the customer.
+        setExistingSentInfo(
+          quotation.status === "SENT" || quotation.status === "VIEWED"
+            ? { status: quotation.status, sentAt: quotation.sentAt ?? null }
             : null,
         );
         setItems(
@@ -370,6 +392,9 @@ export default function QuotationForm() {
       next.validUntil = "Valid Until cannot be before today";
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -377,6 +402,7 @@ export default function QuotationForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitError("");
+    setAttemptedSubmit(true);
     if (!validate()) return;
 
     const payload: QuotationPayload = {
@@ -456,6 +482,23 @@ export default function QuotationForm() {
             </p>
           ) : (
             <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
+              {/* Bug fix (TC-025/TC-075): see existingSentInfo's own comment
+                  above — warn before editing, since changes made here won't
+                  reach the customer's already-sent copy until resent. */}
+              {existingSentInfo && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  This quotation was already sent to the customer
+                  {existingSentInfo.sentAt
+                    ? ` on ${new Date(existingSentInfo.sentAt).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}`
+                    : ""}
+                  {existingSentInfo.status === "VIEWED" ? " and has already viewed it" : ""}. Changes you save here
+                  won't reach the customer's copy until you resend the quotation.
+                </div>
+              )}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Customer</CardTitle>
@@ -496,6 +539,7 @@ export default function QuotationForm() {
                     catalog={catalog}
                     catalogError={catalogError}
                     onUnitPriceAboveBase={handleUnitPriceAboveBase}
+                    attemptedSubmit={attemptedSubmit}
                   />
                   {errors.items && <p className="text-xs text-destructive">{errors.items}</p>}
 

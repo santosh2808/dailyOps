@@ -1386,7 +1386,9 @@ export default function FormConfigurationPage() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Web Form Configuration" showBackButton />
+        {/* Bug fix (TC-087): top-level Sidebar destination — see
+            ComplaintList.tsx's identical fix for the full reasoning. */}
+        <Topbar title="Web Form Configuration" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-6xl space-y-4">
             <div className="inline-flex rounded-md border p-1">

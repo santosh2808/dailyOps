@@ -160,18 +160,17 @@ export default function QuotationDetails() {
 
   async function handleStatusConfirm(status: QuotationStatus) {
     if (!id) return;
-    const result = await updateQuotationStatus(id, status);
-    // Required Workflow: Quotation Approved -> Automatically Create Sales
-    // Order -> Redirect to Sales Order Details. The backend only returns a
-    // `salesOrder` here on the transition into ACCEPTED (see
-    // QuotationsService.updateStatus()) — for any other status change this
-    // is null and the page just refreshes as before.
-    if (result.salesOrder?.id) {
-      toast.success("Quotation approved. Sales Order created.");
-      navigate(`/sales-orders/${result.salesOrder.id}`);
-      return;
-    }
-    toast.success("Quotation status updated.");
+    // QA bug-fix pass (TC-088): accepting a quotation here no longer
+    // auto-creates a Sales Order (or auto-redirects into one) — the backend
+    // now only ever changes the quotation's own status. Creating the Sales
+    // Order is the existing, separate "Create Sales Order" button shown
+    // below once the quotation is ACCEPTED and has a Customer.
+    await updateQuotationStatus(id, status);
+    toast.success(
+      status === "ACCEPTED"
+        ? "Quotation accepted. Use “Create Sales Order” below when you're ready to proceed."
+        : "Quotation status updated.",
+    );
     await fetchQuotation();
     await fetchQuotationHistory();
   }
@@ -295,7 +294,11 @@ export default function QuotationDetails() {
                             if (result.status === "SENT") {
                               toast.success("WhatsApp message sent.");
                             } else if (result.status === "SIMULATED") {
-                              toast.success("WhatsApp message logged (Interakt not configured).");
+                              // Bug fix (TC-094): a green "success" checkmark toast
+                              // for a message that was never actually sent is
+                              // misleading, even with clarifying wording — use the
+                              // distinct "info" variant instead.
+                              toast.info("WhatsApp message logged (Interakt not configured — no real message was sent).");
                             } else {
                               toast.error(
                                 result.errorMessage || "Could not send the WhatsApp message. Please try again.",
@@ -333,6 +336,26 @@ export default function QuotationDetails() {
                 </p>
               )}
               {pdfError && <p className="text-sm text-destructive">{pdfError}</p>}
+
+              {/* Bug fix (TC-025/TC-075): the customer's copy (public
+                  link/PDF) is rendered from the frozen Quotation.sentSnapshot,
+                  not from this quotation's live fields — see
+                  QuotationsService.resolveOfferContent(). If this quotation
+                  was edited after being sent, the two now disagree and
+                  nobody editing it would otherwise know without comparing
+                  numbers by hand. Only shown while there's still an open
+                  offer (SENT/VIEWED) — once accepted/rejected/expired the
+                  snapshot is history, not a live discrepancy to fix. */}
+              {(quotation.status === "SENT" || quotation.status === "VIEWED") &&
+                quotation.sentSnapshot &&
+                quotation.sentSnapshot.grandTotal !== quotation.grandTotal && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    ⚠ This quotation's total has changed since it was sent — the customer's copy
+                    still shows {formatCurrency(quotation.sentSnapshot.grandTotal)}, not the
+                    current total of {formatCurrency(quotation.grandTotal)}.{" "}
+                    <strong>Resend the quotation</strong> to update what the customer sees.
+                  </div>
+                )}
 
               {/* Lead Management Phase 1 (requirement #12), extended by the
                   Customer Quotation Acceptance workflow (requirement #15) —

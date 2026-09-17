@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowLeft,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -193,8 +194,24 @@ export default function ComplaintDetails() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Complaint Details" showBackButton />
+        {/* Bug fix (TC-085): SalesOrderDetails/JobExecutionOrderDetails/
+            ProformaInvoiceDetails/TaxInvoiceDetails were all moved, in this
+            same session's responsive-header rollout, to a plain Topbar (no
+            showBackButton) plus an explicit "Back to <List>" button as the
+            first element in <main> — a fixed, predictable destination
+            instead of Topbar's showBackButton, which calls navigate(-1) and
+            can land somewhere confusing depending on how this page was
+            reached (Dashboard's Open Complaints link, a Lead conversion's
+            "View Lead", etc.). ComplaintDetails was missed in that rollout
+            and still used the old showBackButton — now matches the other
+            four Details pages exactly. */}
+        <Topbar title="Complaint Details" />
         <main className="flex-1 overflow-y-auto p-6">
+          <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/complaints")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Complaints
+          </Button>
+
           {loading ? (
             <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
               <Spinner /> Loading complaint...
@@ -514,6 +531,12 @@ export default function ComplaintDetails() {
                   <Field label="Description" value={complaint.description} />
                   <Field label="Logged By" value={complaint.createdBy} />
                   <Field label="Logged On" value={formatDate(complaint.createdAt)} />
+                  {/* Bug fix (TC-059): assignment/department and age were
+                      already computed/fetched server-side but never shown
+                      on Details. */}
+                  <Field label="Assigned To" value={complaint.assignedToUser?.name} />
+                  <Field label="Department" value={complaint.department?.name} />
+                  <Field label="Age (Days)" value={complaint.ageInDays} />
                 </CardContent>
               </Card>
 

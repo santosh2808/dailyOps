@@ -22,6 +22,9 @@ export interface ComplaintPayload {
   // when given, the backend auto-verifies it against TaxInvoice right at
   // creation instead of requiring a separate manual lookup/link step.
   invoiceNumber?: string;
+  // Bug fix (TC-063): create-only — lets staff skip the acknowledgement
+  // email the backend would otherwise send. Defaults to true when omitted.
+  sendConfirmationEmail?: boolean;
 }
 
 export interface ComplaintStatusPayload {
@@ -32,6 +35,21 @@ export interface ComplaintStatusPayload {
 export async function listComplaints(params: ComplaintListParams) {
   const res = await api.get<PaginatedResponse<Complaint>>("/api/v1/complaints", { params });
   return res.data;
+}
+
+// Additive (TC-061): mirrors exportMaterials() in api/materials.ts exactly —
+// same blob-download shape, pointed at the complaints export endpoint and
+// passing the current filters/sort as query params.
+export async function exportComplaints(params: Omit<ComplaintListParams, "page" | "limit">) {
+  const res = await api.get("/api/v1/complaints/export", { params, responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "complaints-export.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export async function getComplaint(id: string) {
@@ -76,6 +94,16 @@ export type InvoiceLookupResult =
 
 export async function lookupComplaintInvoice(id: string, invoiceNumber: string) {
   const res = await api.get<InvoiceLookupResult>(`/api/v1/complaints/${id}/invoice-lookup`, {
+    params: { invoiceNumber },
+  });
+  return res.data;
+}
+
+// Additive (TC-062): standalone lookup for use during creation, before a
+// complaint id exists yet — same InvoiceLookupResult shape as the id-scoped
+// lookup above.
+export async function lookupInvoiceStandalone(invoiceNumber: string) {
+  const res = await api.get<InvoiceLookupResult>("/api/v1/complaints/invoice-lookup", {
     params: { invoiceNumber },
   });
   return res.data;

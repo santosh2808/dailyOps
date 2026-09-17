@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
 import type { Quotation, QuotationStatus } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
@@ -56,6 +57,9 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): Quotatio
 export default function QuotationList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
+  // Quotation creation — this just hides the action from a role that can't use it.
+  const { hasPermission } = useAuth();
 
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [total, setTotal] = useState(0);
@@ -188,14 +192,18 @@ export default function QuotationList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Quotations" showBackButton />
+        {/* Bug fix (TC-087): top-level Sidebar destination — see
+            ComplaintList.tsx's identical fix for the full reasoning. */}
+        <Topbar title="Quotations" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <QuotationFiltersBar filters={filters} onChange={setFilters} />
-            <Button onClick={() => navigate("/quotations/new")} className="shrink-0">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Quotation
-            </Button>
+            {hasPermission("Quotation", "Create") && (
+              <Button onClick={() => navigate("/quotations/new")} className="shrink-0">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Quotation
+              </Button>
+            )}
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

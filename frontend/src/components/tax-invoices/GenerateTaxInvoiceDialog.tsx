@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import type { TaxInvoicePayload } from "@/api/tax-invoices";
 import type { SalesOrder } from "@/types";
 
@@ -75,6 +76,9 @@ export default function GenerateTaxInvoiceDialog({
     if (!form.buyersOrderNo.trim()) errors.buyersOrderNo = "Buyer's Order No. is required.";
     if (!form.destination.trim()) errors.destination = "Destination is required.";
     if (!form.termsOfDelivery.trim()) errors.termsOfDelivery = "Terms of Delivery is required.";
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(errors);
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }

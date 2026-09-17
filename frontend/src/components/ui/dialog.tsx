@@ -6,9 +6,18 @@ interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
+  // TC-092: every dialog defaults to z-50, same as the mobile Sidebar
+  // drawer and Topbar's profile DropdownMenu — normally a non-issue since
+  // a dialog is always mounted after those in the DOM and wins the tie,
+  // but that's fragile (relies on mount order, not an actual stacking
+  // guarantee). Optional escape hatch for a dialog that needs to
+  // guarantee it's always on top regardless of where/when it's mounted —
+  // e.g. "z-[60]". Omitting it (every other dialog today) keeps the
+  // existing z-50 exactly as it was.
+  overlayClassName?: string;
 }
 
-function Dialog({ open, onOpenChange, children }: DialogProps) {
+function Dialog({ open, onOpenChange, children, overlayClassName }: DialogProps) {
   if (!open) return null;
 
   return (
@@ -19,7 +28,10 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
       // items-center alone with no scroll clips anything past the edges
       // with no way to get to it. py-8 keeps a tall dialog from touching
       // the very top/bottom edge when it does scroll.
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-8 sm:items-center"
+      className={cn(
+        "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-8 sm:items-center",
+        overlayClassName
+      )}
       onClick={() => onOpenChange(false)}
     >
       <div onClick={(e) => e.stopPropagation()} className="w-full">

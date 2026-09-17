@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { updateTaxInvoice, type UpdateTaxInvoicePayload } from "@/api/tax-invoices";
 import type { TaxInvoice } from "@/types";
 
@@ -80,6 +81,9 @@ export default function EditTaxInvoiceDialog({
     if (!form.buyersOrderNo.trim()) errors.buyersOrderNo = "Buyer's Order No. is required.";
     if (!form.destination.trim()) errors.destination = "Destination is required.";
     if (!form.termsOfDelivery.trim()) errors.termsOfDelivery = "Terms of Delivery is required.";
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(errors);
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -141,6 +145,7 @@ export default function EditTaxInvoiceDialog({
             </Label>
             <Input
               id="edit-buyersOrderNo"
+              data-error-key="buyersOrderNo"
               placeholder="PO-12345"
               value={form.buyersOrderNo}
               onChange={(e) => update("buyersOrderNo", e.target.value)}
@@ -165,6 +170,7 @@ export default function EditTaxInvoiceDialog({
             </Label>
             <Input
               id="edit-destination"
+              data-error-key="destination"
               value={form.destination}
               onChange={(e) => update("destination", e.target.value)}
               className={fieldErrors.destination ? "border-destructive" : undefined}
@@ -179,6 +185,7 @@ export default function EditTaxInvoiceDialog({
             </Label>
             <Textarea
               id="edit-termsOfDelivery"
+              data-error-key="termsOfDelivery"
               placeholder={"Packing: Inclusive\nInstallation: Inclusive\nFreight: Inclusive"}
               value={form.termsOfDelivery}
               onChange={(e) => update("termsOfDelivery", e.target.value)}

@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { getDefaultLanguageForState } from '../common/state-language-defaults';
+import { normalizePhone } from '../common/phone.util';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
@@ -537,8 +538,34 @@ export class LeadsService {
     return updated;
   }
 
+  // QA bug-fix pass (TC-080): WON/LOST are terminal — this endpoint must
+  // never move a lead away from either (e.g. WON -> NEW, LOST -> QUALIFIED).
+  // There is no separate "reopen lead" action anywhere in the app today, so
+  // this is a hard block rather than a partial rule; forward moves into
+  // WON/LOST from any earlier stage remain unrestricted (a lead can close
+  // out early, e.g. NEW -> LOST, and that's legitimate).
+  private static readonly LEAD_TERMINAL_STATUSES: LeadStatus[] = ['WON', 'LOST'];
+
   async updateStatus(id: string, dto: UpdateLeadStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+
+    if (dto.status !== existing.status) {
+      // Belt-and-suspenders alongside the terminal-status check below: a
+      // converted lead's status is already WON (convertToCustomer() only
+      // ever runs from WON — see below), so this mostly restates the same
+      // rule, but makes the "converted leads can't be reverted" intent
+      // explicit and future-proof if conversion rules ever change.
+      if (existing.isConverted) {
+        throw new BadRequestException(
+          'This lead has already been converted to a customer and its status can no longer be changed here.',
+        );
+      }
+      if (LeadsService.LEAD_TERMINAL_STATUSES.includes(existing.status)) {
+        throw new BadRequestException(
+          `This lead is already ${existing.status} and its status cannot be changed further.`,
+        );
+      }
+    }
 
     // Catch this at the status-change step, not just later at Generate
     // Quotation (see getLeadForQuotationGeneration() below, which enforces
@@ -674,10 +701,14 @@ export class LeadsService {
   // effect of a public form submission.
   //
   // Field-mapping decisions (documented per the plan's request):
-  //  - companyName: falls back to the contact person's name when the form
-  //    didn't collect a company (e.g. an individual homeowner) — Lead.companyName
-  //    is a required non-null column, and fabricating a placeholder like
-  //    "N/A" would be worse than just using the one real name we do have.
+  //  - companyName: QA bug-fix pass (TC-096) — a submitter's Full Name is
+  //    not a company name, so it must never be duplicated into this field
+  //    just because the form didn't collect a real company. Falls back to
+  //    '' (empty string) when no company was submitted, same as the
+  //    manual Create Lead path's own `companyName?.trim() || ''` in
+  //    create() above — Lead.companyName is a required non-null column, so
+  //    '' is the fallback, not a fabricated placeholder and not the
+  //    person's name.
   //  - contactPerson/email/phone/description: taken verbatim from the
   //    submitted contact fields (phone falls back to '' only if the form's
   //    schema didn't actually require it — every seeded form does).
@@ -705,7 +736,9 @@ export class LeadsService {
     tx: Prisma.TransactionClient,
   ) {
     const leadNumber = await this.generateLeadNumber();
-    const companyName = input.company?.trim() || input.name.trim();
+    // TC-096 fix: no fallback to the person's name — see the field-mapping
+    // comment above.
+    const companyName = input.company?.trim() || '';
 
     const lead = await tx.lead.create({
       data: {
@@ -713,7 +746,17 @@ export class LeadsService {
         companyName,
         contactPerson: input.name,
         email: input.email || undefined,
-        phone: input.phone || '',
+        // QA bug-fix pass, Group B (TC-097): this raw Prisma write bypasses
+        // CreateLeadDto entirely, so a website visitor submitting their
+        // number as "+91 98765 43210" used to get stored verbatim — every
+        // later edit/assign of this lead through the normal, DTO-validated
+        // update path would then fail Matches(PHONE_REGEX) on a value it
+        // never actually typed. Normalize the same way the DTO now does;
+        // fall back to the best-effort digits-only string (rather than the
+        // untouched raw value) when it doesn't match a known shape, so the
+        // stored value is never further from the bare-10-digit convention
+        // than it has to be.
+        phone: normalizePhone(input.phone) ?? (input.phone ?? '').replace(/\D/g, ''),
         title: input.subjectLabel,
         description: input.message || undefined,
         remarks: input.message || undefined,

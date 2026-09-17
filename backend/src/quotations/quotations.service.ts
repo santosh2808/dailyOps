@@ -785,18 +785,21 @@ export class QuotationsService {
     return { status: 'APPROVED' as const, quotation, salesOrder };
   }
 
-  // The actual ACCEPTED transition + full downstream cascade, shared by
-  // both updateStatus() (the normal self-approval path) and
+  // QA bug-fix pass (TC-088): this used to also automatically create a
+  // Sales Order + Proforma Invoice + JEO (and the frontend then auto-
+  // redirected into the new Sales Order) as soon as a quotation was
+  // accepted via either internal route below. That cascade is intentionally
+  // REMOVED — accepting a quotation now only ever changes the quotation's
+  // own status, matching how the customer-facing public acceptance route
+  // (acceptViaPublicLink(), which never cascaded) already behaved. Creating
+  // the Sales Order is now always the explicit, separate, manual step it
+  // already was for public-link acceptances: the "Create Sales Order"
+  // button on Quotation Details (SalesOrdersService.create(), a different
+  // method from the old cascade's createFromQuotation()) — and PI/JEO
+  // creation are their own separate manual actions after that. Still shared
+  // by both updateStatus() (the normal self-approval path) and
   // decideApprovalRequest() (the escalated path) so there is exactly one
-  // place this ever happens. Sales Order / Proforma Invoice / JEO creation
-  // are each individually idempotent (see their own createFromQuotation()/
-  // createFromSalesOrder() methods) and the PI/JEO steps are best-effort —
-  // a failure generating either one is logged but never rolls back the
-  // Accept itself or blocks the other step, since by this point the
-  // Quotation has already been legitimately accepted and a Sales Order
-  // already exists; the customer/factory should not lose that because of
-  // an unrelated PDF/email hiccup. Any failure is still visible via
-  // EmailHistory (status FAILED) and the server log.
+  // place the ACCEPTED transition itself happens.
   private async performAccept(quotationId: string, actorName?: string) {
     const quotation = await this.prisma.quotation.update({
       where: { id: quotationId },
@@ -814,27 +817,7 @@ export class QuotationsService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
-    const createdSalesOrder = await this.salesOrdersService.createFromQuotation(quotationId, actorName);
-
-    try {
-      await this.proformaInvoicesService.createFromSalesOrder(createdSalesOrder.id, actorName);
-    } catch (error) {
-      this.logger.error(
-        `Automatic Proforma Invoice generation failed for Sales Order ${createdSalesOrder.id}`,
-        error,
-      );
-    }
-
-    try {
-      await this.jobExecutionOrdersService.createFromSalesOrder(createdSalesOrder.id);
-    } catch (error) {
-      this.logger.error(`Automatic JEO generation failed for Sales Order ${createdSalesOrder.id}`, error);
-    }
-
-    return {
-      quotation,
-      salesOrder: { id: createdSalesOrder.id, salesOrderNumber: createdSalesOrder.salesOrderNumber },
-    };
+    return { quotation, salesOrder: null as { id: string; salesOrderNumber: string } | null };
   }
 
   // Send Quotation (requirement #6): generates the PDF, sends the email

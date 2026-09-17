@@ -31,11 +31,15 @@ import {
   listSuppliers,
 } from "@/api/suppliers";
 import type { Supplier } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
 export default function SupplierList() {
   const navigate = useNavigate();
+  // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
+  // Supplier creation — this just hides the action from a role that can't use it.
+  const { hasPermission } = useAuth();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [total, setTotal] = useState(0);
@@ -189,10 +193,12 @@ export default function SupplierList() {
                 {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
                 {exporting ? "Exporting..." : "Export Excel"}
               </Button>
-              <Button onClick={() => navigate("/suppliers/new")}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Supplier
-              </Button>
+              {hasPermission("Supplier", "Create") && (
+                <Button onClick={() => navigate("/suppliers/new")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Supplier
+                </Button>
+              )}
             </div>
           </div>
 

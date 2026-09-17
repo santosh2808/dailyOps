@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadPriority, LeadSource, PreferredLanguage } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { INDIA_STATES } from '../../common/india-states';
+import { normalizePhoneForValidation } from '../../common/phone.util';
 import { LeadProductInputDto } from './lead-product-input.dto';
 
 // Indian mobile numbers are exactly 10 digits — previously accepted 10-15,
@@ -52,13 +53,20 @@ export class CreateLeadDto {
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email?: string;
 
+  // QA bug-fix pass, Group B (TC-083/097): normalized before validation, so
+  // "+91 98765 43210" / "+91-9876543210" / "09876543210" all pass and get
+  // stored as the canonical bare 10 digits — same tolerance already used by
+  // whatsapp/normalize-phone.ts, just applied here at entry time instead of
+  // only when sending a WhatsApp message.
   @ApiProperty({ example: '9876543210' })
+  @Transform(({ value }) => normalizePhoneForValidation(value))
   @IsString()
   @Matches(PHONE_REGEX, { message: 'Phone must be exactly 10 digits' })
   phone: string;
 
   @ApiPropertyOptional({ example: '9123456780' })
   @IsOptional()
+  @Transform(({ value }) => normalizePhoneForValidation(value))
   @Matches(PHONE_REGEX, { message: 'Alternate phone must be exactly 10 digits' })
   alternatePhone?: string;
 

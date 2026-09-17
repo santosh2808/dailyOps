@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STATUS_OPTIONS } from "@/components/suppliers/supplierOptions";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { createSupplier, getSupplier, updateSupplier, type SupplierPayload } from "@/api/suppliers";
 import type { SupplierStatus } from "@/types";
 
@@ -55,6 +56,18 @@ const emptyForm: FormState = {
 };
 
 const PHONE_REGEX = /^\+?\d{10,15}$/;
+
+// QA bug-fix pass, Group B (TC-083/097): Supplier's phone is intentionally
+// more lenient than Lead/Customer's (an optional leading + for a
+// non-Indian supplier, 10-15 digits — see CreateSupplierDto, which places
+// no format constraint on it at all), so this doesn't force it down to the
+// bare-10-digit convention normalizePhone() in lib/phone.ts uses for
+// Lead/Customer. It only strips the spaces/dashes/parens a person
+// naturally types ("+91 98765 43210", "(555) 123-4567") before checking
+// against the existing regex, which previously rejected those verbatim.
+function stripPhoneFormatting(value: string): string {
+  return value.replace(/[\s()-]/g, "");
+}
 
 export default function SupplierForm() {
   const { id } = useParams<{ id: string }>();
@@ -120,7 +133,7 @@ export default function SupplierForm() {
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       next.email = "Email must be a valid email address";
     }
-    if (form.phone.trim() && !PHONE_REGEX.test(form.phone.trim())) {
+    if (form.phone.trim() && !PHONE_REGEX.test(stripPhoneFormatting(form.phone.trim()))) {
       next.phone = "Phone must be 10-15 digits";
     }
     if (form.leadTime.trim()) {
@@ -128,6 +141,9 @@ export default function SupplierForm() {
       if (Number.isNaN(parsed) || parsed < 0) next.leadTime = "Lead time cannot be negative";
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -142,7 +158,7 @@ export default function SupplierForm() {
       gstNumber: form.gstNumber.trim() || undefined,
       panNumber: form.panNumber.trim() || undefined,
       contactPerson: form.contactPerson.trim() || undefined,
-      phone: form.phone.trim() || undefined,
+      phone: form.phone.trim() ? stripPhoneFormatting(form.phone.trim()) : undefined,
       email: form.email.trim() || undefined,
       website: form.website.trim() || undefined,
       address: form.address.trim() || undefined,

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 // complaintNumber is deliberately absent — always auto-generated server-side
 // (ComplaintsService.generateComplaintNumber()), same convention as
@@ -32,4 +32,13 @@ export class CreateComplaintDto {
   @IsOptional()
   @IsString()
   invoiceNumber?: string;
+
+  // Bug fix (TC-063): lets staff skip the acknowledgement email this create()
+  // would otherwise send (see ComplaintsService.create()) — e.g. when
+  // logging a complaint on the customer's behalf and they don't want an
+  // email. Defaults to true (unchanged behavior) when omitted.
+  @ApiPropertyOptional({ default: true, description: 'Send the acknowledgement email to the customer on creation' })
+  @IsOptional()
+  @IsBoolean()
+  sendConfirmationEmail?: boolean = true;
 }

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { listDepartmentsBasic } from "@/api/departments";
 import { listAssignableRoles } from "@/api/roles";
 import { quickCreateUser } from "@/api/users";
@@ -95,6 +96,9 @@ export default function QuickAddUserDialog({
     if (!form.email.trim()) next.email = "Email is required";
     else if (!EMAIL_REGEX.test(form.email.trim())) next.email = "Enter a valid email address";
     if (!form.roleId) next.roleId = "Role is required";
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -143,6 +147,7 @@ export default function QuickAddUserDialog({
             <Label htmlFor="quickUserName">Full Name *</Label>
             <Input
               id="quickUserName"
+              data-error-key="name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               autoFocus
@@ -155,6 +160,7 @@ export default function QuickAddUserDialog({
               <Label htmlFor="quickUserEmail">Email *</Label>
               <Input
                 id="quickUserEmail"
+                data-error-key="email"
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -192,6 +198,7 @@ export default function QuickAddUserDialog({
               <Label htmlFor="quickUserRole">Role *</Label>
               <Select
                 id="quickUserRole"
+                data-error-key="roleId"
                 value={form.roleId}
                 onChange={(e) => setForm({ ...form, roleId: e.target.value })}
               >

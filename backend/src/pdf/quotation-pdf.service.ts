@@ -684,9 +684,16 @@ export class QuotationPdfService {
     // falls back to the free-text wording field / its default.
     rows.push({
       label: 'Installation',
+      // Bug fix (TC-077/093): same real-amount-vs-wording mismatch as
+      // buildSpecRows's Installation row above — this always printed the
+      // free-text default regardless of the quotation's actual
+      // installationCharge total. Mirrors this function's own Transportation
+      // row treatment just above.
       value: includesCharges
         ? 'Included'
-        : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+        : quotation.installationCharge > 0
+          ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
+          : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
     });
     if (terms.installationSchedule && terms.installationSchedule.trim()) {
       rows.push({ label: 'Installation Schedule', value: terms.installationSchedule.trim() });
@@ -811,7 +818,16 @@ export class QuotationPdfService {
     const installationRows: SpecRow[] = [
       {
         label: 'Installation',
-        value: includesCharges ? 'Included' : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+        // Bug fix (TC-077/093): this used to always print the free-text
+        // wording default ("Rs.8,000 per fan") even when the quotation had
+        // a real, possibly staff-overridden installationCharge total —
+        // same real-amount-vs-wording mismatch already fixed for
+        // Transportation just below, so mirror that exact pattern here.
+        value: includesCharges
+          ? 'Included'
+          : quotation.installationCharge > 0
+            ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
+            : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
       },
     ];
     const transportationRows: SpecRow[] = [

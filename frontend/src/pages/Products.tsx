@@ -29,6 +29,7 @@ import {
   type ProductPayload,
 } from "@/api/products";
 import type { Product } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +43,11 @@ function formatPrice(price?: number | null) {
 }
 
 export default function Products() {
+  // QA bug-fix pass (TC-078/TC-095): the backend already rejects
+  // unauthorized create/edit/delete (ProductsController's @RequirePermission
+  // guards) — this just stops the UI from showing actions a role can't
+  // actually use, per the app's existing hasPermission() convention.
+  const { hasPermission } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
@@ -174,10 +180,12 @@ export default function Products() {
                 ))}
               </Select>
             </div>
-            <Button onClick={openAddDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
+            {hasPermission("Product", "Create") && (
+              <Button onClick={openAddDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            )}
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
@@ -228,22 +236,26 @@ export default function Products() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit product"
-                          onClick={() => openEditDialog(product)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Deactivate product"
-                          onClick={() => openDeactivateDialog(product)}
-                        >
-                          <Ban className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {hasPermission("Product", "Edit") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Edit product"
+                            onClick={() => openEditDialog(product)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {hasPermission("Product", "Delete") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Deactivate product"
+                            onClick={() => openDeactivateDialog(product)}
+                          >
+                            <Ban className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

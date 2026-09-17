@@ -11,17 +11,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import {
   createMaterial,
   getMaterial,
   updateMaterial,
   type MaterialPayload,
 } from "@/api/materials";
-import {
-  createMaterialCategory,
-  listMaterialCategories,
-} from "@/api/material-categories";
-import { createMaterialUnit, listMaterialUnits } from "@/api/material-units";
+import { listMaterialCategories } from "@/api/material-categories";
+import { listMaterialUnits } from "@/api/material-units";
+import AddMaterialCategoryDialog from "@/components/materials/AddMaterialCategoryDialog";
+import AddMaterialUnitDialog from "@/components/materials/AddMaterialUnitDialog";
 import type { MaterialCategory, MaterialUnit } from "@/types";
 
 interface FormState {
@@ -64,8 +64,8 @@ export default function MaterialForm() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [units, setUnits] = useState<MaterialUnit[]>([]);
-  const [newCategory, setNewCategory] = useState("");
-  const [newUnit, setNewUnit] = useState("");
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const [addUnitOpen, setAddUnitOpen] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(isEdit);
   const [submitError, setSubmitError] = useState("");
@@ -129,30 +129,24 @@ export default function MaterialForm() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  async function handleAddCategory() {
-    if (!newCategory.trim()) return;
-    try {
-      const created = await createMaterialCategory({ name: newCategory.trim() });
-      setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-      update("categoryId", created.id);
-      setNewCategory("");
-      toast.success("Category added.");
-    } catch {
-      toast.error("Could not add this category. Please try again.");
-    }
+  // TC-073: adding a Category/Unit inline now goes through a small Dialog
+  // (AddMaterialCategoryDialog/AddMaterialUnitDialog) rather than a bare
+  // text input sitting directly inside this page's own <form> — that raw
+  // input had no <form> of its own, so pressing Enter to "quick add" would
+  // trigger this outer Material form's implicit submission instead (its
+  // only submit button, Create/Save) rather than adding the category/unit.
+  // The Dialog's own nested <form> (same pattern as QuickAddUserDialog
+  // inside LeadForm) keeps Enter scoped to just that dialog.
+  function handleCategoryCreated(category: MaterialCategory) {
+    setCategories((prev) => [...prev, category].sort((a, b) => a.name.localeCompare(b.name)));
+    update("categoryId", category.id);
+    setAddCategoryOpen(false);
   }
 
-  async function handleAddUnit() {
-    if (!newUnit.trim()) return;
-    try {
-      const created = await createMaterialUnit({ name: newUnit.trim() });
-      setUnits((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-      update("unitId", created.id);
-      setNewUnit("");
-      toast.success("Unit added.");
-    } catch {
-      toast.error("Could not add this unit. Please try again.");
-    }
+  function handleUnitCreated(unit: MaterialUnit) {
+    setUnits((prev) => [...prev, unit].sort((a, b) => a.name.localeCompare(b.name)));
+    update("unitId", unit.id);
+    setAddUnitOpen(false);
   }
 
   function validate(): boolean {
@@ -188,6 +182,9 @@ export default function MaterialForm() {
       }
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -282,57 +279,65 @@ export default function MaterialForm() {
 
                   <div className="space-y-2">
                     <Label htmlFor="categoryId">Category *</Label>
-                    <Select
-                      id="categoryId"
-                      value={form.categoryId}
-                      onChange={(e) => update("categoryId", e.target.value)}
-                    >
-                      <option value="">Select category</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </Select>
-                    {errors.categoryId && (
-                      <p className="text-xs text-destructive">{errors.categoryId}</p>
-                    )}
                     <div className="flex gap-2">
-                      <Input
-                        value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value)}
-                        placeholder="New category name"
-                        className="h-8 text-xs"
-                      />
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddCategory}>
+                      <div className="flex-1">
+                        <Select
+                          id="categoryId"
+                          value={form.categoryId}
+                          onChange={(e) => update("categoryId", e.target.value)}
+                        >
+                          <option value="">Select category</option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        title="Add new category"
+                        onClick={() => setAddCategoryOpen(true)}
+                      >
                         <Plus className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+                    {errors.categoryId && (
+                      <p className="text-xs text-destructive">{errors.categoryId}</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="unitId">Unit *</Label>
-                    <Select id="unitId" value={form.unitId} onChange={(e) => update("unitId", e.target.value)}>
-                      <option value="">Select unit</option>
-                      {units.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                          {u.symbol ? ` (${u.symbol})` : ""}
-                        </option>
-                      ))}
-                    </Select>
-                    {errors.unitId && <p className="text-xs text-destructive">{errors.unitId}</p>}
                     <div className="flex gap-2">
-                      <Input
-                        value={newUnit}
-                        onChange={(e) => setNewUnit(e.target.value)}
-                        placeholder="New unit name"
-                        className="h-8 text-xs"
-                      />
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddUnit}>
+                      <div className="flex-1">
+                        <Select
+                          id="unitId"
+                          value={form.unitId}
+                          onChange={(e) => update("unitId", e.target.value)}
+                        >
+                          <option value="">Select unit</option>
+                          {units.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                              {u.symbol ? ` (${u.symbol})` : ""}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        title="Add new unit"
+                        onClick={() => setAddUnitOpen(true)}
+                      >
                         <Plus className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+                    {errors.unitId && <p className="text-xs text-destructive">{errors.unitId}</p>}
                   </div>
                 </CardContent>
               </Card>
@@ -453,6 +458,17 @@ export default function MaterialForm() {
           )}
         </main>
       </div>
+
+      <AddMaterialCategoryDialog
+        open={addCategoryOpen}
+        onOpenChange={setAddCategoryOpen}
+        onCreated={handleCategoryCreated}
+      />
+      <AddMaterialUnitDialog
+        open={addUnitOpen}
+        onOpenChange={setAddUnitOpen}
+        onCreated={handleUnitCreated}
+      />
     </div>
   );
 }

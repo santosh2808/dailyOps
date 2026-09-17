@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +65,9 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
 export default function LeadList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
+  // Lead creation — this just hides the action from a role that can't use it.
+  const { hasPermission } = useAuth();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
@@ -224,7 +228,9 @@ export default function LeadList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Leads" showBackButton />
+        {/* Bug fix (TC-087): top-level Sidebar destination — see
+            ComplaintList.tsx's identical fix for the full reasoning. */}
+        <Topbar title="Leads" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <LeadFiltersBar filters={filters} onChange={setFilters} />
@@ -241,10 +247,12 @@ export default function LeadList() {
                 <Upload className="mr-2 h-4 w-4" />
                 Import Leads
               </Button>
-              <Button onClick={() => navigate("/leads/new")}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Lead
-              </Button>
+              {hasPermission("Lead", "Create") && (
+                <Button onClick={() => navigate("/leads/new")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Lead
+                </Button>
+              )}
             </div>
           </div>
 

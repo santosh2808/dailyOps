@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ComplaintHistoryAction, LeadPriority, LeadSource, Prisma } from '@prisma/client';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { MailerService } from '../mailer/mailer.service';
@@ -72,9 +73,32 @@ const COMPLAINT_DETAIL_INCLUDE = {
       product: { select: { id: true, name: true, technicalSpec: true } },
     },
   },
+  // Bug fix (TC-059): list/detail views need to show who a complaint is
+  // assigned to and which department owns it — both relations already
+  // exist on the schema (set by createFromWebFormIntake()/manual
+  // assignment), just weren't being fetched.
+  assignedToUser: { select: { id: true, name: true } },
+  department: { select: { id: true, name: true } },
 } satisfies Prisma.ComplaintInclude;
 
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'complaintNumber', 'status'] as const;
+
+// Additive (TC-061): column order for the Excel export.
+const COMPLAINT_EXPORT_COLUMNS = [
+  'complaintNumber',
+  'subject',
+  'source',
+  'salesOrderNumber',
+  'customerName',
+  'status',
+  'assignedTo',
+  'department',
+  'invoiceDisplay',
+  'warrantyStatus',
+  'ageInDays',
+  'createdAt',
+  'resolvedAt',
+] as const;
 
 type ComplaintWithDetail = Prisma.ComplaintGetPayload<{ include: typeof COMPLAINT_DETAIL_INCLUDE }>;
 
@@ -89,13 +113,26 @@ const WARRANTY_YEARS = 3;
 // endpoint that returns a Complaint to the frontend.
 function attachWarranty<T extends ComplaintWithDetail>(
   complaint: T,
-): T & { warranty: { expiryDate: Date; isUnderWarranty: boolean } | null } {
+): T & {
+  warranty: { expiryDate: Date; isUnderWarranty: boolean } | null;
+  ageInDays: number;
+} {
+  // Bug fix (TC-059): "how long has this complaint been open/how long did
+  // it take to resolve" — whole days between createdAt and (resolvedAt if
+  // resolved, else now). Never derived from the warranty expiry logic above.
+  const endTime = complaint.resolvedAt ? new Date(complaint.resolvedAt).getTime() : Date.now();
+  const ageInDays = Math.floor((endTime - new Date(complaint.createdAt).getTime()) / 86400000);
+
   if (!complaint.taxInvoice) {
-    return { ...complaint, warranty: null };
+    return { ...complaint, warranty: null, ageInDays };
   }
   const expiryDate = new Date(complaint.taxInvoice.invoiceDate);
   expiryDate.setFullYear(expiryDate.getFullYear() + WARRANTY_YEARS);
-  return { ...complaint, warranty: { expiryDate, isUnderWarranty: expiryDate.getTime() > Date.now() } };
+  return {
+    ...complaint,
+    warranty: { expiryDate, isUnderWarranty: expiryDate.getTime() > Date.now() },
+    ageInDays,
+  };
 }
 
 @Injectable()
@@ -108,9 +145,13 @@ export class ComplaintsService {
     private mailerService: MailerService,
   ) {}
 
-  async findAll(query: QueryComplaintDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+  // Extracted (TC-061) so the Excel export builds the exact same
+  // where/orderBy findAll() does, instead of duplicating (and risking
+  // drifting from) this filtering logic.
+  private buildFindAllQuery(query: QueryComplaintDto): {
+    where: Prisma.ComplaintWhereInput;
+    orderBy: Prisma.ComplaintOrderByWithRelationInput;
+  } {
     const search = query.search?.trim();
 
     const where: Prisma.ComplaintWhereInput = {
@@ -124,6 +165,14 @@ export class ComplaintsService {
               { subject: { contains: search, mode: 'insensitive' } },
               { salesOrder: { salesOrderNumber: { contains: search, mode: 'insensitive' } } },
               { salesOrder: { customer: { companyName: { contains: search, mode: 'insensitive' } } } },
+              // Bug fix (TC-058): web-form complaints have no salesOrder, so
+              // they were unfindable by search except via
+              // complaintNumber/subject — these cover their own reporter
+              // contact fields and claimed invoice number directly.
+              { reporterName: { contains: search, mode: 'insensitive' } },
+              { reporterEmail: { contains: search, mode: 'insensitive' } },
+              { reporterPhone: { contains: search, mode: 'insensitive' } },
+              { claimedInvoiceNumber: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -134,11 +183,19 @@ export class ComplaintsService {
       : 'createdAt';
     const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
 
+    return { where, orderBy: { [sortBy]: sortOrder } };
+  }
+
+  async findAll(query: QueryComplaintDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const { where, orderBy } = this.buildFindAllQuery(query);
+
     const [data, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         include: COMPLAINT_DETAIL_INCLUDE,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -152,6 +209,58 @@ export class ComplaintsService {
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // Additive (TC-061): mirrors findAll()'s filtering/sorting exactly (via
+  // buildFindAllQuery) but returns every matching row as an .xlsx buffer
+  // instead of a paginated page.
+  async exportToExcel(query: QueryComplaintDto): Promise<Buffer> {
+    const { where, orderBy } = this.buildFindAllQuery(query);
+    const complaints = await this.prisma.complaint.findMany({
+      where,
+      include: COMPLAINT_DETAIL_INCLUDE,
+      orderBy,
+    });
+
+    const rows = complaints.map(attachWarranty).map((complaint) => {
+      const proformaInvoice = complaint.salesOrder?.proformaInvoices?.[0];
+      const invoiceDisplay = complaint.taxInvoice
+        ? complaint.taxInvoice.invoiceNumber
+        : proformaInvoice
+          ? `${proformaInvoice.invoiceNumber} (Proforma)`
+          : complaint.claimedInvoiceNumber
+            ? `${complaint.claimedInvoiceNumber} (unverified)`
+            : '';
+
+      const warrantyStatus = complaint.warranty
+        ? complaint.warranty.isUnderWarranty
+          ? 'Under Warranty'
+          : 'Warranty Expired'
+        : complaint.warrantyVerificationStatus === 'NOT_FOUND'
+          ? 'Not Found'
+          : '';
+
+      return {
+        complaintNumber: complaint.complaintNumber,
+        subject: complaint.subject,
+        source: complaint.source,
+        salesOrderNumber: complaint.salesOrder?.salesOrderNumber ?? '',
+        customerName: complaint.salesOrder?.customer?.companyName || complaint.reporterName || '',
+        status: complaint.status,
+        assignedTo: complaint.assignedToUser?.name ?? '',
+        department: complaint.department?.name ?? '',
+        invoiceDisplay,
+        warrantyStatus,
+        ageInDays: complaint.ageInDays,
+        createdAt: complaint.createdAt.toISOString(),
+        resolvedAt: complaint.resolvedAt ? complaint.resolvedAt.toISOString() : '',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...COMPLAINT_EXPORT_COLUMNS] });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Complaints');
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 
   async findOne(id: string) {
@@ -216,9 +325,15 @@ export class ComplaintsService {
         // PublicFormsService.sendSubmissionNotifications(); this is the same
         // send for a manually-logged one. Runs after the transaction commits
         // and never blocks/fails complaint creation (see method comment).
-        await this.sendComplaintLoggedConfirmation(created).catch((error) =>
-          this.logger.error('Complaint confirmation email failed', error),
-        );
+        // Bug fix (TC-063): staff can opt out of this send per-complaint
+        // (e.g. logging on the customer's behalf when they don't want an
+        // email) — defaults to sending, same as before, unless explicitly
+        // set to false.
+        if (dto.sendConfirmationEmail !== false) {
+          await this.sendComplaintLoggedConfirmation(created).catch((error) =>
+            this.logger.error('Complaint confirmation email failed', error),
+          );
+        }
 
         return attachWarranty(created);
       } catch (error) {
@@ -408,6 +523,18 @@ export class ComplaintsService {
   // fabricated" rule). A manual complaint has no reporterEmail of its own —
   // its only possible recipient is its Sales Order's Customer — so this
   // simply no-ops when that's unset, rather than failing the send.
+  //
+  // Bug fix (TC-063): this used to send under its own separate
+  // 'COMPLAINT_LOGGED_CONFIRMATION' template key, distinct from the
+  // web-form path's 'WEB_COMPLAINT_RECEIVED' — two near-identical templates
+  // an admin had to keep in sync by hand on the Email Templates screen (and
+  // easily wouldn't). Now unified onto the single WEB_COMPLAINT_RECEIVED key
+  // PublicFormsService.sendSubmissionNotifications() already uses, with the
+  // same {{referenceNumber}}/{{customerName}} vars — a manually-logged
+  // complaint has no WebFormIntake.referenceNumber, so its own
+  // complaintNumber fills that slot, which is exactly what the old
+  // template showed anyway. See seed.ts's WEB_COMPLAINT_RECEIVED entry —
+  // the old COMPLAINT_LOGGED_CONFIRMATION seed row is removed as unused.
   private async sendComplaintLoggedConfirmation(
     complaint: Prisma.ComplaintGetPayload<{ include: typeof COMPLAINT_DETAIL_INCLUDE }>,
   ) {
@@ -415,16 +542,16 @@ export class ComplaintsService {
     if (!recipientEmail) return;
 
     await this.mailerService.send({
-      templateKey: 'COMPLAINT_LOGGED_CONFIRMATION',
-      fallbackSubject: 'We received your complaint — {{complaintNumber}}',
+      templateKey: 'WEB_COMPLAINT_RECEIVED',
+      fallbackSubject: 'We received your request — {{referenceNumber}}',
       fallbackBodyHtml:
         '<div style="font-family:Arial;padding:20px">' +
         '<h2>Thank you for contacting Smart Rotamac Support</h2>' +
         '<p>Dear <b>{{customerName}}</b>,</p>' +
-        '<p>Your complaint has been logged successfully.</p>' +
+        '<p>Your warranty/service request has been received successfully.</p>' +
         '<div style="background:#F3F4F6;padding:15px;border-radius:8px">' +
-        '<h3>Complaint Number</h3>' +
-        '<h1 style="color:#2563EB">{{complaintNumber}}</h1>' +
+        '<h3>Reference Number</h3>' +
+        '<h1 style="color:#2563EB">{{referenceNumber}}</h1>' +
         '</div>' +
         '<p>Our support team will review your request and contact you shortly.</p>' +
         '<hr>' +
@@ -432,7 +559,7 @@ export class ComplaintsService {
         '</div>',
       vars: {
         customerName: complaint.salesOrder?.customer?.companyName ?? 'Customer',
-        complaintNumber: complaint.complaintNumber,
+        referenceNumber: complaint.complaintNumber,
       },
       to: recipientEmail,
       link: { module: 'Complaint', complaintId: complaint.id },

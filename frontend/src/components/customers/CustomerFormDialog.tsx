@@ -13,8 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { INDIA_STATES } from "@/lib/indiaStates";
+import { normalizePhone } from "@/lib/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import type { Customer } from "@/types";
 import type { CustomerPayload } from "@/api/customers";
 
@@ -46,7 +48,6 @@ const emptyForm: FormState = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^\d{10,15}$/;
 
 export default function CustomerFormDialog({
   open,
@@ -89,10 +90,12 @@ export default function CustomerFormDialog({
     if (!form.contactPerson.trim()) {
       next.contactPerson = "Contact person is required";
     }
+    // QA bug-fix pass, Group B (TC-083/097): normalize before validating —
+    // see LeadForm.tsx's identical treatment and CreateCustomerDto.
     if (!form.phone.trim()) {
       next.phone = "Phone is required";
-    } else if (!PHONE_REGEX.test(form.phone.trim())) {
-      next.phone = "Phone must be 10-15 digits";
+    } else if (!normalizePhone(form.phone.trim())) {
+      next.phone = "Enter a valid 10-digit Indian mobile number";
     }
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
       next.email = "Enter a valid email address";
@@ -108,6 +111,9 @@ export default function CustomerFormDialog({
       next.state = "State is required";
     }
 
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -122,7 +128,7 @@ export default function CustomerFormDialog({
       await onSubmit({
         companyName: form.companyName.trim(),
         contactPerson: form.contactPerson.trim(),
-        phone: form.phone.trim(),
+        phone: normalizePhone(form.phone.trim()) ?? form.phone.trim(),
         email: form.email.trim() || undefined,
         gstNumber: form.gstNumber.trim() || undefined,
         isGstRegistered: form.isGstRegistered,

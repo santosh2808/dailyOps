@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,18 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import { deleteComplaint, listComplaints } from "@/api/complaints";
+import { deleteComplaint, exportComplaints, listComplaints } from "@/api/complaints";
 import type { Complaint, ComplaintStatus } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+
+// Bug fix (TC-061): the three backend-sortable fields (see
+// ComplaintsService's SORTABLE_FIELDS) that this list exposes as clickable
+// headers. "Age (days)" sorts by createdAt — it's the date-like column this
+// list shows (there's no separate "Logged On" column), and age is
+// monotonic with createdAt for the common unresolved case.
+type SortableColumn = "complaintNumber" | "status" | "createdAt";
 
 // Additive: Dashboard's Open Complaints KPI links here as
 // `/complaints?status=OPEN` — read once on first mount, same convention as
@@ -43,11 +51,15 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): Complain
 export default function ComplaintList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
+  // Complaint creation — this just hides the action from a role that can't use it.
+  const { hasPermission } = useAuth();
 
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [filters, setFilters] = useState<ComplaintFilters>(() =>
     initialFiltersFromSearchParams(searchParams),
   );
@@ -56,6 +68,12 @@ export default function ComplaintList() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  // Bug fix (TC-061): sortable "Complaint No." / "Status" / "Age (days)"
+  // headers — defaults match the backend's own default (createdAt/desc).
+  const [sortBy, setSortBy] = useState<SortableColumn>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
@@ -69,9 +87,11 @@ export default function ComplaintList() {
     try {
       const res = await listComplaints({
         page,
-        limit: PAGE_SIZE,
+        limit: pageSize,
         search: debouncedFilters.search || undefined,
         status: debouncedFilters.status || undefined,
+        sortBy,
+        sortOrder,
       });
       setComplaints(res.data);
       setTotal(res.total);
@@ -82,7 +102,7 @@ export default function ComplaintList() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedFilters]);
+  }, [page, pageSize, debouncedFilters, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchComplaints();
@@ -101,7 +121,43 @@ export default function ComplaintList() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [page, debouncedFilters]);
+  }, [page, debouncedFilters, sortBy, sortOrder]);
+
+  function toggleSort(column: SortableColumn) {
+    if (sortBy === column) {
+      setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  }
+
+  function sortIcon(column: SortableColumn) {
+    if (sortBy !== column) return <ArrowUpDown className="ml-1 h-3 w-3" />;
+    return sortOrder === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />;
+  }
+
+  function handlePageSizeChange(next: number) {
+    setPageSize(next);
+    setPage(1);
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportComplaints({
+        search: debouncedFilters.search || undefined,
+        status: debouncedFilters.status || undefined,
+        sortBy,
+        sortOrder,
+      });
+      toast.success("Complaints exported.");
+    } catch {
+      toast.error("Failed to export complaints.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function openDeleteDialog(complaint: Complaint) {
     setSelectedComplaint(complaint);
@@ -152,14 +208,28 @@ export default function ComplaintList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Complaints" showBackButton />
+        {/* Bug fix (TC-087): this is a top-level Sidebar destination, not
+            reached from anywhere with a predictable "back" target — Topbar's
+            showBackButton calls navigate(-1), which is confusing here (same
+            reasoning already applied to Details pages under TC-085). Other
+            top-level list pages (Suppliers, Customers, etc.) already have no
+            back button; this one and the others below were the outliers. */}
+        <Topbar title="Complaints" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <ComplaintFiltersBar filters={filters} onChange={setFilters} />
-            <Button onClick={() => navigate("/complaints/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Log Complaint
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
+                {exporting ? "Exporting..." : "Export Excel"}
+              </Button>
+              {hasPermission("Complaint", "Create") && (
+                <Button onClick={() => navigate("/complaints/new")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Log Complaint
+                </Button>
+              )}
+            </div>
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
@@ -194,17 +264,37 @@ export default function ComplaintList() {
                     aria-label="Select all complaints on this page"
                   />
                 </TableHead>
-                <TableHead>Complaint No.</TableHead>
+                <TableHead>
+                  <button type="button" className="flex items-center" onClick={() => toggleSort("complaintNumber")}>
+                    Complaint No.
+                    {sortIcon("complaintNumber")}
+                  </button>
+                </TableHead>
                 <TableHead>Subject</TableHead>
                 {/* Bug fix: lower-priority columns now progressively
                     appear from md/lg/xl up instead of all nine always being
                     rendered at once, which forced a horizontal scroll on
                     anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden xl:table-cell">Source</TableHead>
-                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
-                <TableHead className="hidden md:table-cell">Customer</TableHead>
-                <TableHead className="hidden lg:table-cell">Invoice</TableHead>
-                <TableHead>Status</TableHead>
+                {/* Bug fix (TC-060): Source/Sales Order/Customer merged into
+                    one combined "Origin" column — a Source badge stacked
+                    above the sales order + customer (or reporter) text. */}
+                <TableHead className="hidden md:table-cell">Origin</TableHead>
+                <TableHead className="hidden lg:table-cell">Invoice / Warranty</TableHead>
+                {/* Bug fix (TC-059): who/which department this complaint is
+                    assigned to, and how long it's been open/took to resolve. */}
+                <TableHead className="hidden xl:table-cell">Assigned To</TableHead>
+                <TableHead className="hidden xl:table-cell">
+                  <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
+                    Age (days)
+                    {sortIcon("createdAt")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="flex items-center" onClick={() => toggleSort("status")}>
+                    Status
+                    {sortIcon("status")}
+                  </button>
+                </TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -228,13 +318,35 @@ export default function ComplaintList() {
                   const proformaInvoice = complaint.salesOrder?.proformaInvoices?.[0];
                   const customerName =
                     complaint.salesOrder?.customer?.companyName || complaint.reporterName || "—";
+                  // Bug fix (TC-060): a Proforma Invoice's number was
+                  // previously shown identically, unstyled, to a verified
+                  // Tax Invoice number — a user could easily mistake one for
+                  // the other. Now distinct from both the verified case
+                  // (plain) and the unverified-claimed case.
                   const invoiceDisplay = complaint.taxInvoice
                     ? complaint.taxInvoice.invoiceNumber
                     : proformaInvoice?.invoiceNumber
-                      ? proformaInvoice.invoiceNumber
+                      ? `${proformaInvoice.invoiceNumber} (Proforma)`
                       : complaint.claimedInvoiceNumber
                         ? `${complaint.claimedInvoiceNumber} (unverified)`
                         : "—";
+                  const originText = complaint.salesOrder
+                    ? `${complaint.salesOrder.salesOrderNumber} — ${customerName}`
+                    : customerName !== "—"
+                      ? customerName
+                      : "—";
+                  // Bug fix (TC-060): same warranty badge semantics as
+                  // ComplaintDetails.tsx's Invoice Verification card —
+                  // success when under warranty, destructive when expired
+                  // or the automatic check found no matching invoice,
+                  // nothing when still unverified with no claim at all.
+                  const warrantyBadge = complaint.warranty ? (
+                    <Badge variant={complaint.warranty.isUnderWarranty ? "success" : "destructive"}>
+                      {complaint.warranty.isUnderWarranty ? "Under Warranty" : "Warranty Expired"}
+                    </Badge>
+                  ) : complaint.warrantyVerificationStatus === "NOT_FOUND" ? (
+                    <Badge variant="destructive">Not Found</Badge>
+                  ) : null;
                   return (
                     <TableRow
                       key={complaint.id}
@@ -254,24 +366,32 @@ export default function ComplaintList() {
                       <TableCell>
                         <TruncatedText text={complaint.subject} />
                       </TableCell>
-                      <TableCell className="hidden xl:table-cell">
-                        <Badge
-                          variant={
-                            complaint.source === "WEB_FORM"
-                              ? "info"
-                              : complaint.source === "CONVERTED_FROM_LEAD"
-                                ? "warning"
-                                : "muted"
-                          }
-                        >
-                          {complaint.source.replace(/_/g, " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">{complaint.salesOrder?.salesOrderNumber || "—"}</TableCell>
                       <TableCell className="hidden md:table-cell">
-                        <TruncatedText text={customerName} />
+                        <div className="space-y-1">
+                          <Badge
+                            variant={
+                              complaint.source === "WEB_FORM"
+                                ? "info"
+                                : complaint.source === "CONVERTED_FROM_LEAD"
+                                  ? "warning"
+                                  : "muted"
+                            }
+                          >
+                            {complaint.source.replace(/_/g, " ")}
+                          </Badge>
+                          <div>
+                            <TruncatedText text={originText} />
+                          </div>
+                        </div>
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell">{invoiceDisplay}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="space-y-1">
+                          <div>{invoiceDisplay}</div>
+                          {warrantyBadge}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell">{complaint.assignedToUser?.name || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{complaint.ageInDays}</TableCell>
                       <TableCell>
                         <ComplaintStatusBadge status={complaint.status} />
                       </TableCell>
@@ -314,9 +434,24 @@ export default function ComplaintList() {
             <p className="text-sm text-muted-foreground">
               {total === 0
                 ? "0 complaints"
-                : `Showing ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, total)} of ${total} complaints`}
+                : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total} complaints`}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* Bug fix (TC-061): page-size selector — resets to page 1 on change. */}
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Rows per page
+                <select
+                  className="flex h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Button
                 variant="outline"
                 size="sm"

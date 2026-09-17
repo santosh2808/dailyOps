@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequireAllPermissions, RequirePermission } from '../permissions/require-permission.decorator';
@@ -23,6 +24,28 @@ export class ComplaintsController {
   @RequirePermission('Complaint', 'View')
   findAll(@Query() query: QueryComplaintDto) {
     return this.complaintsService.findAll(query);
+  }
+
+  // Additive (TC-062): standalone invoice lookup for use during creation,
+  // before a complaint id exists yet — reuses the same
+  // findInvoiceForLookup() the id-scoped ':id/invoice-lookup' route below
+  // already calls. Registered ahead of ':id' (same route-ordering rule as
+  // 'export') so 'invoice-lookup' is never swallowed as a complaint id.
+  @Get('invoice-lookup')
+  @RequirePermission('Complaint', 'Create')
+  invoiceLookupStandalone(@Query('invoiceNumber') invoiceNumber: string) {
+    return this.complaintsService.findInvoiceForLookup(invoiceNumber);
+  }
+
+  // Additive (TC-061): registered ahead of ':id' so 'export' is never
+  // swallowed as a complaint id (same convention as MaterialsController).
+  @Get('export')
+  @RequirePermission('Complaint', 'View')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="complaints-export.xlsx"')
+  async export(@Query() query: QueryComplaintDto, @Res() res: Response) {
+    const buffer = await this.complaintsService.exportToExcel(query);
+    res.send(buffer);
   }
 
   @Get(':id')

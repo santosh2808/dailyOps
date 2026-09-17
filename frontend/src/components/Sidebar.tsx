@@ -81,10 +81,17 @@ const NAV_GROUPS: NavGroup[] = [
         permission: { module: "SalesOrder", action: "View" },
       },
       {
+        // QA bug-fix pass (TC-082): was gated on Quotation.View (which
+        // Sales Executive/Finance both have), so the link showed for roles
+        // that then hit a 403 from the backend (which correctly requires
+        // Quotation.Approve — see quotations.controller.ts's
+        // approval-requests routes). Gating on the same permission the
+        // backend actually enforces makes the link disappear for them
+        // instead of surfacing an error page after the click.
         label: "Quotation Approvals",
         to: "/quotations/approvals",
         icon: CheckSquare,
-        permission: { module: "Quotation", action: "View" },
+        permission: { module: "Quotation", action: "Approve" },
       },
     ],
   },

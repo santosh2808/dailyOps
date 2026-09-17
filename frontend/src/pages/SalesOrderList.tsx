@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
 import type { SalesOrder, SalesOrderStatus } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +65,10 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): SalesOrd
 export default function SalesOrderList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // QA bug-fix pass (TC-078/082/095): the backend already rejects an
+  // unauthorized bulk delete — this just hides the action from a role that
+  // can't use it, same pattern as every other list page's guarded action.
+  const { hasPermission } = useAuth();
 
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [total, setTotal] = useState(0);
@@ -199,7 +204,9 @@ export default function SalesOrderList() {
     <div className="flex h-screen bg-app-grid">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Sales Orders" showBackButton />
+        {/* Bug fix (TC-087): top-level Sidebar destination — see
+            ComplaintList.tsx's identical fix for the full reasoning. */}
+        <Topbar title="Sales Orders" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <SalesOrderFiltersBar filters={filters} onChange={setFilters} />
@@ -265,10 +272,12 @@ export default function SalesOrderList() {
                 <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                   Clear
                 </Button>
-                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Selected
-                </Button>
+                {hasPermission("SalesOrder", "Delete") && (
+                  <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Selected
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -192,7 +192,10 @@ export default function TaxInvoiceDetails() {
                           if (result.status === "SENT") {
                             toast.success("WhatsApp message sent.");
                           } else if (result.status === "SIMULATED") {
-                            toast.success("WhatsApp message logged (Interakt not configured).");
+                            // Bug fix (TC-094): see QuotationDetails.tsx's identical
+                            // fix — a green "success" toast for a message that was
+                            // never actually sent is misleading; use "info" instead.
+                            toast.info("WhatsApp message logged (Interakt not configured — no real message was sent).");
                           } else {
                             toast.error(
                               result.errorMessage || "Could not send the WhatsApp message. Please try again.",

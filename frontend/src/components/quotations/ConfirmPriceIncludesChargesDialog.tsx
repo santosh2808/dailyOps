@@ -32,7 +32,11 @@ export default function ConfirmPriceIncludesChargesDialog({
   onAnswer,
 }: ConfirmPriceIncludesChargesDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    // TC-092: this dialog can pop up over the Quotation form at any time
+    // (unit price blur) — z-[60] guarantees it always renders above the
+    // app's other z-50 chrome (mobile Sidebar drawer, Topbar profile menu)
+    // instead of depending on where it happens to be mounted in the DOM.
+    <Dialog open={open} onOpenChange={onOpenChange} overlayClassName="z-[60]">
       <DialogContent onClose={() => onOpenChange(false)} size="sm">
         <DialogHeader>
           <DialogTitle>Does this price include everything?</DialogTitle>
