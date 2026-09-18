@@ -263,16 +263,23 @@ export default function QuotationDetails() {
                       </DropdownMenuItem>
                     )}
                     {/* Customer Quotation Acceptance workflow — "Resend
-                        Quotation" once already sent (SENT/VIEWED). Covers a
-                        customer who lost the email, and fixing/retrying
-                        after an Email Template edit (e.g. the QUOTATION
-                        template missing {{quotationLink}} on an older
-                        database). The backend already allows this for any
-                        non-terminal status — see
+                        Quotation" once already sent (SENT/VIEWED), and also
+                        once REJECTED. Covers a customer who lost the email,
+                        fixing/retrying after an Email Template edit (e.g.
+                        the QUOTATION template missing {{quotationLink}} on
+                        an older database), and — the REJECTED case — a
+                        customer who rejected the price, so staff edit the
+                        items (see "Edit" below) and resend a revised offer
+                        without first having to detour through Change
+                        Status just to get back to a sendable state. The
+                        backend allows this for any status short of
+                        Accepted/Expired — see
                         QuotationsService.sendQuotation() — this just
                         surfaces it once the quotation is no longer
                         Draft/Ready. */}
-                    {(quotation.status === "SENT" || quotation.status === "VIEWED") && (
+                    {(quotation.status === "SENT" ||
+                      quotation.status === "VIEWED" ||
+                      quotation.status === "REJECTED") && (
                       <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
                         Resend Quotation
                       </DropdownMenuItem>
@@ -708,7 +715,11 @@ export default function QuotationDetails() {
         open={sendOpen}
         onOpenChange={setSendOpen}
         quotation={quotation}
-        isResend={quotation?.status === "SENT" || quotation?.status === "VIEWED"}
+        isResend={
+          quotation?.status === "SENT" ||
+          quotation?.status === "VIEWED" ||
+          quotation?.status === "REJECTED"
+        }
         onSent={() => {
           fetchQuotation();
           fetchEmailHistory();

@@ -830,13 +830,21 @@ export class QuotationsService {
 
   // Send Quotation (requirement #6): generates the PDF, sends the email
   // (customer, optionally CC'd), records EmailHistory (inside
-  // MailerService.send()), and stamps sentAt/sentBy/sentToEmail — never
-  // any other quotation field. Blocked once the quotation has reached a
-  // terminal-ish state (Accepted/Rejected/Expired have already been
-  // decided; there's nothing left to "send").
+  // MailerService.send()), and stamps sentAt/sentBy/sentToEmail. Blocked
+  // once the quotation has reached a state where "send" doesn't make sense
+  // (Accepted — there's a deal in motion; Expired — needs an explicit
+  // status change first to signal someone actually decided to revive it).
+  //
+  // Bug fix: REJECTED used to be blocked here too, which meant resending
+  // after a customer rejection had no direct path — staff had to first use
+  // Change Status to move off REJECTED (which cleared the rejection fields
+  // itself), then separately edit and send. That's a "why is Send Quotation
+  // just missing" dead end for a completely ordinary case: reject a price,
+  // renegotiate/edit the items, send again. REJECTED is no longer
+  // terminal for sending — see the decision-field clearing below.
   async sendQuotation(id: string, dto: SendQuotationDto, actor: QuotationActor = {}) {
     const quotation = await this.findOne(id);
-    if (['ACCEPTED', 'REJECTED', 'EXPIRED'].includes(quotation.status)) {
+    if (['ACCEPTED', 'EXPIRED'].includes(quotation.status)) {
       throw new BadRequestException(`A quotation with status ${quotation.status} cannot be sent`);
     }
 
@@ -909,6 +917,22 @@ export class QuotationsService {
         publicToken,
         tokenExpiresAt,
         sentSnapshot: sentSnapshot as unknown as Prisma.InputJsonValue,
+        // Bug fix: resending after a rejection must clear the old decision
+        // — otherwise the record would claim both "Rejected on <date>" and
+        // "Sent on <date>" at once, and the customer's brand-new link above
+        // would sit alongside stale rejectionReason/rejectionComment text
+        // from the version they actually rejected. Mirrors the same
+        // clearing updateStatus() already does when leaving REJECTED.
+        // Unconditional (not just when quotation.status === 'REJECTED')
+        // because these fields are already null on every other resendable
+        // status, so this is a no-op for those.
+        acceptedAt: null,
+        acceptedByName: null,
+        acceptedByDesignation: null,
+        acceptanceComment: null,
+        rejectedAt: null,
+        rejectionReason: null,
+        rejectionComment: null,
       },
       include: QUOTATION_DETAIL_INCLUDE,
     });

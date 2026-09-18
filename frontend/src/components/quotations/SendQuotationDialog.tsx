@@ -22,13 +22,14 @@ import type { Quotation } from "@/types";
 // can be added freely (comma-separated).
 //
 // Customer Quotation Acceptance workflow — this same dialog also handles
-// "Resend Quotation" (status already SENT/VIEWED). The backend already
-// allows re-sending anything short of ACCEPTED/REJECTED/EXPIRED
-// (QuotationsService.sendQuotation() only blocks those three), and every
-// send — first or repeat — issues a brand-new secure token, which
-// invalidates any link already out in a customer's inbox. `isResend` only
-// changes the copy shown here so that behavior is obvious to whoever
-// clicks it.
+// "Resend Quotation" (status already SENT/VIEWED/REJECTED — REJECTED lets
+// staff edit the items after a rejection and send a revised offer without a
+// Change Status detour first). The backend allows re-sending anything short
+// of ACCEPTED/EXPIRED (QuotationsService.sendQuotation() only blocks those
+// two), and every send — first or repeat — issues a brand-new secure token,
+// which invalidates any link already out in a customer's inbox, and clears
+// any prior accept/reject decision. `isResend` only changes the copy shown
+// here so that behavior is obvious to whoever clicks it.
 
 interface SendQuotationDialogProps {
   open: boolean;
