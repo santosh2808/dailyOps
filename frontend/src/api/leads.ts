@@ -27,6 +27,7 @@ export interface LeadListParams {
   priority?: LeadPriority;
   source?: LeadSource;
   assignedToUserId?: string;
+  state?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;

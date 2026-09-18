@@ -305,6 +305,7 @@ export class LeadsService {
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.source ? { source: query.source } : {}),
       ...(query.assignedToUserId ? { assignedToUserId: query.assignedToUserId } : {}),
+      ...(query.state ? { state: query.state } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
             createdAt: {

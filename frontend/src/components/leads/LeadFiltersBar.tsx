@@ -5,6 +5,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { STATUS_OPTIONS, PRIORITY_OPTIONS, SOURCE_OPTIONS } from "./leadOptions";
 import { listAssignableUsers } from "@/api/users";
+import { INDIA_STATES } from "@/lib/indiaStates";
 import type { AssignableUser, LeadPriority, LeadSource, LeadStatus } from "@/types";
 
 export interface LeadFilters {
@@ -13,6 +14,7 @@ export interface LeadFilters {
   priority: LeadPriority | "";
   source: LeadSource | "";
   assignedToUserId: string;
+  state: string;
   dateFrom: string;
   dateTo: string;
 }
@@ -28,6 +30,7 @@ export const emptyLeadFilters: LeadFilters = {
   priority: "",
   source: "",
   assignedToUserId: "",
+  state: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -50,6 +53,7 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
     !!filters.priority ||
     !!filters.source ||
     !!filters.assignedToUserId ||
+    !!filters.state ||
     !!filters.dateFrom ||
     !!filters.dateTo;
 
@@ -118,6 +122,19 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
           {assignableUsers.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          className="w-44"
+          value={filters.state}
+          onChange={(e) => update("state", e.target.value)}
+        >
+          <option value="">All states</option>
+          {INDIA_STATES.map((s) => (
+            <option key={s} value={s}>
+              {s}
             </option>
           ))}
         </Select>

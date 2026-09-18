@@ -55,10 +55,12 @@ function formatDate(value?: string | null) {
 function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilters {
   const status = searchParams.get("status");
   const assignedToUserId = searchParams.get("assignedToUserId");
+  const state = searchParams.get("state");
   return {
     ...emptyLeadFilters,
     status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
     assignedToUserId: assignedToUserId ?? emptyLeadFilters.assignedToUserId,
+    state: state ?? emptyLeadFilters.state,
   };
 }
 
@@ -107,6 +109,7 @@ export default function LeadList() {
         priority: debouncedFilters.priority || undefined,
         source: debouncedFilters.source || undefined,
         assignedToUserId: debouncedFilters.assignedToUserId || undefined,
+        state: debouncedFilters.state || undefined,
         dateFrom: debouncedFilters.dateFrom || undefined,
         dateTo: debouncedFilters.dateTo || undefined,
         sortBy,

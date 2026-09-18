@@ -55,6 +55,14 @@ export class QueryLeadDto {
   @IsUUID()
   assignedToUserId?: string;
 
+  // Lead.state is a plain validated string (see INDIA_STATES in
+  // common/india-states.ts), not a Prisma enum — matches Dashboard's
+  // existing state filter pattern.
+  @ApiPropertyOptional({ example: 'Maharashtra' })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
   @ApiPropertyOptional({ example: '2026-01-01', description: 'createdAt >= dateFrom' })
   @IsOptional()
   @IsDateString()
