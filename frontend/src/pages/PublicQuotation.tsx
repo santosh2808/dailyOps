@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import PageLoader from "@/components/PageLoader";
 import AcceptQuotationDialog from "@/components/public-quotation/AcceptQuotationDialog";
 import RejectQuotationDialog from "@/components/public-quotation/RejectQuotationDialog";
+import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
 import { toast } from "@/lib/toast";
 import {
   acceptPublicQuotation,
@@ -278,14 +279,52 @@ export default function PublicQuotation() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {quotation.items.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{item.description || item.productName}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
-                      <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {quotation.items.map((item, index) => {
+                    // Bug fix: a chosen Color/Hanging Structure carries its
+                    // own extra per-unit charge that's folded into Total but
+                    // NOT into Unit Price (see computeTotals()) — without
+                    // showing it, Qty x Unit Price silently didn't add up to
+                    // Total here, unlike the PDF and the internal Quotation
+                    // Details page, which both already show this breakdown.
+                    const hasColor = !!item.color?.trim() || (item.colorCharge ?? 0) > 0;
+                    const hasStructure =
+                      !!item.hangingStructureType || (item.hangingStructureCharge ?? 0) > 0;
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <div>{item.description || item.productName}</div>
+                          {(hasColor || hasStructure) && (
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                              {hasColor && (
+                                <span>
+                                  Color: {item.color?.trim() || "Custom"}
+                                  {(item.colorCharge ?? 0) > 0 &&
+                                    ` (+${formatCurrency(item.colorCharge)})`}
+                                </span>
+                              )}
+                              {hasStructure && (
+                                <span>
+                                  Hanging Structure:{" "}
+                                  {item.hangingStructureType
+                                    ? hangingStructureLabel(item.hangingStructureType)
+                                    : "Custom"}
+                                  {item.hangingStructureType === "PIPE_TRUSS" &&
+                                  item.pipeLength?.trim()
+                                    ? `, Pipe Length: ${item.pipeLength.trim()}`
+                                    : ""}
+                                  {(item.hangingStructureCharge ?? 0) > 0 &&
+                                    ` (+${formatCurrency(item.hangingStructureCharge)})`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

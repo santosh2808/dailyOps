@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { TransportScope } from "@/types";
+import type { HangingStructureType, TransportScope } from "@/types";
 
 // Customer Quotation Acceptance workflow — the unauthenticated counterpart
 // to api/quotations.ts, used only by PublicQuotation.tsx (the /quote/:token
@@ -14,6 +14,17 @@ export interface PublicQuotationItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  // Bug fix: unitPrice is the raw per-unit price — a non-zero colorCharge/
+  // hangingStructureCharge is folded into lineTotal only (see
+  // QuotationsService.computeTotals()), so without these the public page
+  // showed "Qty x Unit Price" that silently didn't multiply out to Total,
+  // with nothing explaining the gap. Mirrors QuotationDetails.tsx's (the
+  // internal view's) item fields exactly.
+  color?: string | null;
+  colorCharge?: number;
+  hangingStructureType?: HangingStructureType | null;
+  pipeLength?: string | null;
+  hangingStructureCharge?: number;
 }
 
 export interface PublicQuotationView {

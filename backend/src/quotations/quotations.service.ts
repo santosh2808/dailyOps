@@ -1217,12 +1217,29 @@ export class QuotationsService {
       validUntil: content.validUntil ? new Date(content.validUntil) : null,
       customerName: content.customerName,
       customerCompany: content.customerCompany,
+      // Bug fix: this used to drop color/colorCharge/hangingStructureType/
+      // pipeLength/hangingStructureCharge even though PublicQuotationView's
+      // own item type already declares them — toPdfInput() (used for both
+      // the emailed PDF and QuotationDetails.tsx, the internal view) always
+      // included them. Since a non-zero colorCharge/hangingStructureCharge
+      // is folded into lineTotal but NOT into unitPrice (see
+      // computeTotals()), the customer-facing public page showed a bare
+      // "Qty 1 x Unit Price" that silently didn't multiply out to Total,
+      // with nothing to explain the gap — while the PDF and internal page
+      // both showed the same numbers plus the color/structure charge
+      // explaining it. Carrying these through (and rendering them below,
+      // same as QuotationDetails.tsx) makes the public page match the PDF.
       items: content.items.map((item) => ({
         productName: item.productName,
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         lineTotal: item.lineTotal,
+        color: item.color,
+        colorCharge: item.colorCharge,
+        hangingStructureType: item.hangingStructureType,
+        pipeLength: item.pipeLength,
+        hangingStructureCharge: item.hangingStructureCharge,
       })),
       subtotal: content.subtotal,
       gstPercent: content.gstPercent,
