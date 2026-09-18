@@ -840,13 +840,18 @@ export class QuotationsService {
     const to = dto.recipientEmail?.trim() || recipientEmail || undefined;
     const pdf = await this.quotationPdfService.render(quotation);
 
-    // Freeze exactly what's being sent right now — resolveOfferContent()
-    // falls back to reconstructing from live fields since this quotation
-    // has no snapshot yet (or has a stale one from a prior send), so this
+    // Freeze exactly what's being sent right now. Bug fix: this must be
+    // buildOfferContentFromLive(), NOT resolveOfferContent() — the latter
+    // returns the OLD sentSnapshot as-is whenever one already exists (i.e.
+    // on every resend), which silently ignored any edits made since the
+    // first send while the email attachment above was rendered from the
+    // live, edited quotation — the exact "attachment vs View Quotation
+    // link" mismatch this was reported as. buildOfferContentFromLive()
+    // always reconstructs fresh from the current live fields, so this
     // captures the same data the PDF above was just rendered from. Stored
     // below alongside the fresh token, so the public link and its PDF
     // always match this email, even if the quotation is edited afterward.
-    const sentSnapshot = this.resolveOfferContent(quotation);
+    const sentSnapshot = this.buildOfferContentFromLive(quotation);
 
     // Customer Quotation Acceptance workflow (requirement #2) — a fresh
     // token every time this quotation is (re)sent, rather than reusing one
@@ -1068,12 +1073,38 @@ export class QuotationsService {
   // reconstructing the identical shape from live fields for a quotation
   // sent before this field existed, so nothing breaks for older records —
   // it just behaves like it did before snapshots existed (live-editable).
+  //
+  // Bug fix: this must ONLY be used for *reading* offer content (the public
+  // page/PDF, or the Quotation Details "stale total" banner) — never for
+  // *capturing* a fresh snapshot. `if (snapshot) return snapshot` means a
+  // quotation that's already been sent once returns its OLD frozen snapshot
+  // here, unconditionally — it has no notion of "stale." sendQuotation()
+  // was calling this same method to build the value it stores as the NEW
+  // sentSnapshot on every (re)send, so on a resend it just wrote the old
+  // snapshot back into `sentSnapshot`, while the email attachment sent
+  // alongside it was rendered from the current, possibly-just-edited, live
+  // quotation — exactly the "attachment says one thing, the View Quotation
+  // link says another" split reported. See buildOfferContentFromLive()
+  // below, which sendQuotation() now uses instead to always capture the
+  // live data at send time, regardless of what any prior snapshot held.
   private resolveOfferContent(
     quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
   ): QuotationSentSnapshot {
     const snapshot = quotation.sentSnapshot as unknown as QuotationSentSnapshot | null;
     if (snapshot) return snapshot;
+    return this.buildOfferContentFromLive(quotation);
+  }
 
+  // Unconditional live reconstruction — the snapshot shape built fresh from
+  // the Quotation row's current fields, ignoring any existing
+  // Quotation.sentSnapshot entirely. Two callers: resolveOfferContent()'s
+  // fallback above (for a pre-snapshot-era record with no sentSnapshot at
+  // all), and sendQuotation() (to capture what's being sent *right now* on
+  // every send, including a resend after edits — see the bug-fix comment
+  // above resolveOfferContent()).
+  private buildOfferContentFromLive(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): QuotationSentSnapshot {
     return {
       quotationNumber: quotation.quotationNumber,
       createdAt: quotation.createdAt.toISOString(),
