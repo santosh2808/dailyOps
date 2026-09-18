@@ -1,5 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ComplaintHistoryAction, LeadPriority, LeadSource, Prisma } from '@prisma/client';
+import {
+  ComplaintHistoryAction,
+  ComplaintSource,
+  LeadPriority,
+  LeadSource,
+  Prisma,
+  WarrantyVerificationStatus,
+} from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -158,6 +165,29 @@ export class ComplaintsService {
       deletedAt: null,
       ...(query.status ? { status: query.status } : {}),
       ...(query.salesOrderId ? { salesOrderId: query.salesOrderId } : {}),
+      // Bug fix (TC-057): "unassigned" is a literal sentinel (not a uuid) so
+      // the filter can express "no assignee" — same convention as the
+      // Assigned To select's "All assignees"/named-user options below it.
+      ...(query.assignedToUserId === 'unassigned'
+        ? { assignedToUserId: null }
+        : query.assignedToUserId
+          ? { assignedToUserId: query.assignedToUserId }
+          : {}),
+      ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+      ...(query.source ? { source: query.source } : {}),
+      ...(query.sourceWebsiteId ? { sourceWebsiteId: query.sourceWebsiteId } : {}),
+      ...(query.sourceSubjectCode ? { sourceSubjectCode: query.sourceSubjectCode } : {}),
+      ...(query.warrantyVerificationStatus
+        ? { warrantyVerificationStatus: query.warrantyVerificationStatus }
+        : {}),
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+            },
+          }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -184,6 +214,91 @@ export class ComplaintsService {
     const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
 
     return { where, orderBy: { [sortBy]: sortOrder } };
+  }
+
+  // Bug fix (TC-057): populates the new filter bar's dropdown choices.
+  // Deliberately self-contained inside the Complaints module — queries
+  // Prisma directly for departments/users/websites/categories instead of
+  // calling DepartmentsController/UsersController/FormConfigurationController
+  // (each gated by a different permission: Department:View, Lead:View,
+  // FormConfiguration:View respectively). Gating this on those would mean a
+  // user who can view Complaints but lacks one of those other permissions
+  // gets a 403 just from opening the Complaints list filter bar. This
+  // endpoint is gated only by Complaint:View (see controller).
+  async getFilterOptions() {
+    const [departments, users, websiteRows, subjectCodeRows] = await Promise.all([
+      this.prisma.department.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      // Not restricted to the Lead module's "assignable" role set
+      // (Sales Executive/Sales Manager) — Complaint.assignedToUserId has no
+      // such restriction (it can be set from any FormSubjectRoute's
+      // assignedUserId), so any active user is a valid filter choice.
+      this.prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      // Website/Category are only ever populated on web-form-originated
+      // complaints, so — unlike Department/User above — we only offer the
+      // values actually in use rather than every configured website/subject
+      // route, to avoid a dropdown full of options that would always return
+      // zero results.
+      this.prisma.complaint.findMany({
+        where: { deletedAt: null, sourceWebsiteId: { not: null } },
+        select: { sourceWebsiteId: true },
+        distinct: ['sourceWebsiteId'],
+      }),
+      this.prisma.complaint.findMany({
+        where: { deletedAt: null, sourceSubjectCode: { not: null } },
+        select: { sourceSubjectCode: true },
+        distinct: ['sourceSubjectCode'],
+      }),
+    ]);
+
+    const websiteIds = websiteRows
+      .map((row) => row.sourceWebsiteId)
+      .filter((id): id is string => !!id);
+    const websites = websiteIds.length
+      ? await this.prisma.formWebsite.findMany({
+          where: { id: { in: websiteIds } },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : [];
+
+    const subjectCodes = subjectCodeRows
+      .map((row) => row.sourceSubjectCode)
+      .filter((code): code is string => !!code);
+    // subjectLabel lives on FormSubjectRoute, keyed by subjectCode — look up
+    // a human label for each in-use code, falling back to the raw code if
+    // its route was since deleted/renamed (the complaint itself still keeps
+    // the code it was created with).
+    const routes = subjectCodes.length
+      ? await this.prisma.formSubjectRoute.findMany({
+          where: { subjectCode: { in: subjectCodes } },
+          select: { subjectCode: true, subjectLabel: true },
+        })
+      : [];
+    const labelByCode = new Map<string, string>();
+    for (const route of routes) {
+      if (!labelByCode.has(route.subjectCode)) {
+        labelByCode.set(route.subjectCode, route.subjectLabel);
+      }
+    }
+    const categories = subjectCodes
+      .map((code) => ({ code, label: labelByCode.get(code) ?? code }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return {
+      departments,
+      users,
+      websites,
+      categories,
+      sources: Object.values(ComplaintSource),
+      warrantyVerificationStatuses: Object.values(WarrantyVerificationStatus),
+    };
   }
 
   async findAll(query: QueryComplaintDto) {

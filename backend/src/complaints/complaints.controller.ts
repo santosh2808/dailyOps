@@ -37,6 +37,16 @@ export class ComplaintsController {
     return this.complaintsService.findInvoiceForLookup(invoiceNumber);
   }
 
+  // Bug fix (TC-057): filter-bar dropdown choices, gated only by
+  // Complaint:View (see ComplaintsService.getFilterOptions() for why this
+  // isn't reused from Department/Users/FormConfiguration controllers).
+  // Registered ahead of ':id' for the same reason as 'export' below.
+  @Get('filter-options')
+  @RequirePermission('Complaint', 'View')
+  getFilterOptions() {
+    return this.complaintsService.getFilterOptions();
+  }
+
   // Additive (TC-061): registered ahead of ':id' so 'export' is never
   // swallowed as a complaint id (same convention as MaterialsController).
   @Get('export')

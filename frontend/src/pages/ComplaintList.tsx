@@ -90,6 +90,15 @@ export default function ComplaintList() {
         limit: pageSize,
         search: debouncedFilters.search || undefined,
         status: debouncedFilters.status || undefined,
+        // Bug fix (TC-057): pass the new filter bar fields through.
+        assignedToUserId: debouncedFilters.assignedToUserId || undefined,
+        departmentId: debouncedFilters.departmentId || undefined,
+        source: debouncedFilters.source || undefined,
+        sourceWebsiteId: debouncedFilters.sourceWebsiteId || undefined,
+        sourceSubjectCode: debouncedFilters.sourceSubjectCode || undefined,
+        warrantyVerificationStatus: debouncedFilters.warrantyVerificationStatus || undefined,
+        dateFrom: debouncedFilters.dateFrom || undefined,
+        dateTo: debouncedFilters.dateTo || undefined,
         sortBy,
         sortOrder,
       });
@@ -148,6 +157,14 @@ export default function ComplaintList() {
       await exportComplaints({
         search: debouncedFilters.search || undefined,
         status: debouncedFilters.status || undefined,
+        assignedToUserId: debouncedFilters.assignedToUserId || undefined,
+        departmentId: debouncedFilters.departmentId || undefined,
+        source: debouncedFilters.source || undefined,
+        sourceWebsiteId: debouncedFilters.sourceWebsiteId || undefined,
+        sourceSubjectCode: debouncedFilters.sourceSubjectCode || undefined,
+        warrantyVerificationStatus: debouncedFilters.warrantyVerificationStatus || undefined,
+        dateFrom: debouncedFilters.dateFrom || undefined,
+        dateTo: debouncedFilters.dateTo || undefined,
         sortBy,
         sortOrder,
       });

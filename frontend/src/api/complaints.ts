@@ -1,5 +1,13 @@
 import api from "@/lib/api";
-import type { Complaint, ComplaintStatus, EmailHistoryEntry, PaginatedResponse, TaxInvoiceItem } from "@/types";
+import type {
+  Complaint,
+  ComplaintSource,
+  ComplaintStatus,
+  EmailHistoryEntry,
+  PaginatedResponse,
+  TaxInvoiceItem,
+  WarrantyVerificationStatus,
+} from "@/types";
 
 export interface ComplaintListParams {
   page?: number;
@@ -9,6 +17,16 @@ export interface ComplaintListParams {
   salesOrderId?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  // Bug fix (TC-057): "Essential filters missing in the complaints list" —
+  // mirrors ComplaintFiltersBar's new filter set / query-complaint.dto.ts.
+  assignedToUserId?: string;
+  departmentId?: string;
+  source?: ComplaintSource;
+  sourceWebsiteId?: string;
+  sourceSubjectCode?: string;
+  warrantyVerificationStatus?: WarrantyVerificationStatus;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 // complaintNumber is deliberately absent — it is always auto-generated
@@ -50,6 +68,25 @@ export async function exportComplaints(params: Omit<ComplaintListParams, "page" 
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+// Bug fix (TC-057): populates ComplaintFiltersBar's dropdown choices — see
+// ComplaintsService.getFilterOptions() for why this is its own
+// Complaint-module endpoint rather than reusing listDepartments()/
+// listAssignableUsers()/listFormWebsites() (each gated by a different
+// permission that a Complaint viewer isn't guaranteed to hold).
+export interface ComplaintFilterOptions {
+  departments: { id: string; name: string }[];
+  users: { id: string; name: string }[];
+  websites: { id: string; name: string }[];
+  categories: { code: string; label: string }[];
+  sources: ComplaintSource[];
+  warrantyVerificationStatuses: WarrantyVerificationStatus[];
+}
+
+export async function getComplaintFilterOptions() {
+  const res = await api.get<ComplaintFilterOptions>("/api/v1/complaints/filter-options");
+  return res.data;
 }
 
 export async function getComplaint(id: string) {
