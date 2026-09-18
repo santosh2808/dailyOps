@@ -11,6 +11,7 @@ import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/Genera
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { getCustomer } from "@/api/customers";
 import { listQuotations, updateQuotationStatus, type QuotationApprovalErrorBody } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
@@ -75,9 +76,10 @@ export default function CustomerDetails() {
       setCustomer(customerData);
       setQuotations(quotationsRes.data);
       setSalesOrders(salesOrdersRes.data);
-    } catch {
-      setError("Could not load this customer.");
-      toast.error("Could not load this customer.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this customer.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

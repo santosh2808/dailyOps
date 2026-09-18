@@ -9,6 +9,7 @@ import SupplierStatusBadge from "@/components/suppliers/SupplierStatusBadge";
 import DeleteSupplierConfirmDialog from "@/components/suppliers/DeleteSupplierConfirmDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deleteSupplier, getSupplier } from "@/api/suppliers";
 import type { Supplier } from "@/types";
 
@@ -42,9 +43,10 @@ export default function SupplierDetails() {
     try {
       const data = await getSupplier(id);
       setSupplier(data);
-    } catch {
-      setError("Could not load this supplier.");
-      toast.error("Could not load this supplier.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this supplier.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
@@ -229,10 +230,11 @@ export default function QuotationForm() {
       try {
         const res = await listProducts({ page: 1, limit: 100 });
         if (!cancelled) setCatalog(res.data);
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setCatalogError("Could not load the product catalog.");
-          toast.error("Could not load the product catalog.");
+          const message = getErrorMessage(err, "Could not load the product catalog.");
+          setCatalogError(message);
+          toast.error(message);
         }
       }
     }
@@ -309,8 +311,8 @@ export default function QuotationForm() {
             hangingStructureCharge: item.hangingStructureCharge,
           }))
         );
-      } catch {
-        const message = "Could not load this quotation.";
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load this quotation.");
         setSubmitError(message);
         toast.error(message);
       } finally {
@@ -435,8 +437,8 @@ export default function QuotationForm() {
         toast.success("Quotation created successfully.");
         navigate(`/quotations/${created.id}`);
       }
-    } catch {
-      const message = "Something went wrong while saving this quotation. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong while saving this quotation. Please try again.");
       setSubmitError(message);
       toast.error(message);
       setSubmitting(false);

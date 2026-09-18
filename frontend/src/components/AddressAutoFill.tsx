@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { getErrorMessage } from "@/lib/errors";
 import {
   ADDRESS_SEARCH_MIN_LENGTH,
   lookupPincode,
@@ -73,7 +74,7 @@ export default function AddressAutoFill({
         setShowSuggestions(true);
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
-          setSearchError("Could not search addresses right now.");
+          setSearchError(getErrorMessage(err, "Could not search addresses right now."));
         }
       } finally {
         setSearching(false);
@@ -114,8 +115,8 @@ export default function AddressAutoFill({
       if (!value.includes(line)) {
         onChange(value.trim() ? `${value.trim()}\n${line}` : line);
       }
-    } catch {
-      setPinError("Could not look up that PIN code. Please try again.");
+    } catch (err) {
+      setPinError(getErrorMessage(err, "Could not look up that PIN code. Please try again."));
     } finally {
       setPinLoading(false);
     }

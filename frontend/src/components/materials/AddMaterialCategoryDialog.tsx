@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { createMaterialCategory } from "@/api/material-categories";
 import type { MaterialCategory } from "@/types";
 
@@ -59,8 +60,8 @@ export default function AddMaterialCategoryDialog({
       });
       toast.success("Category added.");
       onCreated(created);
-    } catch {
-      const message = "Could not add this category. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not add this category. Please try again.");
       setError(message);
       toast.error(message);
     } finally {

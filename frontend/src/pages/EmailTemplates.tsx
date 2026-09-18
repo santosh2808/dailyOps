@@ -15,6 +15,7 @@ import {
 import EditEmailTemplateDialog from "@/components/email-templates/EditEmailTemplateDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listEmailTemplates } from "@/api/email-templates";
 import type { EmailTemplate } from "@/types";
 
@@ -37,9 +38,10 @@ export default function EmailTemplates() {
     setError("");
     try {
       setTemplates(await listEmailTemplates());
-    } catch {
-      setError("Could not load email templates.");
-      toast.error("Could not load email templates.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load email templates.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

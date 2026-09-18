@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listPermissions } from "@/api/permissions";
 import type { Permission, Role } from "@/types";
 import type { RolePayload } from "@/api/roles";
@@ -64,9 +65,10 @@ export default function RoleFormDialog({
     setLoadingPermissions(true);
     listPermissions()
       .then(setAllPermissions)
-      .catch(() => {
-        setSubmitError("Failed to load the permission catalog.");
-        toast.error("Failed to load the permission catalog.");
+      .catch((err) => {
+        const message = getErrorMessage(err, "Failed to load the permission catalog.");
+        setSubmitError(message);
+        toast.error(message);
       })
       .finally(() => setLoadingPermissions(false));
   }, [open, role]);
@@ -121,9 +123,10 @@ export default function RoleFormDialog({
       });
       toast.success(isEdit ? "Role updated successfully." : "Role created successfully.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

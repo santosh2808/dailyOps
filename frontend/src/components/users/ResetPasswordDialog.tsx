@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import type { RbacUser } from "@/types";
 
 // Administrator action ("Reset Passwords") — separate from the Edit User
@@ -58,9 +59,10 @@ export default function ResetPasswordDialog({
       await onSubmit(newPassword);
       toast.success("Password reset.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

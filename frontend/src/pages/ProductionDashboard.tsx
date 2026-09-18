@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { STATUS_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
 import { getProductionDashboard, updateJeoStatus } from "@/api/job-execution-orders";
 import type { JeoDashboardResponse, JeoStatus } from "@/types";
@@ -63,9 +64,10 @@ export default function ProductionDashboard() {
     try {
       const res = await getProductionDashboard();
       setData(res);
-    } catch {
-      setError("Failed to load the production dashboard.");
-      toast.error("Failed to load the production dashboard.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load the production dashboard.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -85,9 +87,10 @@ export default function ProductionDashboard() {
       await updateJeoStatus(id, status);
       toast.success("Job execution order status updated.");
       await fetchDashboard();
-    } catch {
-      setError("Could not update that JEO's status. Please try again.");
-      toast.error("Could not update that JEO's status.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not update that JEO's status. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setUpdatingId(null);
     }

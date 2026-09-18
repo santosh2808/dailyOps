@@ -7,6 +7,7 @@ import AiStatusBadge from "./AiStatusBadge";
 import AiQualificationBadge from "./AiQualificationBadge";
 import { LANGUAGE_SOURCE_LABELS, preferredLanguageLabel } from "./aiOptions";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { getLeadAiCallHistory } from "@/api/leads";
 import type { Lead, LeadAiCallLog } from "@/types";
 
@@ -53,9 +54,10 @@ export default function LeadAiFollowUpCard({ lead, refreshKey }: LeadAiFollowUpC
     setError("");
     try {
       setCallLog(await getLeadAiCallHistory(lead.id));
-    } catch {
-      setError("Could not load D.O.T. call history.");
-      toast.error("Could not load D.O.T. call history.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load D.O.T. call history.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

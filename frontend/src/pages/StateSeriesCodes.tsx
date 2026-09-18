@@ -17,6 +17,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   createStateSeriesCode,
   deleteStateSeriesCode,
@@ -42,9 +43,10 @@ export default function StateSeriesCodes() {
     setError("");
     try {
       setCodes(await listStateSeriesCodes());
-    } catch {
-      setError("Failed to load state series codes.");
-      toast.error("Failed to load state series codes.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load state series codes.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

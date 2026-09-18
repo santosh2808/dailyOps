@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SalesOrderPicker from "@/components/complaints/SalesOrderPicker";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import {
   createComplaint,
@@ -77,9 +78,10 @@ export default function ComplaintForm() {
         if (complaint.salesOrder) {
           setSelectedSalesOrder(complaint.salesOrder as unknown as SalesOrder);
         }
-      } catch {
-        setSubmitError("Could not load this complaint.");
-        toast.error("Could not load this complaint.");
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load this complaint.");
+        setSubmitError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }

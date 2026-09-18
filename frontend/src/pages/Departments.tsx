@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   createDepartment,
   deleteDepartment,
@@ -44,9 +45,10 @@ export default function Departments() {
     setError("");
     try {
       setDepartments(await listDepartments());
-    } catch {
-      setError("Failed to load departments.");
-      toast.error("Failed to load departments.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load departments.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

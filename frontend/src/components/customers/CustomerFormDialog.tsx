@@ -16,6 +16,7 @@ import { INDIA_STATES } from "@/lib/indiaStates";
 import { normalizePhone } from "@/lib/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import type { Customer } from "@/types";
 import type { CustomerPayload } from "@/api/customers";
@@ -136,9 +137,10 @@ export default function CustomerFormDialog({
       });
       toast.success(isEdit ? "Customer updated successfully." : "Customer created successfully.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

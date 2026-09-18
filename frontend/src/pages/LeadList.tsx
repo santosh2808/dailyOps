@@ -35,6 +35,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -124,9 +125,10 @@ export default function LeadList() {
       setLeads(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load leads.");
-      toast.error("Failed to load leads.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load leads.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -225,9 +227,10 @@ export default function LeadList() {
     setDownloadingTemplate(true);
     try {
       await downloadLeadImportTemplate();
-    } catch {
-      setError("Failed to download the import template.");
-      toast.error("Failed to download the import template.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to download the import template.");
+      setError(message);
+      toast.error(message);
     } finally {
       setDownloadingTemplate(false);
     }

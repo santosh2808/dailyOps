@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { importMaterials } from "@/api/materials";
 import type { MaterialImportResult } from "@/types";
 
@@ -46,9 +47,13 @@ export default function ImportMaterialsDialog({
       setResult(res);
       toast.success(`Imported: ${res.created} created, ${res.updated} updated.`);
       await onImported();
-    } catch {
-      setError("Could not import this file. Please check its format and try again.");
-      toast.error("Could not import this file. Please check its format and try again.");
+    } catch (err) {
+      const message = getErrorMessage(
+        err,
+        "Could not import this file. Please check its format and try again."
+      );
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { getLeadHistory, getLeadNotes, addLeadNote } from "@/api/leads";
 import type { LeadHistoryAction, LeadHistoryEntry, LeadNote } from "@/types";
 
@@ -95,9 +96,10 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
     setHistoryError("");
     try {
       setHistory(await getLeadHistory(leadId));
-    } catch {
-      setHistoryError("Could not load the activity timeline.");
-      toast.error("Could not load the activity timeline.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load the activity timeline.");
+      setHistoryError(message);
+      toast.error(message);
     } finally {
       setHistoryLoading(false);
     }
@@ -108,9 +110,10 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
     setNotesError("");
     try {
       setNotes(await getLeadNotes(leadId));
-    } catch {
-      setNotesError("Could not load notes.");
-      toast.error("Could not load notes.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load notes.");
+      setNotesError(message);
+      toast.error(message);
     } finally {
       setNotesLoading(false);
     }
@@ -134,8 +137,8 @@ export default function LeadActivityPanel({ leadId, refreshKey, view }: LeadActi
       setNewNote("");
       toast.success("Note added.");
       await fetchNotes();
-    } catch {
-      const message = "Could not save this note. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not save this note. Please try again.");
       setNotesError(message);
       toast.error(message);
     } finally {

@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import type { Lead } from "@/types";
 
 interface DeleteLeadConfirmDialogProps {
@@ -34,9 +35,10 @@ export default function DeleteLeadConfirmDialog({
     try {
       await onConfirm();
       onOpenChange(false);
-    } catch {
-      setError("Could not delete this lead. Please try again.");
-      toast.error("Could not delete this lead.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not delete this lead. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

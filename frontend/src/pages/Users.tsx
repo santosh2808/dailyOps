@@ -19,6 +19,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   createUser,
   deleteUser,
@@ -55,9 +56,10 @@ export default function Users() {
       setUsers(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load users.");
-      toast.error("Failed to load users.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load users.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

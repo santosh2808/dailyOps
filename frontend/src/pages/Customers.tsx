@@ -28,6 +28,7 @@ import {
 } from "@/api/customers";
 import type { Customer } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { getErrorMessage } from "@/lib/errors";
 
 const PAGE_SIZE = 20;
 
@@ -58,9 +59,10 @@ export default function Customers() {
       setCustomers(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load customers.");
-      toast.error("Failed to load customers.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load customers.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

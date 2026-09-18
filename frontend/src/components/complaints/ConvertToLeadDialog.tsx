@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { convertComplaintToLead } from "@/api/complaints";
 import type { Complaint } from "@/types";
 
@@ -45,9 +46,10 @@ export default function ConvertToLeadDialog({ open, onOpenChange, complaint }: C
       toast.success(`Converted to Lead ${lead.leadNumber}.`);
       onOpenChange(false);
       navigate(`/leads/${lead.id}`);
-    } catch {
-      setError("Could not convert this complaint. Please try again.");
-      toast.error("Could not convert this complaint to a lead.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not convert this complaint. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

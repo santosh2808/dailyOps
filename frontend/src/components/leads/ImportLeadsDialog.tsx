@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { importLeads, previewLeadImport } from "@/api/leads";
 import type { LeadImportRowResult, LeadImportSummary } from "@/types";
 
@@ -65,8 +66,8 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
       const result = await previewLeadImport(file);
       setPreview(result);
       setStep("preview");
-    } catch {
-      const message = "Could not read this file. Please check its format and try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not read this file. Please check its format and try again.");
       setError(message);
       toast.error(message);
     } finally {
@@ -86,8 +87,8 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
       setStep("summary");
       toast.success(`Imported ${result.createdCount} of ${result.totalRows} leads.`);
       await onImported();
-    } catch {
-      const message = "Something went wrong while importing. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong while importing. Please try again.");
       setError(message);
       toast.error(message);
     } finally {

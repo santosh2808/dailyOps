@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import type { ProformaInvoicePayload } from "@/api/proforma-invoices";
 import type { SalesOrder } from "@/types";
@@ -100,9 +101,10 @@ export default function GenerateProformaInvoiceDialog({
         advanceReceived: advanceReceivedValue,
       });
       onOpenChange(false);
-    } catch {
-      setError("Could not generate the proforma invoice. Please try again.");
-      toast.error("Could not generate the proforma invoice.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not generate the proforma invoice. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

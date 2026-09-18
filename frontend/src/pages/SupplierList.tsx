@@ -24,6 +24,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   deleteSupplier,
   downloadSupplierImportTemplate,
@@ -73,9 +74,10 @@ export default function SupplierList() {
       setSuppliers(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load suppliers.");
-      toast.error("Failed to load suppliers.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load suppliers.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -149,8 +151,8 @@ export default function SupplierList() {
     setDownloadingTemplate(true);
     try {
       await downloadSupplierImportTemplate();
-    } catch {
-      toast.error("Failed to download the import template.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to download the import template."));
     } finally {
       setDownloadingTemplate(false);
     }
@@ -161,8 +163,8 @@ export default function SupplierList() {
     try {
       await exportSuppliers();
       toast.success("Suppliers exported.");
-    } catch {
-      toast.error("Failed to export suppliers.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to export suppliers."));
     } finally {
       setExporting(false);
     }

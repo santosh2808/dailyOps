@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import type { ProformaInvoice } from "@/types";
 
 interface RecordAdvancePaymentDialogProps {
@@ -54,9 +55,10 @@ export default function RecordAdvancePaymentDialog({
     try {
       await onConfirm(value);
       onOpenChange(false);
-    } catch {
-      setError("Could not record the advance payment. Please try again.");
-      toast.error("Could not record the advance payment.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not record the advance payment. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

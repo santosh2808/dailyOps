@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listProducts } from "@/api/products";
+import { getErrorMessage } from "@/lib/errors";
 import type { LeadProductPayload } from "@/api/leads";
 import type { Product } from "@/types";
 import { isFanProduct } from "@/components/quotations/QuotationItemsEditor";
@@ -55,8 +56,8 @@ export default function LeadProductsSelector({ value, onChange }: LeadProductsSe
       try {
         const res = await listProducts({ page: 1, limit: 100 });
         if (!cancelled) setCatalog(res.data);
-      } catch {
-        if (!cancelled) setLoadError("Could not load the product catalog.");
+      } catch (err) {
+        if (!cancelled) setLoadError(getErrorMessage(err, "Could not load the product catalog."));
       }
     }
     loadCatalog();

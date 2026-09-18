@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import {
   createMaterial,
@@ -110,8 +111,8 @@ export default function MaterialForm() {
             unitId: f.unitId || us[0]?.id || "",
           }));
         }
-      } catch {
-        const message = "Could not load this material.";
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load this material.");
         setSubmitError(message);
         toast.error(message);
       } finally {

@@ -16,6 +16,7 @@ import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
 import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
 import { generateQuotationFromLead } from "@/api/quotations";
@@ -80,9 +81,10 @@ export default function LeadDetails() {
     try {
       const data = await getLead(id);
       setLead(data);
-    } catch {
-      setError("Could not load this lead.");
-      toast.error("Could not load this lead.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this lead.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

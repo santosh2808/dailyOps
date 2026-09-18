@@ -21,6 +21,7 @@ import JeoFiltersBar, {
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
 
@@ -77,9 +78,10 @@ export default function JobExecutionOrderList() {
       setJeos(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load job execution orders.");
-      toast.error("Failed to load job execution orders.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load job execution orders.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

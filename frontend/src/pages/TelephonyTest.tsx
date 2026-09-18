@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { getTelephonyStatus, getTestCalls, makeTestCall } from "@/api/telephony";
 import type { TelephonyStatus, TelephonyTestCall, TelephonyTestCallStatus } from "@/types";
 
@@ -55,8 +56,8 @@ export default function TelephonyTest() {
       const [statusRes, callsRes] = await Promise.all([getTelephonyStatus(), getTestCalls(10)]);
       setStatus(statusRes);
       setTestCalls(callsRes);
-    } catch {
-      toast.error("Could not load telephony status.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not load telephony status."));
     } finally {
       setLoading(false);
     }

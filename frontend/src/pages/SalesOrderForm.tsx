@@ -17,6 +17,8 @@ import SalesOrderItemsEditor, {
 import { getQuotation } from "@/api/quotations";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
+import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import {
   createSalesOrder,
@@ -84,6 +86,7 @@ export default function SalesOrderForm() {
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -110,9 +113,10 @@ export default function SalesOrderForm() {
             discount: 0,
           }))
         );
-      } catch {
-        setLoadError("Could not load the quotation for this sales order.");
-        toast.error("Could not load the quotation for this sales order.");
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load the quotation for this sales order.");
+        setLoadError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -151,9 +155,10 @@ export default function SalesOrderForm() {
             discount: item.discount,
           }))
         );
-      } catch {
-        setLoadError("Could not load this sales order.");
-        toast.error("Could not load this sales order.");
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load this sales order.");
+        setLoadError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -185,17 +190,48 @@ export default function SalesOrderForm() {
     }
   }, [sameAsBilling, form.billingAddress]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSubmitError("");
+  function validate(): boolean {
+    const next: Partial<Record<keyof FormState, string>> = {};
 
     // You can't promise delivery on a date that's already passed. Order
     // Date is left unrestricted — backdating the order itself (catching up
     // on data entry) is legitimate.
     if (isPastDateInputValue(form.deliveryDate)) {
-      setSubmitError("Delivery Date cannot be before today.");
-      return;
+      next.deliveryDate = "Delivery Date cannot be before today.";
     }
+
+    if (form.advancePercentage.trim()) {
+      const parsed = Number(form.advancePercentage);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+        next.advancePercentage = "Advance % must be between 0 and 100";
+      }
+    }
+
+    if (form.gstPercent.trim()) {
+      const parsed = Number(form.gstPercent);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        next.gstPercent = "GST percent must be a positive number";
+      }
+    }
+
+    if (form.discount.trim()) {
+      const parsed = Number(form.discount);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        next.discount = "Discount must be a positive number";
+      }
+    }
+
+    // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
+    // submit is never silently invisible on a scrolled form.
+    scrollToFirstError(next);
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitError("");
+    if (!validate()) return;
 
     const payload: SalesOrderPayload = {
       quotationId: quotationIdParam ?? "",
@@ -307,6 +343,9 @@ export default function SalesOrderForm() {
                         value={form.gstPercent}
                         onChange={(e) => update("gstPercent", e.target.value)}
                       />
+                      {errors.gstPercent && (
+                        <p className="text-xs text-destructive">{errors.gstPercent}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="discount">Additional Discount</Label>
@@ -317,6 +356,7 @@ export default function SalesOrderForm() {
                         onChange={(e) => update("discount", e.target.value)}
                       />
                       <p className="text-xs text-muted-foreground">On top of any per-line discounts</p>
+                      {errors.discount && <p className="text-xs text-destructive">{errors.discount}</p>}
                     </div>
                   </div>
 
@@ -370,6 +410,9 @@ export default function SalesOrderForm() {
                       value={form.deliveryDate}
                       onChange={(e) => update("deliveryDate", e.target.value)}
                     />
+                    {errors.deliveryDate && (
+                      <p className="text-xs text-destructive">{errors.deliveryDate}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="advancePercentage">Advance %</Label>
@@ -379,6 +422,9 @@ export default function SalesOrderForm() {
                       value={form.advancePercentage}
                       onChange={(e) => update("advancePercentage", e.target.value)}
                     />
+                    {errors.advancePercentage && (
+                      <p className="text-xs text-destructive">{errors.advancePercentage}</p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-3">
                     <Label htmlFor="paymentTerms">Payment Terms</Label>

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { createMaterialUnit } from "@/api/material-units";
 import type { MaterialUnit } from "@/types";
 
@@ -57,8 +58,8 @@ export default function AddMaterialUnitDialog({
       });
       toast.success("Unit added.");
       onCreated(created);
-    } catch {
-      const message = "Could not add this unit. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not add this unit. Please try again.");
       setError(message);
       toast.error(message);
     } finally {

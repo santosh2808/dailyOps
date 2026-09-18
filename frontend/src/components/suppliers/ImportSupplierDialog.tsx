@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { importSuppliers, previewSupplierImport } from "@/api/suppliers";
 import type { SupplierImportRowResult, SupplierImportSummary } from "@/types";
 
@@ -69,8 +70,8 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
       const result = await previewSupplierImport(file);
       setPreview(result);
       setStep("preview");
-    } catch {
-      setError("Could not read this file. Please check its format and try again.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not read this file. Please check its format and try again."));
     } finally {
       setSubmitting(false);
     }
@@ -88,9 +89,10 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
       setStep("summary");
       toast.success(`Imported ${result.createdCount} of ${result.totalRows} suppliers.`);
       await onImported();
-    } catch {
-      setError("Something went wrong while importing. Please try again.");
-      toast.error("Something went wrong while importing suppliers.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong while importing. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

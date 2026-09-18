@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SOURCE_OPTIONS, sourceLabel } from "@/components/leads/leadOptions";
@@ -480,9 +481,10 @@ export default function Dashboard() {
       setStats(statsData);
       setCharts(chartsData);
       setTodaysFollowUps(followUps);
-    } catch {
-      setError("Failed to load dashboard data.");
-      toast.error("Failed to load dashboard data.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load dashboard data.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -27,6 +27,7 @@ import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotatio
 import SendQuotationDialog from "@/components/quotations/SendQuotationDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   deleteQuotation,
   getQuotation,
@@ -125,9 +126,10 @@ export default function QuotationDetails() {
     try {
       const data = await getQuotation(id);
       setQuotation(data);
-    } catch {
-      setError("Could not load this quotation.");
-      toast.error("Could not load this quotation.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this quotation.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -249,9 +251,10 @@ export default function QuotationDetails() {
                     <DropdownMenuItem
                       icon={FileDown}
                       onSelect={() =>
-                        openQuotationPdf(quotation.id).catch(() => {
-                          setPdfError("Could not load the PDF. Please try again.");
-                          toast.error("Could not load the PDF. Please try again.");
+                        openQuotationPdf(quotation.id).catch((err) => {
+                          const message = getErrorMessage(err, "Could not load the PDF. Please try again.");
+                          setPdfError(message);
+                          toast.error(message);
                         })
                       }
                     >

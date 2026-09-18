@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
 import { getAiSettings, updateAiSettings, type AiSettingsPayload } from "@/api/aiSettings";
 import { PREFERRED_LANGUAGE_OPTIONS } from "@/components/leads/aiOptions";
@@ -45,9 +46,10 @@ export default function AiSettings() {
         defaultDelayMinutes: data.defaultDelayMinutes,
         supportedLanguages: data.supportedLanguages,
       });
-    } catch {
-      setError("Could not load AI settings.");
-      toast.error("Could not load AI settings.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load AI settings.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -73,8 +75,8 @@ export default function AiSettings() {
       const saved = await updateAiSettings(form);
       setSettings(saved);
       toast.success("AI settings saved.");
-    } catch {
-      toast.error("Could not save AI settings. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not save AI settings. Please try again."));
     } finally {
       setSaving(false);
     }

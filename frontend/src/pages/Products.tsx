@@ -20,6 +20,7 @@ import DeactivateProductConfirmDialog from "@/components/products/DeactivateProd
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   createProduct,
   deactivateProduct,
@@ -86,9 +87,10 @@ export default function Products() {
       setProducts(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load products.");
-      toast.error("Failed to load products.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load products.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

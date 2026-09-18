@@ -14,6 +14,7 @@ import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions
 import { INDIA_STATES } from "@/lib/indiaStates";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import { normalizePhone } from "@/lib/phone";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
@@ -133,9 +134,10 @@ export default function LeadForm() {
             colorCharge: p.colorCharge ?? undefined,
           }))
         );
-      } catch {
-        setSubmitError("Could not load this lead.");
-        toast.error("Could not load this lead.");
+      } catch (err) {
+        const message = getErrorMessage(err, "Could not load this lead.");
+        setSubmitError(message);
+        toast.error(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -247,8 +249,11 @@ export default function LeadForm() {
         toast.success("Lead created successfully.");
         navigate(`/leads/${created.id}`);
       }
-    } catch {
-      const message = "Something went wrong while saving this lead. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(
+        err,
+        "Something went wrong while saving this lead. Please try again.",
+      );
       setSubmitError(message);
       toast.error(message);
       setSubmitting(false);

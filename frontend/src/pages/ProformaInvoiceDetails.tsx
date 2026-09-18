@@ -14,6 +14,7 @@ import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProfor
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   getProformaInvoice,
   getProformaInvoiceEmailHistory,
@@ -76,9 +77,10 @@ export default function ProformaInvoiceDetails() {
     try {
       const data = await getProformaInvoice(id);
       setInvoice(data);
-    } catch {
-      setError("Could not load this proforma invoice.");
-      toast.error("Could not load this proforma invoice.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this proforma invoice.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -153,9 +155,10 @@ export default function ProformaInvoiceDetails() {
                     <DropdownMenuItem
                       icon={Download}
                       onSelect={() =>
-                        openProformaInvoicePdf(invoice.id).catch(() => {
-                          setPdfError("Could not load the PDF. Please try again.");
-                          toast.error("Could not load the PDF. Please try again.");
+                        openProformaInvoicePdf(invoice.id).catch((err) => {
+                          const message = getErrorMessage(err, "Could not load the PDF. Please try again.");
+                          setPdfError(message);
+                          toast.error(message);
                         })
                       }
                     >

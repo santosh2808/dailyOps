@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { listDepartments } from "@/api/departments";
 import { listRoles } from "@/api/roles";
@@ -97,9 +98,10 @@ export default function UserFormDialog({
         setDepartments(deps);
         setRoles(rls);
       })
-      .catch(() => {
-        setSubmitError("Failed to load departments/roles.");
-        toast.error("Failed to load departments/roles.");
+      .catch((err) => {
+        const message = getErrorMessage(err, "Failed to load departments/roles.");
+        setSubmitError(message);
+        toast.error(message);
       })
       .finally(() => setLoadingOptions(false));
   }, [open, user]);
@@ -156,9 +158,10 @@ export default function UserFormDialog({
       await onSubmit(payload);
       toast.success(isEdit ? "User updated successfully." : "User created successfully.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

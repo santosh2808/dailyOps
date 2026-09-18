@@ -20,6 +20,7 @@ import TaxInvoiceFiltersBar, {
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listTaxInvoices } from "@/api/tax-invoices";
 import type { TaxInvoice } from "@/types";
 
@@ -72,9 +73,10 @@ export default function TaxInvoiceList() {
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load tax invoices.");
-      toast.error("Failed to load tax invoices.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load tax invoices.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

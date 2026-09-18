@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import type { Department } from "@/types";
 import type { DepartmentPayload } from "@/api/departments";
 
@@ -71,9 +72,10 @@ export default function DepartmentFormDialog({
       });
       toast.success(isEdit ? "Department updated successfully." : "Department created successfully.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

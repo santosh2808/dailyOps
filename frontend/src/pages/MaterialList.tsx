@@ -21,6 +21,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
 import type { Material } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -92,9 +93,10 @@ export default function MaterialList() {
       setMaterials(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load materials.");
-      toast.error("Failed to load materials.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load materials.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -166,9 +168,10 @@ export default function MaterialList() {
     try {
       await exportMaterials();
       toast.success("Materials exported.");
-    } catch {
-      setError("Failed to export materials.");
-      toast.error("Failed to export materials.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to export materials.");
+      setError(message);
+      toast.error(message);
     } finally {
       setExporting(false);
     }

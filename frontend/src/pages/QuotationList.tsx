@@ -23,6 +23,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
 import type { Quotation, QuotationStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -99,9 +100,10 @@ export default function QuotationList() {
       setQuotations(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load quotations.");
-      toast.error("Failed to load quotations.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load quotations.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import MaterialStockBadge from "@/components/materials/MaterialStockBadge";
 import DeleteMaterialConfirmDialog from "@/components/materials/DeleteMaterialConfirmDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deactivateMaterial, getMaterial } from "@/api/materials";
 import type { Material } from "@/types";
 
@@ -51,9 +52,10 @@ export default function MaterialDetails() {
     try {
       const data = await getMaterial(id);
       setMaterial(data);
-    } catch {
-      setError("Could not load this material.");
-      toast.error("Could not load this material.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this material.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

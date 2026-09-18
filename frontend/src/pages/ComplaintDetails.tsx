@@ -23,6 +23,7 @@ import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplain
 import ChangeComplaintStatusDialog from "@/components/complaints/ChangeComplaintStatusDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
 import {
   deleteComplaint,
@@ -86,9 +87,10 @@ export default function ComplaintDetails() {
     try {
       const data = await getComplaint(id);
       setComplaint(data);
-    } catch {
-      setError("Could not load this complaint.");
-      toast.error("Could not load this complaint.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this complaint.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -127,8 +129,8 @@ export default function ComplaintDetails() {
         setReplyMessage("");
       }
       await fetchEmailHistory();
-    } catch {
-      toast.error("Could not send the reply. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not send the reply. Please try again."));
     } finally {
       setSendingReply(false);
     }
@@ -159,8 +161,8 @@ export default function ComplaintDetails() {
       if (!result.found) {
         toast.error("No tax invoice found with that number.");
       }
-    } catch {
-      toast.error("Invoice lookup failed. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Invoice lookup failed. Please try again."));
     } finally {
       setLookingUp(false);
     }
@@ -178,8 +180,8 @@ export default function ComplaintDetails() {
       setLookupResult(null);
       setInvoiceNumberInput("");
       await fetchComplaint();
-    } catch {
-      toast.error("Could not link this invoice. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not link this invoice. Please try again."));
     } finally {
       setLinking(false);
     }

@@ -21,6 +21,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   createFormDefinition,
   createFormSubjectRoute,
@@ -239,8 +240,8 @@ function NewWebsiteDialog({
       toast.success("Website created.");
       onOpenChange(false);
       onCreated();
-    } catch {
-      setError("Could not create the website. Check that the code is unique.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not create the website. Check that the code is unique."));
     } finally {
       setSubmitting(false);
     }
@@ -333,8 +334,8 @@ function NewFormDialog({
       toast.success("Form created.");
       onOpenChange(false);
       onCreated();
-    } catch {
-      setError("Could not create the form. Check that the code is unique for this website.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not create the form. Check that the code is unique for this website."));
     } finally {
       setSubmitting(false);
     }
@@ -429,8 +430,8 @@ function NewVersionDialog({
       toast.success("New form version published.");
       onOpenChange(false);
       onCreated();
-    } catch {
-      setError("Could not publish the new version. Please try again.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not publish the new version. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -560,8 +561,8 @@ function WebsitesFormsPanel({ websites, loading, error, onRefresh }: {
       await updateFormWebsite(website.id, { status: website.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
       toast.success(`${website.name} is now ${website.status === "ACTIVE" ? "inactive" : "active"}.`);
       await onRefresh();
-    } catch {
-      toast.error("Could not update the website status.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update the website status."));
     }
   }
 
@@ -570,8 +571,8 @@ function WebsitesFormsPanel({ websites, loading, error, onRefresh }: {
       await updateFormDefinition(websiteId, form.id, { enabled: !form.enabled });
       toast.success(`${form.name} is now ${form.enabled ? "disabled" : "enabled"}.`);
       await onRefresh();
-    } catch {
-      toast.error("Could not update the form.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update the form."));
     }
   }
 
@@ -730,8 +731,8 @@ function ProductMappingDialog({
       }
       onOpenChange(false);
       onSaved();
-    } catch {
-      setError("Could not save this mapping. Check that the public code is unique for this website.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not save this mapping. Check that the public code is unique for this website."));
     } finally {
       setSubmitting(false);
     }
@@ -814,7 +815,7 @@ function ProductMappingsPanel({ websites }: { websites: FormWebsite[] }) {
   useEffect(() => {
     listProducts({ limit: 500 })
       .then((res) => setProducts(res.data.filter((p) => p.isActive)))
-      .catch(() => toast.error("Failed to load products."));
+      .catch((err) => toast.error(getErrorMessage(err, "Failed to load products.")));
   }, []);
 
   const fetchMappings = useCallback(async () => {
@@ -826,8 +827,8 @@ function ProductMappingsPanel({ websites }: { websites: FormWebsite[] }) {
     try {
       const data = await listFormWebsiteProducts(websiteId);
       setMappings(data);
-    } catch {
-      toast.error("Failed to load product mappings.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load product mappings."));
     } finally {
       setLoading(false);
     }
@@ -851,8 +852,8 @@ function ProductMappingsPanel({ websites }: { websites: FormWebsite[] }) {
     try {
       await updateFormWebsiteProduct(websiteId, mapping.id, { enabled: !mapping.enabled });
       await fetchMappings();
-    } catch {
-      toast.error("Could not update the mapping.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update the mapping."));
     }
   }
 
@@ -861,8 +862,8 @@ function ProductMappingsPanel({ websites }: { websites: FormWebsite[] }) {
       await deleteFormWebsiteProduct(websiteId, mapping.id);
       toast.success("Product mapping removed.");
       await fetchMappings();
-    } catch {
-      toast.error("Could not remove this mapping.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not remove this mapping."));
     }
   }
 
@@ -1047,8 +1048,8 @@ function SubjectRouteDialog({
       }
       onOpenChange(false);
       onSaved();
-    } catch {
-      setError("Could not save this route. Please try again.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not save this route. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -1191,13 +1192,13 @@ function SubjectRoutingPanel({ websites }: { websites: FormWebsite[] }) {
   useEffect(() => {
     listProducts({ limit: 500 })
       .then((res) => setProducts(res.data.filter((p) => p.isActive)))
-      .catch(() => toast.error("Failed to load products."));
+      .catch((err) => toast.error(getErrorMessage(err, "Failed to load products.")));
     listDepartments()
       .then(setDepartments)
-      .catch(() => toast.error("Failed to load departments."));
+      .catch((err) => toast.error(getErrorMessage(err, "Failed to load departments.")));
     listAssignableUsers()
       .then(setUsers)
-      .catch(() => toast.error("Failed to load assignable users."));
+      .catch((err) => toast.error(getErrorMessage(err, "Failed to load assignable users.")));
   }, []);
 
   const fetchRoutes = useCallback(async () => {
@@ -1209,8 +1210,8 @@ function SubjectRoutingPanel({ websites }: { websites: FormWebsite[] }) {
     try {
       const data = await listFormSubjectRoutes(formDefinitionId);
       setRoutes(data);
-    } catch {
-      toast.error("Failed to load subject routes.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load subject routes."));
     } finally {
       setLoading(false);
     }
@@ -1234,8 +1235,8 @@ function SubjectRoutingPanel({ websites }: { websites: FormWebsite[] }) {
     try {
       await updateFormSubjectRoute(formDefinitionId, route.id, { enabled: !route.enabled });
       await fetchRoutes();
-    } catch {
-      toast.error("Could not update this route.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update this route."));
     }
   }
 
@@ -1244,8 +1245,8 @@ function SubjectRoutingPanel({ websites }: { websites: FormWebsite[] }) {
       await deleteFormSubjectRoute(formDefinitionId, route.id);
       toast.success("Subject route removed.");
       await fetchRoutes();
-    } catch {
-      toast.error("Could not remove this route.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not remove this route."));
     }
   }
 
@@ -1370,9 +1371,10 @@ export default function FormConfigurationPage() {
     try {
       const res = await listFormWebsites({ limit: 100 });
       setWebsites(res.data);
-    } catch {
-      setError("Failed to load websites.");
-      toast.error("Failed to load websites.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load websites.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

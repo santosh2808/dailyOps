@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { decideQuotationApproval, listQuotationApprovalRequests } from "@/api/quotations";
 import type { QuotationApprovalRequest } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -57,9 +58,10 @@ export default function QuotationApprovals() {
     setError("");
     try {
       setRequests(await listQuotationApprovalRequests(statusFilter || undefined));
-    } catch {
-      setError("Could not load approval requests.");
-      toast.error("Could not load approval requests.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load approval requests.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

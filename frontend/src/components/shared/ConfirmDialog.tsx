@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 
 // Generic confirm dialog shared across the RBAC admin screens (Departments,
 // Roles, Users) so each module doesn't need its own near-identical
@@ -45,9 +46,10 @@ export default function ConfirmDialog({
     try {
       await onConfirm();
       onOpenChange(false);
-    } catch {
-      setError(errorMessage);
-      toast.error(errorMessage);
+    } catch (err) {
+      const message = getErrorMessage(err, errorMessage);
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

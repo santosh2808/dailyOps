@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { getErrorMessage } from "@/lib/errors";
 import { listSalesOrders } from "@/api/sales-orders";
 import type { SalesOrder } from "@/types";
 
@@ -27,8 +28,8 @@ export default function SalesOrderPicker({ value, selectedSalesOrder, onChange }
     try {
       const res = await listSalesOrders({ page: 1, limit: 20, search: query || undefined });
       setResults(res.data);
-    } catch {
-      setLoadError("Could not load sales orders.");
+    } catch (err) {
+      setLoadError(getErrorMessage(err, "Could not load sales orders."));
     } finally {
       setLoading(false);
     }

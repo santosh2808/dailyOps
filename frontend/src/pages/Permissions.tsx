@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listPermissions } from "@/api/permissions";
 import type { Permission } from "@/types";
 
@@ -26,9 +27,10 @@ export default function Permissions() {
       setError("");
       try {
         setPermissions(await listPermissions());
-      } catch {
-        setError("Failed to load permissions.");
-        toast.error("Failed to load permissions.");
+      } catch (err) {
+        const message = getErrorMessage(err, "Failed to load permissions.");
+        setError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }

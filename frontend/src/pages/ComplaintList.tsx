@@ -24,6 +24,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deleteComplaint, exportComplaints, listComplaints } from "@/api/complaints";
 import type { Complaint, ComplaintStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -105,9 +106,10 @@ export default function ComplaintList() {
       setComplaints(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load complaints.");
-      toast.error("Failed to load complaints.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load complaints.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -169,8 +171,8 @@ export default function ComplaintList() {
         sortOrder,
       });
       toast.success("Complaints exported.");
-    } catch {
-      toast.error("Failed to export complaints.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to export complaints."));
     } finally {
       setExporting(false);
     }

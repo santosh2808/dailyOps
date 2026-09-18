@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import type { Product, ProductTechnicalSpec } from "@/types";
 import type { ProductPayload } from "@/api/products";
@@ -260,9 +261,10 @@ export default function ProductFormDialog({
       });
       toast.success(isEdit ? "Product updated successfully." : "Product created successfully.");
       onOpenChange(false);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      toast.error("Something went wrong. Please try again.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Something went wrong. Please try again.");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

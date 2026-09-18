@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listAssignableUsers } from "@/api/users";
 import type { AssignableUser } from "@/types";
 
@@ -35,9 +36,10 @@ export default function AssignedToPicker({ value, onChange }: AssignedToPickerPr
     setLoadError("");
     try {
       setUsers(await listAssignableUsers());
-    } catch {
-      setLoadError("Could not load sales users.");
-      toast.error("Could not load sales users.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load sales users.");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

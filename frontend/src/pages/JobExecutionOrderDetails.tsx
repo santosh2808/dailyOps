@@ -29,6 +29,7 @@ import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   getJeoEmailHistory,
   getJeoTimeline,
@@ -104,9 +105,10 @@ export default function JobExecutionOrderDetails() {
     try {
       const data = await getJobExecutionOrder(id);
       setJeo(data);
-    } catch {
-      setError("Could not load this job execution order.");
-      toast.error("Could not load this job execution order.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this job execution order.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -149,8 +151,8 @@ export default function JobExecutionOrderDetails() {
     try {
       await updateProductionChecklist(id, { [key]: value });
       await Promise.all([fetchJeo(), fetchTimeline()]);
-    } catch {
-      toast.error("Could not update the checklist. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update the checklist. Please try again."));
     }
   }
 
@@ -168,8 +170,8 @@ export default function JobExecutionOrderDetails() {
       await updateJeoStatus(id, "ASSEMBLY_STARTED");
       toast.success("Production started.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
-    } catch {
-      toast.error("Could not start production. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not start production. Please try again."));
     } finally {
       setActionBusy(false);
     }
@@ -183,8 +185,8 @@ export default function JobExecutionOrderDetails() {
       await updateJeoStatus(id, "QC");
       toast.success("Marked QC complete.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
-    } catch {
-      toast.error("Could not mark QC complete. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not mark QC complete. Please try again."));
     } finally {
       setActionBusy(false);
     }
@@ -198,8 +200,8 @@ export default function JobExecutionOrderDetails() {
       await updateJeoStatus(id, "READY_FOR_DISPATCH");
       toast.success("Marked ready for dispatch.");
       await Promise.all([fetchJeo(), fetchTimeline()]);
-    } catch {
-      toast.error("Could not update to ready for dispatch. Please try again.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not update to ready for dispatch. Please try again."));
     } finally {
       setActionBusy(false);
     }
@@ -299,9 +301,10 @@ export default function JobExecutionOrderDetails() {
                     <DropdownMenuItem
                       icon={Download}
                       onSelect={() =>
-                        openJeoPdf(jeo.id).catch(() => {
-                          setPdfError("Could not load the PDF. Please try again.");
-                          toast.error("Could not load the PDF. Please try again.");
+                        openJeoPdf(jeo.id).catch((err) => {
+                          const message = getErrorMessage(err, "Could not load the PDF. Please try again.");
+                          setPdfError(message);
+                          toast.error(message);
                         })
                       }
                     >

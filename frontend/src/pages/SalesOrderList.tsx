@@ -23,6 +23,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
 import type { SalesOrder, SalesOrderStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -111,9 +112,10 @@ export default function SalesOrderList() {
       setSalesOrders(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load sales orders.");
-      toast.error("Failed to load sales orders.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load sales orders.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

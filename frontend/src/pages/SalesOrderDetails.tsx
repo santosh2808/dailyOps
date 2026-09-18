@@ -27,6 +27,7 @@ import GenerateTaxInvoiceDialog from "@/components/tax-invoices/GenerateTaxInvoi
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
 import { statusLabel } from "@/components/sales-orders/salesOrderOptions";
 import {
@@ -102,9 +103,10 @@ export default function SalesOrderDetails() {
     try {
       const data = await getSalesOrder(id);
       setSalesOrder(data);
-    } catch {
-      setError("Could not load this sales order.");
-      toast.error("Could not load this sales order.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this sales order.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

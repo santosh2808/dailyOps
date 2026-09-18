@@ -20,6 +20,7 @@ import ProformaInvoiceFiltersBar, {
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { listProformaInvoices } from "@/api/proforma-invoices";
 import type { ProformaInvoice } from "@/types";
 
@@ -72,9 +73,10 @@ export default function ProformaInvoiceList() {
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    } catch {
-      setError("Failed to load proforma invoices.");
-      toast.error("Failed to load proforma invoices.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to load proforma invoices.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

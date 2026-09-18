@@ -26,6 +26,7 @@ import ConfirmSendMissingQrDialog from "@/components/tax-invoices/ConfirmSendMis
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import {
   getTaxInvoice,
   getTaxInvoiceEmailHistory,
@@ -81,9 +82,10 @@ export default function TaxInvoiceDetails() {
     try {
       const data = await getTaxInvoice(id);
       setInvoice(data);
-    } catch {
-      setError("Could not load this tax invoice.");
-      toast.error("Could not load this tax invoice.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this tax invoice.");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -172,9 +174,10 @@ export default function TaxInvoiceDetails() {
                     <DropdownMenuItem
                       icon={Download}
                       onSelect={() =>
-                        openTaxInvoicePdf(invoice.id).catch(() => {
-                          setPdfError("Could not load the PDF. Please try again.");
-                          toast.error("Could not load the PDF. Please try again.");
+                        openTaxInvoicePdf(invoice.id).catch((err) => {
+                          const message = getErrorMessage(err, "Could not load the PDF. Please try again.");
+                          setPdfError(message);
+                          toast.error(message);
                         })
                       }
                     >

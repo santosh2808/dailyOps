@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STATUS_OPTIONS } from "@/components/suppliers/supplierOptions";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { createSupplier, getSupplier, updateSupplier, type SupplierPayload } from "@/api/suppliers";
 import type { SupplierStatus } from "@/types";
@@ -109,8 +110,8 @@ export default function SupplierForm() {
           remarks: supplier.remarks ?? "",
           status: supplier.status,
         });
-      } catch {
-        setSubmitError("Could not load this supplier.");
+      } catch (err) {
+        setSubmitError(getErrorMessage(err, "Could not load this supplier."));
       } finally {
         if (!cancelled) setLoading(false);
       }

@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import type { Product } from "@/types";
 
 interface DeactivateProductConfirmDialogProps {
@@ -34,9 +35,10 @@ export default function DeactivateProductConfirmDialog({
     try {
       await onConfirm();
       onOpenChange(false);
-    } catch {
-      setError("Could not deactivate this product. Please try again.");
-      toast.error("Could not deactivate this product.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not deactivate this product. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
