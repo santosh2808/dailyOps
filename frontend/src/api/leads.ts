@@ -38,6 +38,11 @@ export interface LeadProductPayload {
   quantity: number;
   unitPrice?: number;
   remarks?: string;
+  // Bug fix: see LeadProduct's color/colorCharge comment in types/index.ts —
+  // without this, "Generate Quotation" from a lead with a fan product had
+  // no way to ever supply the color that fan item's Quotation row requires.
+  color?: string;
+  colorCharge?: number;
 }
 
 export interface LeadPayload {

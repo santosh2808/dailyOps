@@ -356,6 +356,14 @@ export class QuotationsService {
         description: p.remarks ?? undefined,
         quantity: p.quantity,
         unitPrice: p.unitPrice ?? undefined,
+        // Bug fix: this one-click flow used to derive its items without
+        // ever carrying a color through, so computeTotals() below always
+        // rejected a fan product with "Pick a Color..." and there was no
+        // way to satisfy that from this flow at all — LeadProductsSelector
+        // (on the Lead form) now collects it up front for exactly this
+        // reason; see LeadProduct's own schema comment.
+        color: p.color ?? undefined,
+        colorCharge: p.colorCharge ?? undefined,
       }));
     } else {
       if (!dto.items || dto.items.length === 0) {

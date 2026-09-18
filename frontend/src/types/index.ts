@@ -376,6 +376,12 @@ export interface LeadProduct {
   quantity: number;
   unitPrice?: number | null;
   remarks?: string | null;
+  // Bug fix: carried straight through to a generated Quotation's items (see
+  // QuotationsService.create()'s leadId branch) so the one-click "Generate
+  // Quotation" flow has a color to satisfy computeTotals()'s fan-color
+  // guard — mirrors QuotationItem.color/colorCharge exactly.
+  color?: string | null;
+  colorCharge?: number | null;
   createdAt: string;
   product?: Product;
 }

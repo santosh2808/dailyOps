@@ -125,6 +125,12 @@ export default function LeadForm() {
             quantity: p.quantity,
             unitPrice: p.unitPrice ?? undefined,
             remarks: p.remarks ?? undefined,
+            // Bug fix: update() fully replaces this lead's products (see
+            // buildProductsCreateInput() in leads.service.ts) — without
+            // carrying these through here, re-saving an edited lead would
+            // silently drop any color already picked for a fan product.
+            color: p.color ?? undefined,
+            colorCharge: p.colorCharge ?? undefined,
           }))
         );
       } catch {

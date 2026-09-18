@@ -688,6 +688,18 @@ model LeadProduct {
   remarks   String?
   createdAt DateTime @default(now())
 
+  // Bug fix: "Generate Quotation" from a Qualified lead is a one-click
+  // action that derives its Quotation items straight from this table (see
+  // QuotationsService.create()) — with no color field here, that one-click
+  // call always hit QuotationsService.computeTotals()'s "a fan item needs a
+  // confirmed paint Color" guard for any fan product, and there was no UI
+  // anywhere in the Generate-Quotation flow to supply one. Mirrors
+  // QuotationItem.color/colorCharge exactly, so a color picked while adding
+  // a product to the lead carries straight through to the generated
+  // quotation instead of hitting that same wall a second time.
+  color       String?
+  colorCharge Float   @default(0)
+
   @@index([leadId])
   @@index([productId])
 }

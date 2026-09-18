@@ -1678,6 +1678,11 @@ export class LeadsService {
         quantity: p.quantity,
         unitPrice: p.unitPrice,
         remarks: p.remarks,
+        // Bug fix: carried through to Generate Quotation's itemsInput
+        // mapping in QuotationsService.create() — see that file and
+        // LeadProduct's own schema comment for why this exists.
+        color: p.color,
+        colorCharge: p.colorCharge,
       })),
     };
   }
