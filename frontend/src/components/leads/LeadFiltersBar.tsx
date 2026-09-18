@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import DateRangePicker from "@/components/shared/DateRangePicker";
 import { STATUS_OPTIONS, PRIORITY_OPTIONS, SOURCE_OPTIONS } from "./leadOptions";
 import { listAssignableUsers } from "@/api/users";
 import { INDIA_STATES } from "@/lib/indiaStates";
@@ -139,19 +140,11 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
           ))}
         </Select>
 
-        <Input
-          type="date"
-          className="w-40"
-          value={filters.dateFrom}
-          onChange={(e) => update("dateFrom", e.target.value)}
-          aria-label="Created from"
-        />
-        <Input
-          type="date"
-          className="w-40"
-          value={filters.dateTo}
-          onChange={(e) => update("dateTo", e.target.value)}
-          aria-label="Created to"
+        <DateRangePicker
+          from={filters.dateFrom}
+          to={filters.dateTo}
+          onChange={({ from, to }) => onChange({ ...filters, dateFrom: from, dateTo: to })}
+          placeholder="Created date range"
         />
 
         {hasActiveFilters && (

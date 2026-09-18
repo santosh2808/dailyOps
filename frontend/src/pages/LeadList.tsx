@@ -41,7 +41,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
 
-type SortableColumn = "leadNumber" | "nextFollowUp";
+type SortableColumn = "leadNumber" | "nextFollowUp" | "createdAt";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -81,7 +81,13 @@ export default function LeadList() {
   const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(() =>
     initialFiltersFromSearchParams(searchParams),
   );
-  const [sortBy, setSortBy] = useState<SortableColumn>("leadNumber");
+  // Request: leads should list "in sequence based on date uploaded" —
+  // default sort is now createdAt desc (most recently uploaded/created
+  // first) instead of Lead No., since Lead No. is no longer a reliable
+  // chronological proxy once StateSeriesCode gives every state its own
+  // numbering sequence. Lead No. and Next Follow-up remain click-to-sort
+  // via the column headers below.
+  const [sortBy, setSortBy] = useState<SortableColumn>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
