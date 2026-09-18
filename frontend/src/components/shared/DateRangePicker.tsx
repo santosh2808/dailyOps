@@ -84,6 +84,10 @@ export default function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [draftFrom, setDraftFrom] = useState<Date | null>(null);
   const [draftTo, setDraftTo] = useState<Date | null>(null);
+  // While the start date is picked but the end date isn't yet, this tracks
+  // whichever day the mouse is currently over so the days in between can be
+  // highlighted as a live preview of the range the next click would commit.
+  const [hoverDay, setHoverDay] = useState<Date | null>(null);
   const [viewDate, setViewDate] = useState<Date>(() => parseISODate(from) ?? new Date());
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -113,6 +117,7 @@ export default function DateRangePicker({
     const seededTo = parseISODate(to);
     setDraftFrom(seededFrom);
     setDraftTo(seededTo);
+    setHoverDay(null);
     setViewDate(seededFrom ?? new Date());
     setOpen(true);
   }
@@ -121,6 +126,7 @@ export default function DateRangePicker({
     if (!draftFrom || draftTo) {
       setDraftFrom(day);
       setDraftTo(null);
+      setHoverDay(null);
       return;
     }
     if (day < draftFrom) {
@@ -129,6 +135,7 @@ export default function DateRangePicker({
     } else {
       setDraftTo(day);
     }
+    setHoverDay(null);
   }
 
   function handleApply() {
@@ -194,22 +201,39 @@ export default function DateRangePicker({
           </div>
 
           {weeks.map((week, wi) => (
-            <div key={wi} className="grid grid-cols-7">
+            <div key={wi} className="grid grid-cols-7" onMouseLeave={() => setHoverDay(null)}>
               {week.map((day, di) => {
                 if (!day) return <span key={di} className="h-7 w-7" />;
                 const isStart = !!draftFrom && isSameDay(day, draftFrom);
                 const isEnd = !!draftTo && isSameDay(day, draftTo);
                 const inRange = !!draftFrom && !!draftTo && day > draftFrom && day < draftTo;
+
+                // Live preview: once a start date is picked but before an
+                // end date is committed, hovering shows what the range
+                // would become on the next click (including the case where
+                // the hovered day is before the start, which swaps like
+                // handleDayClick does).
+                const previewEnd = draftFrom && !draftTo ? hoverDay : null;
+                const previewLow = previewEnd && draftFrom && previewEnd < draftFrom ? previewEnd : draftFrom;
+                const previewHigh = previewEnd && draftFrom && previewEnd < draftFrom ? draftFrom : previewEnd;
+                const inHoverPreview =
+                  !!previewLow && !!previewHigh && day > previewLow && day < previewHigh;
+                const isHoverEnd = !!previewEnd && isSameDay(day, previewEnd);
                 const isToday = isSameDay(day, today);
+
                 return (
                   <button
                     key={di}
                     type="button"
                     onClick={() => handleDayClick(day)}
+                    onMouseEnter={() => setHoverDay(day)}
                     className={cn(
-                      "mx-auto my-0.5 flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors hover:bg-accent",
-                      (isStart || isEnd) && "rounded-full bg-primary text-primary-foreground hover:bg-primary/90",
+                      "mx-auto my-0.5 flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors",
+                      !(isStart || isEnd || isHoverEnd) && "hover:bg-accent",
+                      (isStart || isEnd) && "bg-primary text-primary-foreground hover:bg-primary/90",
                       inRange && !isStart && !isEnd && "rounded-none bg-primary/10",
+                      (inHoverPreview || isHoverEnd) && !isStart && !isEnd && "rounded-none bg-primary/10",
+                      isHoverEnd && !isStart && !isEnd && "rounded-full ring-2 ring-primary/60",
                       isToday && !isStart && !isEnd && "border border-primary/50"
                     )}
                   >
