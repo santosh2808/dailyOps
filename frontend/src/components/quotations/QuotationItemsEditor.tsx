@@ -322,9 +322,7 @@ export default function QuotationItemsEditor({
                       </p>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
                         <div className="space-y-1">
-                          <Label className="text-xs">
-                            Color{isFanProduct(product) ? " *" : ""}
-                          </Label>
+                          <Label className="text-xs">Color</Label>
                           <Select
                             // QA bug-fix pass (TC-070): show "Custom" as
                             // selected whenever this row is in custom mode
@@ -406,8 +404,15 @@ export default function QuotationItemsEditor({
                                 Only Aluminium and Orange are free — this color carries an extra charge (see Color Charge).
                               </p>
                             )}
-                          {attemptedSubmit && isFanProduct(product) && !row.color?.trim() && (
-                            <p className="text-xs text-destructive">Required — ask the customer which color they want.</p>
+                          {/* Bug fix: Color used to be mandatory for fan
+                              items (a red "Required" message here blocked
+                              saving) — it no longer is. Leaving it unset
+                              now just quietly defaults to the free
+                              "Standard" finish when the quotation is saved
+                              (see QuotationsService.computeTotals()), so
+                              this is a note rather than a validation error. */}
+                          {isFanProduct(product) && !customColorProductIds.has(row.productId) && !row.color?.trim() && (
+                            <p className="text-xs text-muted-foreground">Defaults to Standard if left blank.</p>
                           )}
                         </div>
                         <div className="space-y-1">

@@ -15,7 +15,6 @@ import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
-  isFanProduct,
 } from "@/components/quotations/QuotationItemsEditor";
 import ConfirmPriceIncludesChargesDialog from "@/components/quotations/ConfirmPriceIncludesChargesDialog";
 import { Select } from "@/components/ui/select";
@@ -370,16 +369,12 @@ export default function QuotationForm() {
     const next: Partial<Record<keyof FormState, string>> & { items?: string } = {};
 
     if (!leadOrigin && !form.customerId) next.customerId = "Customer is required";
+    // Bug fix: Color is no longer mandatory for fan items — a fan item
+    // left with no Color now silently defaults to "Aluminium" (shown to
+    // the customer as "Standard") in QuotationsService.computeTotals(),
+    // so there's nothing left to validate here.
     if (items.length === 0) {
       next.items = "Add at least one item";
-    } else {
-      const catalogById = new Map(catalog.map((p) => [p.id, p]));
-      const missingColor = items.some(
-        (item) => isFanProduct(catalogById.get(item.productId)) && !item.color?.trim(),
-      );
-      if (missingColor) {
-        next.items = "Pick a Color for every fan item before saving — ask the customer which color they want.";
-      }
     }
     if (form.gstPercent.trim()) {
       const parsed = Number(form.gstPercent);

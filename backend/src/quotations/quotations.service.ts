@@ -1633,21 +1633,22 @@ export class QuotationsService {
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    // Backend safety net for the frontend's own required-Color validation
-    // (QuotationForm.validate()) — a fan item (product with a populated
-    // Annexure-I technical spec) must have a confirmed paint Color before
-    // the quotation can be saved. Previously an empty Color silently fell
-    // back to whatever the seeded product catalog happened to default to
-    // (e.g. "BLACK COLOUR") on the printed PDF — nobody had actually
-    // confirmed that with the customer, so it's rejected here rather than
-    // guessed.
+    // Bug fix: Color used to be mandatory for every fan item (a product
+    // with a populated Annexure-I technical spec) — staff had to pick one
+    // before the quotation could be saved at all. Per request, Color is no
+    // longer required: a fan item left with no Color now silently defaults
+    // to "Aluminium" (displayed to the customer as "Standard" — see
+    // PAINT_COLOR_OPTIONS/quotation-pdf.service.ts's color-label swap),
+    // which is also the one free/no-extra-charge finish, so defaulting to
+    // it never introduces a surprise charge. This mutates `items` in place
+    // before computedItems below reads item.color, so the default is
+    // reflected consistently everywhere (Annexure-I row, JEO pre-fill,
+    // stored QuotationItem.color) without duplicating the fallback logic.
     for (const item of items) {
       const spec = productMap.get(item.productId)?.technicalSpec as Record<string, unknown> | null;
       const isFan = !!spec && Object.keys(spec).length > 0;
       if (isFan && !item.color?.trim()) {
-        throw new BadRequestException(
-          `Pick a Color for "${productMap.get(item.productId)?.name ?? 'this fan'}" before saving — ask the customer which color they want.`,
-        );
+        item.color = 'Aluminium';
       }
     }
 
