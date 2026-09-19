@@ -145,7 +145,15 @@ const DEFAULT_COMMERCIAL_TERMS: Required<
   // is shown in the Quotation Summary block.
   installationCharge: 'Rs.8,000 per fan',
   transportation: 'Extra at actual',
-  gstTerms: 'Included',
+  // Bug fix: this used to default to 'Included', so a fresh quotation
+  // printed "GST ... Included" even though GST is actually computed and
+  // added as its own extra line on top of the subtotal (see
+  // QuotationsService.computeTotals — pricesIncludeChargesAndGst defaults
+  // to false, meaning GST is charged extra unless staff explicitly say
+  // otherwise). Default now matches that actual behavior; it only prints
+  // "Included" when staff type that themselves or when
+  // pricesIncludeChargesAndGst is true (handled separately below).
+  gstTerms: 'Extra',
   packingForwarding: 'Included',
   transportInsurance: 'To your account',
   payment: '100% advance along with the Purchase order.',
@@ -662,7 +670,15 @@ export class QuotationPdfService {
       { label: 'Price', value: terms.priceBasis || DEFAULT_COMMERCIAL_TERMS.priceBasis },
       {
         label: 'Taxes',
-        value: `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
+        // Bug fix: this row used to ignore `includesCharges` entirely,
+        // always printing the free-text gstTerms wording — so once staff
+        // confirm prices already bake in GST, Annexure-I's own GST row
+        // correctly said "Included" but this Annexure-II row still said
+        // "Extra", contradicting it. Now mirrors the Transportation row
+        // just below.
+        value: includesCharges
+          ? `${this.gstLabel(quotation)} Included`
+          : `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
       },
       {
         label: 'Transportation',

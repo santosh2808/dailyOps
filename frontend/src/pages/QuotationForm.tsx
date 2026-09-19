@@ -86,7 +86,13 @@ const COMMERCIAL_TERMS_DEFAULTS: Record<keyof QuotationCommercialTerms, string> 
   priceBasis: PRICE_BASIS_BY_SCOPE.COMPANY_SCOPE,
   installationCharge: "Rs.8,000 per fan",
   transportation: "Extra at actual",
-  gstTerms: "Included",
+  // Bug fix: defaulted to "Included" before, which printed on the PDF
+  // even though GST is actually computed and charged as an extra line on
+  // top of the subtotal by default (pricesIncludeChargesAndGst is false
+  // unless staff explicitly confirm otherwise). Matches Transportation's
+  // "Extra at actual" default just above — GST reads as extra unless
+  // staff type "Included" here themselves.
+  gstTerms: "Extra",
   packingForwarding: "Included",
   transportInsurance: "To your account",
   unloading: "",
