@@ -41,7 +41,15 @@ export function statusBadgeVariant(status: QuotationStatus): BadgeProps["variant
 // quotation-pdf.service.ts ("Any specific paint shall be charged extra @
 // Rs.10,000.00").
 export const PAINT_COLOR_OPTIONS = [
-  { value: "Aluminium", label: "Aluminium" },
+  // Label-only rename: "Aluminium" is our internal name for this free/
+  // default finish, but staff and customers alike read it more clearly as
+  // "Standard" — mirrors the same wording swap already applied to the
+  // Quotation PDF (see buildColorAndStructureRows/resolveScopeRowValue in
+  // quotation-pdf.service.ts). The stored value stays "Aluminium" so
+  // FREE_PAINT_COLORS, JEO pre-fill, and every existing quotation/item
+  // keep working exactly as before — only the text shown in this dropdown
+  // (and anywhere else that reads .label) changed.
+  { value: "Aluminium", label: "Standard" },
   { value: "Orange", label: "Orange" },
   { value: "Black", label: "Black (extra cost)" },
   { value: "White", label: "White (extra cost)" },
