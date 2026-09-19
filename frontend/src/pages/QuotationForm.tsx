@@ -814,6 +814,63 @@ export default function QuotationForm() {
                           </div>
                         );
                       }
+                      // Bug fix: once a real Installation/Transportation
+                      // Charge (₹) is entered above, QuotationPdfService
+                      // overrides this wording with that actual amount on
+                      // the PDF (mirrors the Annexure-I rows) — so this
+                      // free-text field was silently ignored, but kept
+                      // showing its stale generic default ("Rs.8,000 per
+                      // fan" / "Extra at actual"), which looked like the
+                      // amount above wasn't being picked up at all. Preview
+                      // the same overridden value here (read-only, like
+                      // Offer Validity below) so what's shown here always
+                      // matches what actually prints.
+                      if (key === "installationCharge" && installationChargeNum > 0) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input
+                              id={`ct-${key}`}
+                              value={`${formatCurrency(installationChargeNum)} (Total, all fans)`}
+                              disabled
+                              readOnly
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Computed automatically from the Installation Charge (₹) field above.
+                            </p>
+                          </div>
+                        );
+                      }
+                      if (key === "transportation" && form.transportScope === "CUSTOMER_SCOPE") {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="By Customer" disabled readOnly />
+                          </div>
+                        );
+                      }
+                      if (key === "transportation" && transportationChargeNum > 0) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input
+                              id={`ct-${key}`}
+                              value={`${formatCurrency(transportationChargeNum)} (Total, all fans)`}
+                              disabled
+                              readOnly
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Computed automatically from the Transportation Charge (₹) field above.
+                            </p>
+                          </div>
+                        );
+                      }
                       // Payment — fixed dropdown (100% / 50%) instead of
                       // free text, so every quotation uses one of exactly
                       // two approved wordings.

@@ -689,11 +689,20 @@ export class QuotationPdfService {
       },
       {
         label: 'Transportation',
+        // Bug fix: unlike the Installation row just below (already fixed
+        // for TC-077/093), this row never checked the quotation's actual
+        // transportationCharge at all — so once staff entered a real
+        // Transportation Charge (₹) above, Annexure-I's own Transportation
+        // row correctly showed that amount, but this Annexure-II row kept
+        // printing the generic "Extra at actual" wording, contradicting it.
+        // Mirrors the Installation row's real-amount override exactly.
         value: includesCharges
           ? 'Included'
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
-            : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+            : quotation.transportationCharge > 0
+              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
       { label: 'Packing & Forwarding', value: terms.packingForwarding || DEFAULT_COMMERCIAL_TERMS.packingForwarding },
       { label: 'Transport Insurance', value: terms.transportInsurance || DEFAULT_COMMERCIAL_TERMS.transportInsurance },
