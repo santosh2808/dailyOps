@@ -163,7 +163,10 @@ const DEFAULT_COMMERCIAL_TERMS: Required<
   gstTerms: 'Extra',
   packingForwarding: 'Included',
   transportInsurance: 'To your account',
-  payment: '100% advance along with the Purchase order.',
+  // Bug fix: default Payment term changed from 100% advance to 50% —
+  // mirrors QuotationForm.tsx's COMMERCIAL_TERMS_DEFAULTS.payment, which
+  // must match one of PAYMENT_OPTIONS' two exact values there.
+  payment: '50% advance along with the Purchase order, balance before dispatch.',
   delivery: '7-10 days from the date of PO / release of advance.',
   offerValidity: '10 days from the date of offer',
 };

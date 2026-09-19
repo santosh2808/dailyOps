@@ -100,7 +100,10 @@ const COMMERCIAL_TERMS_DEFAULTS: Record<keyof QuotationCommercialTerms, string> 
   packingForwarding: "Included",
   transportInsurance: "To your account",
   unloading: "",
-  payment: "100% advance along with the Purchase order.",
+  // Bug fix: default Payment term changed from 100% advance to 50% —
+  // matches PAYMENT_OPTIONS below (must be one of its exact two values,
+  // since Payment is a fixed dropdown, not free text).
+  payment: "50% advance along with the Purchase order, balance before dispatch.",
   delivery: "7-10 days from the date of PO / release of advance.",
   installationSchedule: "",
   offerValidity: "10 days from the date of offer",
