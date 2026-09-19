@@ -865,7 +865,18 @@ export class QuotationPdfService {
               : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
     ];
-    const gstValue = includesCharges ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // Bug fix: same real-amount-vs-wording mismatch already fixed for
+    // Installation/Transportation above — this used to only ever print the
+    // free-text wording ("Extra") with no rupee figure, leaving the
+    // customer to infer the GST amount by working backwards from
+    // Grand Total. Show the actual computed amount once it's known (mirrors
+    // installationRows/transportationRows exactly), falling back to the
+    // wording only if there's genuinely no GST amount yet.
+    const gstValue = includesCharges
+      ? 'Included'
+      : (quotation.gstAmount ?? 0) > 0
+        ? `${this.formatCurrency(quotation.gstAmount ?? 0)} (Total, all fans)`
+        : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
     // Additive: printed as its own row, right above Grand Total, only when a
     // discount was actually given — same flat amount repeated on every
     // item's Annexure-I block, matching how Grand Total itself is already
