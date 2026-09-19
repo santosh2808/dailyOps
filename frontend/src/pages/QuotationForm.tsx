@@ -830,6 +830,24 @@ export default function QuotationForm() {
                       // the same overridden value here (read-only, like
                       // Offer Validity below) so what's shown here always
                       // matches what actually prints.
+                      // Bug fix: mirrors QuotationPdfService.buildCommercialTermsRows()
+                      // (see quotation-pdf.service.ts) — staff setting the
+                      // Installation Charge (₹) field above to exactly 0 is a
+                      // deliberate "no charge for this", so this wording row
+                      // must read "Included" too, not the stale generic
+                      // "Rs.8,000 per fan" default, which is what actually
+                      // printed on the PDF before that fix and is what would
+                      // otherwise show here.
+                      if (key === "installationCharge" && installationChargeNum === 0) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
+                          </div>
+                        );
+                      }
                       if (key === "installationCharge" && installationChargeNum > 0) {
                         return (
                           <div key={key} className="space-y-1">
@@ -855,6 +873,22 @@ export default function QuotationForm() {
                               {label}
                             </Label>
                             <Input id={`ct-${key}`} value="By Customer" disabled readOnly />
+                          </div>
+                        );
+                      }
+                      // Bug fix: same treatment as Installation above — an
+                      // explicit Transportation Charge (₹) of 0 means
+                      // "Included", not the stale generic "Extra at actual"
+                      // default. Guarded by the CUSTOMER_SCOPE check above,
+                      // which already covers that case with its own "By
+                      // Customer" wording.
+                      if (key === "transportation" && transportationChargeNum === 0) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
                           </div>
                         );
                       }
