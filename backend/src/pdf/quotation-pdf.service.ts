@@ -360,7 +360,7 @@ export class QuotationPdfService {
       }, 0) +
       bankHeight;
     ensureBlockSpace(annexureIIHeight);
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('ANNEXURE – II', contentLeft, doc.y, { width: contentWidth, align: 'left' });
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('ANNEXURE – II', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.font('Helvetica-Bold').fontSize(11).text('COMMERCIAL TERMS & CONDITIONS', contentLeft, doc.y, { width: contentWidth, align: 'center' });
     doc.moveDown(0.5);
 
