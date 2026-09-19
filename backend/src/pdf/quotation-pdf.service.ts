@@ -775,7 +775,10 @@ export class QuotationPdfService {
     const rowLabel = row.item.trim().toLowerCase();
     const isPaintRow = rowLabel === 'paint';
     const color = item.color?.trim();
-    if (isPaintRow && color) return color;
+    // Same customer-facing wording swap as buildColorAndStructureRows'
+    // Color row: "Aluminium" is our internal name for the free/default
+    // finish, printed as "Standard" here too.
+    if (isPaintRow && color) return color === 'Aluminium' ? 'Standard' : color;
     // Same treatment as Paint above: the seeded scope row (e.g. "Customer to
     // confirm") is only a catalog default. Once staff pick a real hanging
     // structure on the quotation item (QuotationItem.hangingStructureType —
@@ -810,11 +813,19 @@ export class QuotationPdfService {
   private buildColorAndStructureRows(item: QuotationPdfItem, includesCharges: boolean): SpecRow[] {
     const rows: SpecRow[] = [];
     const color = item.color?.trim();
+    // Customer-facing wording only: "Aluminium" is our free/default paint
+    // finish (see FREE_PAINT_COLORS in quotationOptions.ts), but that's an
+    // internal material name, not something a customer needs to parse — so
+    // the PDF prints it as "Standard" instead. The stored value, dropdown
+    // option, and every other place "Aluminium" drives real behavior
+    // (free-color charge logic, JEO pre-fill, etc.) are untouched — this is
+    // display wording for this one row only.
+    const colorDisplay = color === 'Aluminium' ? 'Standard' : color;
     const colorCharge = item.colorCharge ?? 0;
     if (color || colorCharge > 0) {
       rows.push({
         label: 'Color',
-        value: `${color || 'Custom'}${!includesCharges && colorCharge > 0 ? ` (+${this.formatCurrency(colorCharge)})` : ''}`,
+        value: `${colorDisplay || 'Custom'}${!includesCharges && colorCharge > 0 ? ` (+${this.formatCurrency(colorCharge)})` : ''}`,
       });
     }
     const hangingStructureCharge = item.hangingStructureCharge ?? 0;
@@ -881,8 +892,28 @@ export class QuotationPdfService {
     // discount was actually given — same flat amount repeated on every
     // item's Annexure-I block, matching how Grand Total itself is already
     // repeated per item (not divided/split across items).
+    //
+    // Discount is a single flat, order-level figure (Quotation.discount —
+    // there's no per-item discount), so there's no real "per fan" amount
+    // stored anywhere. But staff commonly work the number out per fan
+    // first (e.g. "Rs.7,000 off x 6 fans = Rs.42,000") and the customer
+    // reads it the same way, so show that breakdown alongside the total
+    // whenever the quotation's total quantity divides it evenly — this is
+    // purely a display convenience, not a new stored value.
+    const totalQuantity = quotation.items.reduce((sum, i) => sum + i.quantity, 0);
+    const discountPerUnit =
+      totalQuantity > 0 && (quotation.discount ?? 0) % totalQuantity === 0
+        ? (quotation.discount ?? 0) / totalQuantity
+        : null;
     const discountRows: SpecRow[] = (quotation.discount ?? 0) > 0
-      ? [{ label: 'Discount', value: `- ${this.formatCurrency(quotation.discount ?? 0)}` }]
+      ? [
+          {
+            label: 'Discount',
+            value: `- ${this.formatCurrency(quotation.discount ?? 0)}${
+              discountPerUnit !== null ? ` (${this.formatCurrency(discountPerUnit)}/fan × ${totalQuantity})` : ''
+            }`,
+          },
+        ]
       : [];
 
     if (!this.hasPopulatedSpec(item)) {
