@@ -260,12 +260,19 @@ export default function QuotationItemsEditor({
                       <Input
                         type="number"
                         min={0}
-                        // TC-092: only affects the native up/down arrow
-                        // increment — typing any exact rupee amount (not a
-                        // multiple of 10,000) still works and saves as
-                        // typed, since onChange below just takes
-                        // Number(e.target.value) as-is.
-                        step={10000}
+                        // Bug fix: step={10000} was meant to only affect the
+                        // native up/down arrow increment (TC-092), but the
+                        // browser's own HTML5 constraint validation enforces
+                        // step on ANY value, not just ones typed via the
+                        // arrows — so a manually typed price that wasn't an
+                        // exact multiple of 10,000 (e.g. 162000) blocked the
+                        // whole form from submitting with a native "Please
+                        // enter a valid value" popup, even though onChange
+                        // below happily accepted and stored it. step="any"
+                        // disables that constraint entirely while leaving
+                        // the arrows working (browsers default to a step of
+                        // 1 for the arrows when step is "any").
+                        step="any"
                         value={row.unitPrice ?? ""}
                         onChange={(e) =>
                           updateRow(index, {
