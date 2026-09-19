@@ -697,13 +697,19 @@ export class QuotationPdfService {
         // row correctly showed that amount, but this Annexure-II row kept
         // printing the generic "Extra at actual" wording, contradicting it.
         // Mirrors the Installation row's real-amount override exactly.
+        // Bug fix: staff setting Transportation Charge to exactly 0 is a
+        // deliberate "no charge for this" — it must read "Included", not
+        // fall back to the generic "Extra at actual" wording, which would
+        // contradict the zero amount actually charged.
         value: includesCharges
           ? 'Included'
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
               ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
-              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+              : quotation.transportationCharge === 0
+                ? 'Included'
+                : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
       { label: 'Packing & Forwarding', value: terms.packingForwarding || DEFAULT_COMMERCIAL_TERMS.packingForwarding },
       { label: 'Transport Insurance', value: terms.transportInsurance || DEFAULT_COMMERCIAL_TERMS.transportInsurance },
@@ -722,11 +728,16 @@ export class QuotationPdfService {
       // free-text default regardless of the quotation's actual
       // installationCharge total. Mirrors this function's own Transportation
       // row treatment just above.
+      // Bug fix: staff setting Installation Charge to exactly 0 is a
+      // deliberate "no charge for this" — it must read "Included", not
+      // fall back to the generic "Rs.8,000 per fan" wording default.
       value: includesCharges
         ? 'Included'
         : quotation.installationCharge > 0
           ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
-          : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+          : quotation.installationCharge === 0
+            ? 'Included'
+            : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
     });
     if (terms.installationSchedule && terms.installationSchedule.trim()) {
       rows.push({ label: 'Installation Schedule', value: terms.installationSchedule.trim() });
@@ -877,23 +888,34 @@ export class QuotationPdfService {
         // a real, possibly staff-overridden installationCharge total —
         // same real-amount-vs-wording mismatch already fixed for
         // Transportation just below, so mirror that exact pattern here.
+        // Bug fix: an explicit installationCharge of 0 is staff saying "no
+        // charge for this" — must read "Included", not the generic
+        // "Rs.8,000 per fan" wording default (mirrors the Annexure-II
+        // Installation row treatment in buildCommercialTermsRows()).
         value: includesCharges
           ? 'Included'
           : quotation.installationCharge > 0
             ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
-            : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
+            : quotation.installationCharge === 0
+              ? 'Included'
+              : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
       },
     ];
     const transportationRows: SpecRow[] = [
       {
         label: 'Transportation',
+        // Bug fix: same treatment as Installation just above — an explicit
+        // transportationCharge of 0 means "Included", not the generic
+        // "Extra at actual" wording default.
         value: includesCharges
           ? 'Included'
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
               ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
-              : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
+              : quotation.transportationCharge === 0
+                ? 'Included'
+                : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
     ];
     // Bug fix: GST is not charged/collected at the Quotation stage at all
