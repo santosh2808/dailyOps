@@ -856,7 +856,7 @@ export default function QuotationForm() {
                             </Label>
                             <Input
                               id={`ct-${key}`}
-                              value={`${formatCurrency(installationChargeNum)} (Total, all fans)`}
+                              value={formatCurrency(installationChargeNum)}
                               disabled
                               readOnly
                             />
@@ -900,7 +900,7 @@ export default function QuotationForm() {
                             </Label>
                             <Input
                               id={`ct-${key}`}
-                              value={`${formatCurrency(transportationChargeNum)} (Total, all fans)`}
+                              value={formatCurrency(transportationChargeNum)}
                               disabled
                               readOnly
                             />
