@@ -1726,17 +1726,27 @@ export class QuotationsService {
     // of what was passed in.
     const effectiveTransportationCharge =
       transportScope === TransportScope.CUSTOMER_SCOPE ? 0 : (transportationCharge ?? 0);
-    // GST is charged on the full pre-tax total — fans + installation +
-    // transportation — matching standard invoicing practice, not just the
-    // fan subtotal.
+    // Bug fix: the Quotation stage no longer charges/collects GST at all —
+    // it's quoted as "Extra" (see quotation-pdf.service.ts's gstValue and
+    // the frontend's GST summary cell), not baked into any total the
+    // customer sees on the Quotation itself. GST only actually gets
+    // calculated for the first time when the Sales Order is created from
+    // an accepted Quotation — see SalesOrdersService's
+    // freezeToQuotationTotalsIfUnmodified(), which now re-adds this same
+    // gstAmount on top of grandTotal at that stage. gstAmount is still
+    // computed and stored here (informational — and it's exactly the
+    // figure the Sales Order re-adds), it's just no longer summed into
+    // this Quotation's own grandTotal.
     const gstAmount =
       Math.round((subtotal + effectiveInstallationCharge + effectiveTransportationCharge) * (effectiveGstPercent / 100) * 100) /
       100;
-    const preDiscountTotal = subtotal + effectiveInstallationCharge + effectiveTransportationCharge + gstAmount;
+    const preDiscountTotal = subtotal + effectiveInstallationCharge + effectiveTransportationCharge;
     // Discount is a post-tax rebate — it doesn't reduce the taxable base
     // above (gstAmount is already computed on the undiscounted amount),
     // it just comes straight off the final total. Clamped so it can never
-    // make grandTotal negative.
+    // make grandTotal negative. Note "post-tax" here is about ordering
+    // relative to how GST is computed on the untouched subtotal, not about
+    // GST being part of this grandTotal (it no longer is).
     const effectiveDiscount = Math.round(Math.min(Math.max(0, discount), preDiscountTotal) * 100) / 100;
     const grandTotal = Math.round((preDiscountTotal - effectiveDiscount) * 100) / 100;
 

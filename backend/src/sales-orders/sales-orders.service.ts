@@ -671,7 +671,13 @@ export class SalesOrdersService {
 
     totals.subtotal = quotation.subtotal;
     totals.tax = quotation.gstAmount;
-    totals.grandTotal = quotation.grandTotal;
+    // Bug fix: the Quotation itself no longer charges GST (it's quoted as
+    // "Extra" — see QuotationsService.computeTotals(), which stopped
+    // summing gstAmount into Quotation.grandTotal). GST is only actually
+    // collected starting here, at Sales Order creation — so this freeze
+    // must add gstAmount back on top of the Quotation's (GST-less)
+    // grandTotal, not just copy it verbatim like before.
+    totals.grandTotal = Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
 
     const lineTotalSum = quotation.items.reduce((sum, qi) => sum + qi.lineTotal, 0);
     totals.items = totals.items.map((item) => {

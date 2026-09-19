@@ -885,18 +885,23 @@ export class QuotationPdfService {
               : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
       },
     ];
-    // Bug fix: same real-amount-vs-wording mismatch already fixed for
-    // Installation/Transportation above — this used to only ever print the
-    // free-text wording ("Extra") with no rupee figure, leaving the
-    // customer to infer the GST amount by working backwards from
-    // Grand Total. Show the actual computed amount once it's known (mirrors
-    // installationRows/transportationRows exactly), falling back to the
-    // wording only if there's genuinely no GST amount yet.
-    const gstValue = includesCharges
-      ? 'Included'
-      : (quotation.gstAmount ?? 0) > 0
-        ? `${this.formatCurrency(quotation.gstAmount ?? 0)} (Total, all fans)`
-        : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // Bug fix: GST is not charged/collected at the Quotation stage at all
+    // (see QuotationsService.computeTotals() — gstAmount is computed but no
+    // longer added into Quotation.grandTotal; it's only actually added once
+    // a Sales Order is created from an accepted Quotation). So this row
+    // always reads as wording ("Extra"/"Included"/whatever staff typed
+    // under Commercial Terms), never a computed rupee figure — showing an
+    // amount here would suggest that amount is already part of Grand Total
+    // below, which it deliberately isn't.
+    const gstValue = includesCharges ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // Grand Total on the Quotation is GST-exclusive (see above) — append
+    // "+ GST Extra" so it's unambiguous the number below doesn't already
+    // include tax, matching the GST row's own wording. Not appended when
+    // prices already include everything (grandTotal is genuinely final
+    // there — nothing left to add).
+    const grandTotalValue = includesCharges
+      ? this.formatCurrency(quotation.grandTotal)
+      : `${this.formatCurrency(quotation.grandTotal)} + GST Extra`;
     // Additive: printed as its own row, right above Grand Total, only when a
     // discount was actually given — same flat amount repeated on every
     // item's Annexure-I block, matching how Grand Total itself is already
@@ -940,7 +945,7 @@ export class QuotationPdfService {
         { label: this.gstLabel(quotation), value: gstValue },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
         ...discountRows,
-        { label: 'Grand Total', value: this.formatCurrency(quotation.grandTotal) },
+        { label: 'Grand Total', value: grandTotalValue },
       ];
     }
 
@@ -993,7 +998,7 @@ export class QuotationPdfService {
       // only place Grand Total printed — now it prints here instead, right
       // under Quantity, on every item's Annexure-I table (same repeat-per-
       // item convention Installation/Transportation/GST already use above).
-      { label: 'Grand Total', value: this.formatCurrency(quotation.grandTotal) },
+      { label: 'Grand Total', value: grandTotalValue },
     ];
   }
 

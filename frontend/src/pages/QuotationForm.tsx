@@ -488,9 +488,14 @@ export default function QuotationForm() {
   const gstAmount = form.pricesIncludeChargesAndGst
     ? subtotal - subtotal / (1 + gstPercentNum / 100)
     : (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
+  // Bug fix: mirrors QuotationsService.computeTotals() — GST is quoted as
+  // "Extra" but not charged/collected at the Quotation stage at all (it's
+  // only actually added once a Sales Order is created from an accepted
+  // Quotation), so gstAmount above is informational only and must not be
+  // added in here.
   const preDiscountTotal = form.pricesIncludeChargesAndGst
     ? subtotal
-    : subtotal + installationChargeNum + transportationChargeNum + gstAmount;
+    : subtotal + installationChargeNum + transportationChargeNum;
   // Mirrors QuotationsService.computeTotals(): a flat, order-level rebate
   // taken off the final total after GST — never larger than the total
   // itself, so grandTotal can never go negative.
@@ -706,8 +711,9 @@ export default function QuotationForm() {
                         placeholder="e.g. 5000"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Flat amount taken off the grand total (after GST) — shown to the customer
-                        as its own Discount line on the quotation. Leave blank for no discount.
+                        Flat amount taken off the grand total (GST is quoted separately as Extra) —
+                        shown to the customer as its own Discount line on the quotation. Leave blank
+                        for no discount.
                       </p>
                       {errors.discount && <p className="text-xs text-destructive">{errors.discount}</p>}
                     </div>
@@ -739,7 +745,7 @@ export default function QuotationForm() {
                         GST ({gstPercentNum || 0}%){form.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">
-                        {form.pricesIncludeChargesAndGst ? "Included" : formatCurrency(gstAmount)}
+                        {form.pricesIncludeChargesAndGst ? "Included" : "Extra"}
                       </p>
                     </div>
                     <div>
@@ -748,7 +754,11 @@ export default function QuotationForm() {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
-                      <p className="font-semibold text-slate-900">{formatCurrency(grandTotal)}</p>
+                      <p className="font-semibold text-slate-900">
+                        {form.pricesIncludeChargesAndGst
+                          ? formatCurrency(grandTotal)
+                          : `${formatCurrency(grandTotal)} + GST Extra`}
+                      </p>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">

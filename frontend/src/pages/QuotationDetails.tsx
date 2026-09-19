@@ -527,7 +527,7 @@ export default function QuotationDetails() {
                         GST ({quotation.gstPercent}%){quotation.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">
-                        {quotation.pricesIncludeChargesAndGst ? "Included" : formatCurrency(quotation.gstAmount)}
+                        {quotation.pricesIncludeChargesAndGst ? "Included" : "Extra"}
                       </p>
                     </div>
                     {quotation.discount > 0 && (
@@ -539,7 +539,9 @@ export default function QuotationDetails() {
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">
-                        {formatCurrency(quotation.grandTotal)}
+                        {quotation.pricesIncludeChargesAndGst
+                          ? formatCurrency(quotation.grandTotal)
+                          : `${formatCurrency(quotation.grandTotal)} + GST Extra`}
                       </p>
                     </div>
                   </div>
