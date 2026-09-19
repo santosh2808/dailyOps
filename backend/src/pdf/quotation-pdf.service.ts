@@ -203,6 +203,7 @@ const EXCLUSIONS = [
   'Unloading of Fan from Transport, Plant internal movement and storage, preservation.',
   'Preparing site ready for installing Fan with Wiring, open floor.',
   'Any specific paint shall be charged extra @ Rs.10,000.00',
+  'Power supply for installation and labor accommodation to be provided by you.',
 ];
 
 interface SpecRow {
@@ -318,7 +319,7 @@ export class QuotationPdfService {
     });
 
     // Kept together as one block — previously only checked room for the
-    // heading (ensureSpace(24)), so the fixed 8-line EXCLUSIONS list itself
+    // heading (ensureSpace(24)), so the fixed EXCLUSIONS list itself
     // could still start near the bottom of a page and split across the page
     // break partway through. Measuring the whole list's height up front and
     // checking it as one unit means it only jumps to a new page when it
@@ -732,6 +733,16 @@ export class QuotationPdfService {
     }
     rows.push({ label: 'Delivery', value: terms.delivery || DEFAULT_COMMERCIAL_TERMS.delivery });
     rows.push({ label: 'Offer Validity', value: this.resolveOfferValidity(terms, quotation) });
+    // Standing clause on every quotation (not per-quotation configurable,
+    // same treatment as EXCLUSIONS above) — covers the case where our
+    // installation team sits idle on site waiting for customer-arranged
+    // equipment (Boom Lift/Scaffolding — see EXCLUSIONS's first line) or
+    // is forced to leave and come back.
+    rows.push({
+      label: 'Idle Charge',
+      value:
+        'In case our team is idle for more than 8 hours due to unavailability of Boom Lift/Scaffolding or any other reason, idle charges of Rs.5,000/day will be applicable. If the team is mobilized away from site, a re-mobilization charge of Rs.5,000 + Tax will also be applicable.',
+    });
     return rows;
   }
 
