@@ -469,19 +469,6 @@ export default function QuotationItemsEditor({
                             />
                           </div>
                         )}
-                        <div className="space-y-1">
-                          <Label className="text-xs">Hanging Structure Charge (₹)</Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={row.hangingStructureCharge ?? ""}
-                            onChange={(e) =>
-                              updateRow(index, {
-                                hangingStructureCharge: e.target.value ? Number(e.target.value) : undefined,
-                              })
-                            }
-                          />
-                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
