@@ -694,6 +694,10 @@ export interface Quotation {
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
   gstAmount: number;
+  // Additive: flat, order-level discount — mirrors SalesOrder.discount.
+  // Applied as a post-tax rebate (subtracted from grandTotal, doesn't change
+  // gstAmount). See QuotationsService.computeTotals(). Defaults to 0.
+  discount: number;
   grandTotal: number;
   validUntil?: string | null;
   notes?: string | null;

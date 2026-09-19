@@ -111,6 +111,13 @@ export interface QuotationPdfInput {
   // own defaults.
   transportScope?: TransportScope;
   pricesIncludeChargesAndGst?: boolean;
+  // Additive: flat, order-level discount (see Quotation.discount) —
+  // subtracted from grandTotal already (see QuotationsService.computeTotals),
+  // so grandTotal below is already net of this. Shown as its own "Discount"
+  // row in buildSpecRows() only when > 0, so the customer can see a discount
+  // was actually applied rather than just a lower Grand Total. Optional for
+  // the same reason as pricesIncludeChargesAndGst above; defaults to 0.
+  discount?: number;
   grandTotal: number;
   notes?: string | null;
   commercialTerms?: unknown;
@@ -859,6 +866,13 @@ export class QuotationPdfService {
       },
     ];
     const gstValue = includesCharges ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // Additive: printed as its own row, right above Grand Total, only when a
+    // discount was actually given — same flat amount repeated on every
+    // item's Annexure-I block, matching how Grand Total itself is already
+    // repeated per item (not divided/split across items).
+    const discountRows: SpecRow[] = (quotation.discount ?? 0) > 0
+      ? [{ label: 'Discount', value: `- ${this.formatCurrency(quotation.discount ?? 0)}` }]
+      : [];
 
     if (!this.hasPopulatedSpec(item)) {
       // Simple line item (spare part sold on its own) — no fan spec sheet
@@ -874,6 +888,7 @@ export class QuotationPdfService {
         ...transportationRows,
         { label: this.gstLabel(quotation), value: gstValue },
         { label: 'Quantity', value: `${item.quantity} Nos.` },
+        ...discountRows,
         { label: 'Grand Total', value: this.formatCurrency(quotation.grandTotal) },
       ];
     }
@@ -922,6 +937,7 @@ export class QuotationPdfService {
       ...transportationRows,
       { label: `GST ${quotation.gstPercent}%`, value: gstValue },
       { label: 'Quantity', value: `${item.quantity} Nos.` },
+      ...discountRows,
       // Removed the standalone Quotation Summary block that used to be the
       // only place Grand Total printed — now it prints here instead, right
       // under Quantity, on every item's Annexure-I table (same repeat-per-

@@ -62,6 +62,9 @@ export interface QuotationPayload {
   // ConfirmPriceIncludesChargesDialog).
   transportScope?: TransportScope;
   pricesIncludeChargesAndGst?: boolean;
+  // Additive: flat, order-level discount applied to the grand total —
+  // mirrors SalesOrder's own discount field. Omit/0 for no discount.
+  discount?: number;
   validUntil?: string;
   notes?: string;
   terms?: string;

@@ -497,7 +497,11 @@ export default function QuotationDetails() {
                     <p className="text-sm text-muted-foreground">No items on this quotation.</p>
                   )}
 
-                  <div className="mt-4 grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-5">
+                  <div
+                    className={`mt-4 grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm ${
+                      quotation.discount > 0 ? "sm:grid-cols-6" : "sm:grid-cols-5"
+                    }`}
+                  >
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Subtotal</p>
                       <p className="font-medium text-slate-900">{formatCurrency(quotation.subtotal)}</p>
@@ -526,6 +530,12 @@ export default function QuotationDetails() {
                         {quotation.pricesIncludeChargesAndGst ? "Included" : formatCurrency(quotation.gstAmount)}
                       </p>
                     </div>
+                    {quotation.discount > 0 && (
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>
+                        <p className="font-medium text-slate-900">- {formatCurrency(quotation.discount)}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">

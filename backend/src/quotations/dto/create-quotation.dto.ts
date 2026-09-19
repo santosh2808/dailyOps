@@ -98,6 +98,18 @@ export class CreateQuotationDto {
   @IsBoolean()
   pricesIncludeChargesAndGst?: boolean;
 
+  // Additive: a flat, order-level discount amount — mirrors SalesOrder's
+  // own discount field/convention exactly. Applied as a post-tax rebate in
+  // QuotationsService.computeTotals() (subtracted from grandTotal, doesn't
+  // change gstAmount) and printed on the PDF as its own "Discount" row
+  // whenever non-zero, so the customer can see a discount was given.
+  @ApiPropertyOptional({ example: 5000, default: 0, description: 'Flat discount amount applied to the grand total' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0, { message: 'Discount must be a positive number' })
+  discount?: number;
+
   @ApiPropertyOptional({ example: '2026-09-30' })
   @IsOptional()
   @IsDateString()

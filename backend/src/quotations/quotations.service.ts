@@ -99,6 +99,9 @@ export interface PublicQuotationView {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  // Additive: flat, order-level discount — see Quotation.discount's schema
+  // comment. 0 for any quotation sent before this field existed.
+  discount: number;
   grandTotal: number;
   paymentTerms: string | null;
   deliveryTerms: string | null;
@@ -155,6 +158,10 @@ interface QuotationSentSnapshot {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  // Additive: flat, order-level discount — see Quotation.discount's schema
+  // comment. Optional so a snapshot written before this field existed
+  // still type-checks; resolveOfferContent() below falls back to 0 for it.
+  discount?: number;
   grandTotal: number;
   notes: string | null;
   terms: string | null;
@@ -238,6 +245,11 @@ interface ComputedTotals {
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
   gstAmount: number;
+  // Additive: flat, order-level discount actually applied — echoes back
+  // whatever was passed into computeTotals() (already clamped so it can
+  // never make grandTotal negative) so callers can persist the exact
+  // figure that produced this grandTotal.
+  discount: number;
   grandTotal: number;
 }
 
@@ -379,6 +391,7 @@ export class QuotationsService {
       dto.transportationCharge,
       dto.transportScope,
       dto.pricesIncludeChargesAndGst,
+      dto.discount,
     );
 
     for (let attempt = 1; attempt <= MAX_QUOTATION_NUMBER_ATTEMPTS; attempt++) {
@@ -397,6 +410,7 @@ export class QuotationsService {
             transportScope: totals.transportScope,
             pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
             gstAmount: totals.gstAmount,
+            discount: totals.discount,
             grandTotal: totals.grandTotal,
             validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
             notes: dto.notes,
@@ -450,7 +464,8 @@ export class QuotationsService {
       dto.installationCharge !== undefined ||
       dto.transportationCharge !== undefined ||
       dto.transportScope !== undefined ||
-      dto.pricesIncludeChargesAndGst !== undefined;
+      dto.pricesIncludeChargesAndGst !== undefined ||
+      dto.discount !== undefined;
     // installationCharge: only carry forward the existing stored amount as
     // an explicit override when items AREN'T changing (quantity is the same,
     // so the previous amount — whether auto-computed or manually overridden
@@ -472,6 +487,7 @@ export class QuotationsService {
           dto.transportationCharge ?? existing.transportationCharge,
           dto.transportScope ?? existing.transportScope,
           dto.pricesIncludeChargesAndGst ?? existing.pricesIncludeChargesAndGst,
+          dto.discount ?? existing.discount,
         )
       : null;
 
@@ -505,6 +521,7 @@ export class QuotationsService {
                 transportScope: totals.transportScope,
                 pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
                 gstAmount: totals.gstAmount,
+                discount: totals.discount,
                 grandTotal: totals.grandTotal,
               }
             : {}),
@@ -1183,6 +1200,7 @@ export class QuotationsService {
       transportationCharge: quotation.transportationCharge,
       transportScope: quotation.transportScope,
       pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst,
+      discount: quotation.discount,
       grandTotal: quotation.grandTotal,
       notes: quotation.notes,
       terms: quotation.terms,
@@ -1205,6 +1223,7 @@ export class QuotationsService {
       transportationCharge: content.transportationCharge,
       transportScope: content.transportScope,
       pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
+      discount: content.discount ?? 0,
       grandTotal: content.grandTotal,
       notes: content.notes,
       commercialTerms: content.commercialTerms,
@@ -1272,6 +1291,7 @@ export class QuotationsService {
       transportationCharge: content.transportationCharge,
       transportScope: content.transportScope,
       pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
+      discount: content.discount ?? 0,
       grandTotal: content.grandTotal,
       paymentTerms: (content.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
       deliveryTerms: (content.commercialTerms as Prisma.JsonObject | null)?.delivery as string | null ?? null,
@@ -1599,6 +1619,13 @@ export class QuotationsService {
     // True once staff have confirmed a raised item price already bakes in
     // installation/transportation/GST — see the inclusive-GST branch below.
     pricesIncludeChargesAndGst = false,
+    // Additive: flat, order-level discount — same post-tax-rebate treatment
+    // as SalesOrdersService.computeTotals()'s own extraDiscount (subtracted
+    // from the final total, GST itself is computed on the undiscounted
+    // amount, matching standard "discount doesn't reduce your tax base"
+    // invoicing practice here). Clamped below so it can never push
+    // grandTotal negative.
+    discount = 0,
   ): Promise<ComputedTotals> {
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
@@ -1675,7 +1702,8 @@ export class QuotationsService {
       // are recorded as 0 (not double-charged), and GST is shown as the
       // amount already embedded in the subtotal (back-calculated), not an
       // additional line.
-      const grandTotal = subtotal;
+      const effectiveDiscount = Math.min(Math.max(0, discount), subtotal);
+      const grandTotal = Math.round((subtotal - effectiveDiscount) * 100) / 100;
       const gstAmount = Math.round((subtotal - subtotal / (1 + effectiveGstPercent / 100)) * 100) / 100;
       return {
         items: computedItems,
@@ -1686,6 +1714,7 @@ export class QuotationsService {
         transportScope,
         pricesIncludeChargesAndGst: true,
         gstAmount,
+        discount: effectiveDiscount,
         grandTotal,
       };
     }
@@ -1703,8 +1732,13 @@ export class QuotationsService {
     const gstAmount =
       Math.round((subtotal + effectiveInstallationCharge + effectiveTransportationCharge) * (effectiveGstPercent / 100) * 100) /
       100;
-    const grandTotal =
-      Math.round((subtotal + effectiveInstallationCharge + effectiveTransportationCharge + gstAmount) * 100) / 100;
+    const preDiscountTotal = subtotal + effectiveInstallationCharge + effectiveTransportationCharge + gstAmount;
+    // Discount is a post-tax rebate — it doesn't reduce the taxable base
+    // above (gstAmount is already computed on the undiscounted amount),
+    // it just comes straight off the final total. Clamped so it can never
+    // make grandTotal negative.
+    const effectiveDiscount = Math.round(Math.min(Math.max(0, discount), preDiscountTotal) * 100) / 100;
+    const grandTotal = Math.round((preDiscountTotal - effectiveDiscount) * 100) / 100;
 
     return {
       items: computedItems,
@@ -1715,6 +1749,7 @@ export class QuotationsService {
       transportScope,
       pricesIncludeChargesAndGst: false,
       gstAmount,
+      discount: effectiveDiscount,
       grandTotal,
     };
   }

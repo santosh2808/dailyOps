@@ -768,6 +768,16 @@ model Quotation {
   // computeTotals()'s inclusive-GST branch). Defaults to false, i.e. today's
   // additive behavior, for every existing quotation.
   pricesIncludeChargesAndGst Boolean    @default(false)
+  // Additive: a flat, order-level discount amount staff can enter on the
+  // quotation (separate from any per-item pricing) — mirrors
+  // SalesOrder.discount exactly, including how it's applied: subtracted
+  // from the total AFTER GST is computed on the undiscounted amount (a
+  // post-tax rebate, not a reduction of the taxable base), so it never
+  // changes gstAmount. See QuotationsService.computeTotals(). Printed on
+  // the PDF as its own "Discount" row (QuotationPdfService) whenever it's
+  // non-zero, so the customer can see a discount was actually given.
+  // Defaults to 0, i.e. no behavior change for any existing quotation.
+  discount              Float           @default(0)
   grandTotal            Float           @default(0)
   // Additive: Techno-Commercial Offer PDF — Annexure-II commercial terms
   // (price basis, GST Included/Extra wording, transportation, payment,

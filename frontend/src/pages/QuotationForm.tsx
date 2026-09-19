@@ -45,6 +45,11 @@ interface FormState {
   // a raised item price already includes installation/transportation/GST —
   // see Quotation.pricesIncludeChargesAndGst.
   pricesIncludeChargesAndGst: boolean;
+  // Additive: flat, order-level discount — mirrors SalesOrderForm's own
+  // "Additional Discount" field/convention. Blank/0 means no discount.
+  // Applied as a post-tax rebate (subtracted from grandTotal only, doesn't
+  // change gstAmount). See QuotationsService.computeTotals().
+  discount: string;
   validUntil: string;
   notes: string;
   terms: string;
@@ -155,6 +160,7 @@ const emptyForm: FormState = {
   transportationCharge: "",
   transportScope: "COMPANY_SCOPE",
   pricesIncludeChargesAndGst: false,
+  discount: "",
   validUntil: "",
   notes: "",
   terms: "",
@@ -277,6 +283,7 @@ export default function QuotationForm() {
           transportationCharge: quotation.transportationCharge ? String(quotation.transportationCharge) : "",
           transportScope: quotation.transportScope ?? "COMPANY_SCOPE",
           pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst ?? false,
+          discount: quotation.discount ? String(quotation.discount) : "",
           validUntil: toDateInputValue(quotation.validUntil),
           notes: quotation.notes ?? "",
           terms: quotation.terms ?? "",
@@ -395,6 +402,12 @@ export default function QuotationForm() {
         next.transportationCharge = "Transportation charge must be a positive number";
       }
     }
+    if (form.discount.trim()) {
+      const parsed = Number(form.discount);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        next.discount = "Discount must be a positive number";
+      }
+    }
     // A quotation can't be valid until a date that's already passed.
     if (isPastDateInputValue(form.validUntil)) {
       next.validUntil = "Valid Until cannot be before today";
@@ -426,6 +439,7 @@ export default function QuotationForm() {
       transportationCharge: form.transportationCharge.trim() ? Number(form.transportationCharge) : undefined,
       transportScope: form.transportScope,
       pricesIncludeChargesAndGst: form.pricesIncludeChargesAndGst,
+      discount: form.discount.trim() ? Number(form.discount) : undefined,
       validUntil: form.validUntil || undefined,
       notes: form.notes.trim() || undefined,
       terms: form.terms.trim() || undefined,
@@ -474,9 +488,16 @@ export default function QuotationForm() {
   const gstAmount = form.pricesIncludeChargesAndGst
     ? subtotal - subtotal / (1 + gstPercentNum / 100)
     : (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
-  const grandTotal = form.pricesIncludeChargesAndGst
+  const preDiscountTotal = form.pricesIncludeChargesAndGst
     ? subtotal
     : subtotal + installationChargeNum + transportationChargeNum + gstAmount;
+  // Mirrors QuotationsService.computeTotals(): a flat, order-level rebate
+  // taken off the final total after GST — never larger than the total
+  // itself, so grandTotal can never go negative.
+  const discountNum = form.discount.trim()
+    ? Math.min(Math.max(0, Number(form.discount) || 0), preDiscountTotal)
+    : 0;
+  const grandTotal = preDiscountTotal - discountNum;
 
   return (
     <div className="flex h-screen bg-app-grid">
@@ -674,9 +695,25 @@ export default function QuotationForm() {
                         )}
                       </div>
                     )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="discount">Discount (₹)</Label>
+                      <Input
+                        id="discount"
+                        inputMode="decimal"
+                        value={form.discount}
+                        onChange={(e) => update("discount", e.target.value)}
+                        placeholder="e.g. 5000"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Flat amount taken off the grand total (after GST) — shown to the customer
+                        as its own Discount line on the quotation. Leave blank for no discount.
+                      </p>
+                      {errors.discount && <p className="text-xs text-destructive">{errors.discount}</p>}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-6">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Subtotal</p>
                       <p className="font-medium text-slate-900">{formatCurrency(subtotal)}</p>
@@ -706,14 +743,18 @@ export default function QuotationForm() {
                       </p>
                     </div>
                     <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>
+                      <p className="font-medium text-slate-900">{formatCurrency(discountNum)}</p>
+                    </div>
+                    <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">{formatCurrency(grandTotal)}</p>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Subtotal, Installation, Transportation, GST, and Grand Total shown above are a
-                    live preview — the backend recalculates these from the submitted values when
-                    you save.
+                    Subtotal, Installation, Transportation, GST, Discount, and Grand Total shown
+                    above are a live preview — the backend recalculates these from the submitted
+                    values when you save.
                   </p>
                 </CardContent>
               </Card>
