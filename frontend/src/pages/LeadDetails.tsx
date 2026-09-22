@@ -14,6 +14,7 @@ import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog"
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import ContactOutcomeDialog, { type ContactOutcome } from "@/components/leads/ContactOutcomeDialog";
 import ScheduleFollowUpDialog from "@/components/leads/ScheduleFollowUpDialog";
+import SiteVisitOutcomeDialog, { type SiteVisitOutcome } from "@/components/leads/SiteVisitOutcomeDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import PipelineTimeline from "@/components/shared/PipelineTimeline";
@@ -79,6 +80,7 @@ export default function LeadDetails() {
   const [confirmQuoteOpen, setConfirmQuoteOpen] = useState(false);
   const [contactOutcomeOpen, setContactOutcomeOpen] = useState(false);
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
+  const [siteVisitOutcomeOpen, setSiteVisitOutcomeOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -188,18 +190,71 @@ export default function LeadDetails() {
   // UX fix: the Contacted-stage next action reads "Schedule Follow-up", but
   // used to fall through to the generic Change Status dropdown, which has
   // no date field at all — the label's promise went unfulfilled. This
-  // dialog is purpose-built for exactly that: a date + optional reminder,
-  // no status change (a follow-up date alone doesn't move the lead's
-  // stage — see leadOptions.ts's CONTACTED hint). LeadsService.update()
-  // already writes its own "Follow-up scheduled for ..." Timeline entry
-  // whenever nextFollowUp/reminderNote change, so there's no separate note
-  // call needed here the way ContactOutcomeDialog needs one.
-  async function handleScheduleFollowUpConfirm(nextFollowUp: string, reminderNote?: string) {
+  // dialog is purpose-built for exactly that: a date + optional reminder.
+  // LeadsService.update() already writes its own "Follow-up scheduled for
+  // ..." Timeline entry whenever nextFollowUp/reminderNote change, so
+  // there's no separate note call needed here the way ContactOutcomeDialog
+  // needs one.
+  //
+  // "Ideal situation to go to Site Visit step" (user's own framing):
+  // markAsSiteVisit comes from the dialog's own checkbox — when set, this
+  // date is a visit date, not just a reminder, so on top of the usual
+  // updateLead() the status also moves to Site Visit, with its own
+  // "Status changed" Timeline entry for the record. SiteVisitOutcomeDialog
+  // (Site Visit's own next action) picks up from there once the visit has
+  // actually happened.
+  async function handleScheduleFollowUpConfirm(
+    nextFollowUp: string,
+    reminderNote?: string,
+    markAsSiteVisit?: boolean,
+  ) {
     if (!id) return;
     await updateLead(id, { nextFollowUp, reminderNote });
-    toast.success("Follow-up scheduled.");
+    if (markAsSiteVisit) {
+      await updateLeadStatus(
+        id,
+        "SITE_VISIT",
+        reminderNote ? `Site visit scheduled — ${reminderNote}` : "Site visit scheduled",
+      );
+    }
+    toast.success(markAsSiteVisit ? "Site visit scheduled." : "Follow-up scheduled.");
     await fetchLead();
     setHistoryRefreshKey((k) => k + 1);
+    if (markAsSiteVisit) await fetchPipelineTimeline();
+  }
+
+  // Mirrors handleContactOutcomeConfirm() exactly, one stage later: the
+  // outcome decides the status change, and what was found on site is
+  // always logged as a note regardless of which way it goes, so it's never
+  // buried inside a status-change remark only. READY_TO_QUOTE's products
+  // check is enforced server-side too (see updateStatus()'s QUALIFIED
+  // gate) — SiteVisitOutcomeDialog just surfaces the same error earlier.
+  async function handleSiteVisitOutcomeConfirm(
+    outcome: SiteVisitOutcome,
+    notes: string,
+    nextVisitDate?: string,
+  ) {
+    if (!id) return;
+    const outcomeLabel =
+      outcome === "READY_TO_QUOTE"
+        ? "Ready to Quote"
+        : outcome === "NEEDS_ANOTHER_VISIT"
+          ? "Needs Another Visit"
+          : "Not Viable";
+    await addLeadNote(id, notes ? `Site visit — ${outcomeLabel}: ${notes}` : `Site visit — ${outcomeLabel}`);
+
+    if (outcome === "READY_TO_QUOTE") {
+      await updateLeadStatus(id, "QUALIFIED");
+    } else if (outcome === "NOT_VIABLE") {
+      await updateLeadStatus(id, "LOST", notes || "Not viable after site visit");
+    } else if (nextVisitDate) {
+      await updateLead(id, { nextFollowUp: nextVisitDate });
+    }
+
+    toast.success("Site visit outcome logged.");
+    await fetchLead();
+    setHistoryRefreshKey((k) => k + 1);
+    await fetchPipelineTimeline();
   }
 
   async function handleDeleteConfirm() {
@@ -262,6 +317,8 @@ export default function LeadDetails() {
       setContactOutcomeOpen(true);
     } else if (nextAction.label === "Schedule Follow-up") {
       setScheduleFollowUpOpen(true);
+    } else if (nextAction.label === "Complete Site Visit") {
+      setSiteVisitOutcomeOpen(true);
     } else {
       setStatusOpen(true);
     }
@@ -665,6 +722,12 @@ export default function LeadDetails() {
         onOpenChange={setScheduleFollowUpOpen}
         lead={lead}
         onConfirm={handleScheduleFollowUpConfirm}
+      />
+      <SiteVisitOutcomeDialog
+        open={siteVisitOutcomeOpen}
+        onOpenChange={setSiteVisitOutcomeOpen}
+        lead={lead}
+        onConfirm={handleSiteVisitOutcomeConfirm}
       />
     </div>
   );

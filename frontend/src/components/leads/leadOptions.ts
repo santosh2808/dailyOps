@@ -93,14 +93,21 @@ export function nextActionFor(lead: Lead): NextAction {
       // own, no separate manual Change Status trip needed.
       return { label: "Contact Customer", hint: "Reach out, then log what happened." };
     case "CONTACTED":
+      // Clicking this opens ScheduleFollowUpDialog — usually just another
+      // call reminder, but its "This is a scheduled Site Visit" checkbox
+      // moves the lead to Site Visit in the same step once one's actually
+      // been arranged with the customer (see ScheduleFollowUpDialog.tsx).
       return {
         label: "Schedule Follow-up",
-        hint: "Set a Next Follow-up date, then move to Site Visit once one is scheduled.",
+        hint: "Set a Next Follow-up date — or check “Site Visit” once one's been arranged.",
       };
     case "SITE_VISIT":
+      // Clicking this opens SiteVisitOutcomeDialog — Ready to Quote moves
+      // to Qualified, Needs Another Visit stays here with a new date, Not
+      // Viable closes it as Lost.
       return {
         label: "Complete Site Visit",
-        hint: "Once the site visit is done, mark this lead as Qualified.",
+        hint: "Log what happened — mark it Qualified, schedule another visit, or close it out.",
       };
     case "QUALIFIED": {
       const latest = lead.quotations?.[0];
