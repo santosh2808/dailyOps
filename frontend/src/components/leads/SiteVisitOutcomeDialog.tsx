@@ -240,17 +240,17 @@ export default function SiteVisitOutcomeDialog({
 
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Site Photos (optional)</Label>
+            <Label>Site Photos (required)</Label>
             <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(true)}>
               <Camera className="mr-2 h-4 w-4" />
               Take Photo
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Photos help the factory build to what's actually on site. No minimum required. Your
-            device will ask for location access — this is required to confirm the photo was
-            taken on site. Photos taken with no signal upload automatically once you're back in
-            range.
+            At least one photo is required to log this outcome — it confirms you were actually on
+            site. Your device will ask for location access — this is required to confirm the
+            photo was taken on site. Photos taken with no signal upload automatically once you're
+            back in range, and still count while queued.
           </p>
           <SiteVisitPhotoGallery
             leadId={lead.id}
