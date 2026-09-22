@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Camera, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,10 +15,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import SiteVisitPhotoGallery from "./SiteVisitPhotoGallery";
-import { uploadSiteVisitPhotos } from "@/api/leads";
-import { toast } from "@/lib/toast";
-import { getErrorMessage } from "@/lib/errors";
-import { captureCurrentLocation } from "@/lib/geolocation";
+import SiteVisitCameraCapture from "./SiteVisitCameraCapture";
+import { useOfflineSiteVisitPhotoQueue } from "@/context/OfflineSiteVisitPhotoQueueContext";
 import { todayDateInputValue, isPastDateInputValue } from "@/lib/date";
 import type { Lead, LeadSiteVisitPhoto } from "@/types";
 
@@ -76,11 +74,19 @@ export default function SiteVisitOutcomeDialog({
 
   // Site visit photo evidence (see notifySiteVisitScheduled's sibling
   // feature) — deliberately independent of the outcome form's own
-  // submitting/error state above, since photos upload immediately on
-  // selection rather than waiting for "Log Outcome".
+  // submitting/error state above, since photos capture/upload immediately
+  // rather than waiting for "Log Outcome". Capture itself happens in
+  // SiteVisitCameraCapture (in-app camera, not a file picker — see its own
+  // comment for why); every captured shot is handed to the offline queue
+  // (see OfflineSiteVisitPhotoQueueContext) rather than uploaded directly
+  // here, so a photo taken with no signal is never lost — it just uploads
+  // the moment connectivity returns, from wherever the app happens to be
+  // open at that point, not necessarily this dialog.
   const [photos, setPhotos] = useState<LeadSiteVisitPhoto[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [pendingThumbnails, setPendingThumbnails] = useState<Record<string, string>>({});
+  const { enqueuePhoto, pendingForLead, subscribe } = useOfflineSiteVisitPhotoQueue();
+  const pendingPhotos = lead ? pendingForLead(lead.id) : [];
 
   useEffect(() => {
     if (open) {
@@ -92,43 +98,46 @@ export default function SiteVisitOutcomeDialog({
     }
   }, [open, lead]);
 
-  async function handleFilesSelected(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0 || !lead) return;
-    const files = Array.from(fileList);
-    setUploading(true);
-    try {
-      // Anti-fraud (user's own request: "i dont want them to fraud me they
-      // visited") — a fresh GPS fix is required before any upload is even
-      // attempted. If the rep denies location access, or the device can't
-      // get a fix, the upload never happens; the backend independently
-      // rejects the request too if location is somehow missing, so this
-      // isn't just a frontend nicety.
-      let location;
-      try {
-        location = await captureCurrentLocation();
-      } catch (locationErr) {
-        toast.error(
-          locationErr instanceof Error
-            ? locationErr.message
-            : "Could not get your location. Please try again.",
-        );
-        return;
-      }
+  // Learns the moment a queued photo for this lead actually lands on the
+  // server — including ones that were queued in a previous dialog session
+  // and only just came back online — so the confirmed gallery below picks
+  // it up without the rep needing to reopen anything.
+  useEffect(() => {
+    if (!lead) return;
+    return subscribe(lead.id, (uploadedPhoto) => {
+      setPhotos((prev) => {
+        const next = [...prev, uploadedPhoto];
+        onPhotosChanged?.(next);
+        return next;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
 
-      const uploaded = await uploadSiteVisitPhotos(lead.id, files, location);
-      const next = [...photos, ...uploaded];
-      setPhotos(next);
-      onPhotosChanged?.(next);
-      toast.success(
-        uploaded.length === 1 ? "Photo uploaded." : `${uploaded.length} photos uploaded.`,
-      );
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Could not upload these photos. Please try again."));
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
+  // Local (not server) thumbnails for photos still sitting in the offline
+  // queue — we already have the raw File in memory, no need to round-trip
+  // through the authenticated streaming endpoint like SiteVisitPhotoGallery
+  // does for confirmed photos.
+  useEffect(() => {
+    setPendingThumbnails((prev) => {
+      const next: Record<string, string> = {};
+      pendingPhotos.forEach((p) => {
+        next[p.id] = prev[p.id] ?? URL.createObjectURL(p.file);
+      });
+      Object.entries(prev).forEach(([id, url]) => {
+        if (!next[id]) URL.revokeObjectURL(url);
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPhotos.map((p) => p.id).join(",")]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(pendingThumbnails).forEach((url) => URL.revokeObjectURL(url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handlePhotoDeleted(photoId: string) {
     const next = photos.filter((p) => p.id !== photoId);
@@ -218,30 +227,16 @@ export default function SiteVisitOutcomeDialog({
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between">
             <Label>Site Photos (optional)</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? <Spinner className="mr-2 h-4 w-4" /> : <ImagePlus className="mr-2 h-4 w-4" />}
-              {uploading ? "Uploading..." : "Add Photos"}
+            <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(true)}>
+              <Camera className="mr-2 h-4 w-4" />
+              Take Photo
             </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              capture="environment"
-              className="hidden"
-              onChange={(e) => handleFilesSelected(e.target.files)}
-            />
           </div>
           <p className="text-xs text-muted-foreground">
             Photos help the factory build to what's actually on site. No minimum required. Your
             device will ask for location access — this is required to confirm the photo was
-            taken on site.
+            taken on site. Photos taken with no signal upload automatically once you're back in
+            range.
           </p>
           <SiteVisitPhotoGallery
             leadId={lead.id}
@@ -250,7 +245,54 @@ export default function SiteVisitOutcomeDialog({
             onPhotoDeleted={handlePhotoDeleted}
             emptyHint="No site photos added yet."
           />
+          {pendingPhotos.length > 0 && (
+            <div className="space-y-1">
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {pendingPhotos.length === 1
+                  ? "1 photo waiting to upload"
+                  : `${pendingPhotos.length} photos waiting to upload`}
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {pendingPhotos.map((p) => (
+                  <div
+                    key={p.id}
+                    className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50 opacity-60"
+                  >
+                    {pendingThumbnails[p.id] && (
+                      <img
+                        src={pendingThumbnails[p.id]}
+                        alt="Queued site photo"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                    <div
+                      className="absolute inset-0 flex items-center justify-center bg-black/30"
+                      title={p.lastError ? `Waiting to retry: ${p.lastError}` : "Waiting for connection"}
+                    >
+                      <Clock className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        <SiteVisitCameraCapture
+          open={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          onCapture={({ file, location }) => {
+            if (!lead) return;
+            enqueuePhoto({
+              leadId: lead.id,
+              file,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              accuracyMeters: location.accuracyMeters,
+            });
+          }}
+        />
 
         {outcome === "NEEDS_ANOTHER_VISIT" && (
           <div className="mt-4 space-y-2">

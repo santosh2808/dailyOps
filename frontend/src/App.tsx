@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { OfflineSiteVisitPhotoQueueProvider } from "@/context/OfflineSiteVisitPhotoQueueContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Toaster from "@/components/ui/toaster";
 import Login from "@/pages/Login";
@@ -50,6 +51,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        {/* Mounted at app root, not inside SiteVisitOutcomeDialog — a Site
+            Visit photo captured while offline (see offlineSiteVisitPhotoQueue.ts)
+            keeps retrying in the background regardless of which page the
+            rep navigates to afterwards. */}
+        <OfflineSiteVisitPhotoQueueProvider>
         <SidebarProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -431,6 +437,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </SidebarProvider>
+        </OfflineSiteVisitPhotoQueueProvider>
       </AuthProvider>
       <Toaster />
     </BrowserRouter>
