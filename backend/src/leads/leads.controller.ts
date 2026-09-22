@@ -158,8 +158,8 @@ export class LeadsController {
     return this.leadsService.getStatusHistory(id);
   }
 
-  // Quick-glance cross-module pipeline tracker (Lead Created -> ... ->
-  // Completed) shown as a horizontal stepper on Lead Details — distinct
+  // Quick-glance Lead-stage tracker (New -> ... -> Quotation Sent ->
+  // Won/Lost) shown as a horizontal stepper on Lead Details — distinct
   // from the ':id/history' chronological Timeline tab above.
   @Get(':id/pipeline-timeline')
   @RequirePermission('Lead', 'View')

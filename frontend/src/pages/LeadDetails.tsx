@@ -318,13 +318,13 @@ export default function LeadDetails() {
 
               {tab === "overview" && (
                 <div className="space-y-6">
-                  {/* Quick-glance cross-module pipeline tracker (Lead Created
-                      -> ... -> Completed) as a horizontal stepper, so status
-                      can be read at a glance without opening the Quotation/
-                      Sales Order/JEO records individually. */}
+                  {/* Quick-glance Lead-stage tracker (New -> Assigned ->
+                      Contacted -> Site Visit -> Qualified -> Quotation Sent
+                      -> Won/Lost) as a horizontal stepper, so this lead's
+                      own sales-stage progress can be read at a glance. */}
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Pipeline Progress</CardTitle>
+                      <CardTitle className="text-base">Lead Progress</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <PipelineTimeline steps={pipelineSteps} loading={pipelineLoading} />

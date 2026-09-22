@@ -171,8 +171,8 @@ export async function getLeadEmailHistory(id: string) {
   return res.data;
 }
 
-// Quick-glance cross-module pipeline tracker (Lead Created -> ... ->
-// Completed) — same response shape as the JEO Details Timeline
+// Quick-glance Lead-stage tracker (New -> ... -> Quotation Sent ->
+// Won/Lost) — same response shape as the JEO Details Timeline
 // (GET /job-execution-orders/:id/timeline), so it's typed with the same
 // JeoTimelineResponse rather than duplicating an identical interface.
 export async function getLeadPipelineTimeline(id: string) {
