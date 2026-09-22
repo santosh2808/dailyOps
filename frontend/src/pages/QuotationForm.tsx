@@ -555,6 +555,27 @@ export default function QuotationForm() {
                       {errors.customerId && (
                         <p className="text-xs text-destructive">{errors.customerId}</p>
                       )}
+                      {/* A prospect who hasn't accepted anything yet doesn't
+                          need a full Customer record — that's what Leads are
+                          for (see LeadsService.convertToCustomer(), only
+                          done today once a Quotation is actually accepted).
+                          This just points staff at the right starting point
+                          instead of forcing a throwaway Customer; the Lead
+                          still needs its own products + Qualified status
+                          before "Generate from Lead" can raise a quotation
+                          off it (same as the Leads/Quotations list flow). */}
+                      {!isEdit && (
+                        <p className="text-xs text-muted-foreground">
+                          Don't have a Customer for this yet?{" "}
+                          <button
+                            type="button"
+                            className="font-medium text-orange underline-offset-2 hover:underline"
+                            onClick={() => navigate("/leads/new")}
+                          >
+                            Create a Lead instead
+                          </button>
+                        </p>
+                      )}
                     </>
                   )}
                 </CardContent>
