@@ -22,7 +22,7 @@ const OUTCOME_OPTIONS: { value: ContactOutcome; label: string; hint: string }[] 
   {
     value: "INTERESTED",
     label: "Reached — Interested",
-    hint: "Moves this lead to Contacted.",
+    hint: "Moves this lead to Contacted. Requires a Next Follow-up date.",
   },
   {
     value: "NOT_INTERESTED",
@@ -73,6 +73,14 @@ export default function ContactOutcomeDialog({
 
   async function handleConfirm() {
     setError("");
+    // A lead marked Interested moves to Contacted with no further status
+    // change scheduled anywhere else in the app — without a follow-up date
+    // it has no next trigger and just goes quiet. Required here, not just
+    // encouraged, so that can't happen silently.
+    if (outcome === "INTERESTED" && !nextFollowUp) {
+      setError("Next Follow-up date is required when marking a lead as Interested.");
+      return;
+    }
     if (isPastDateInputValue(nextFollowUp)) {
       setError("Next Follow-up cannot be before today");
       return;
@@ -141,7 +149,9 @@ export default function ContactOutcomeDialog({
 
         {showNextFollowUp && (
           <div className="mt-4 space-y-2">
-            <Label htmlFor="contact-outcome-followup">Next Follow-up (optional)</Label>
+            <Label htmlFor="contact-outcome-followup">
+              Next Follow-up {outcome === "INTERESTED" ? "*" : "(optional)"}
+            </Label>
             <Input
               id="contact-outcome-followup"
               type="date"

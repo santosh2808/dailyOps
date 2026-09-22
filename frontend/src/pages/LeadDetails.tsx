@@ -13,6 +13,7 @@ import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog"
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import ContactOutcomeDialog, { type ContactOutcome } from "@/components/leads/ContactOutcomeDialog";
+import ScheduleFollowUpDialog from "@/components/leads/ScheduleFollowUpDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import PipelineTimeline from "@/components/shared/PipelineTimeline";
@@ -77,6 +78,7 @@ export default function LeadDetails() {
   const [convertOpen, setConvertOpen] = useState(false);
   const [confirmQuoteOpen, setConfirmQuoteOpen] = useState(false);
   const [contactOutcomeOpen, setContactOutcomeOpen] = useState(false);
+  const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -183,6 +185,23 @@ export default function LeadDetails() {
     await fetchPipelineTimeline();
   }
 
+  // UX fix: the Contacted-stage next action reads "Schedule Follow-up", but
+  // used to fall through to the generic Change Status dropdown, which has
+  // no date field at all — the label's promise went unfulfilled. This
+  // dialog is purpose-built for exactly that: a date + optional reminder,
+  // no status change (a follow-up date alone doesn't move the lead's
+  // stage — see leadOptions.ts's CONTACTED hint). LeadsService.update()
+  // already writes its own "Follow-up scheduled for ..." Timeline entry
+  // whenever nextFollowUp/reminderNote change, so there's no separate note
+  // call needed here the way ContactOutcomeDialog needs one.
+  async function handleScheduleFollowUpConfirm(nextFollowUp: string, reminderNote?: string) {
+    if (!id) return;
+    await updateLead(id, { nextFollowUp, reminderNote });
+    toast.success("Follow-up scheduled.");
+    await fetchLead();
+    setHistoryRefreshKey((k) => k + 1);
+  }
+
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteLead(id);
@@ -241,6 +260,8 @@ export default function LeadDetails() {
       navigate(`/leads/${id}/edit`);
     } else if (nextAction.label === "Contact Customer") {
       setContactOutcomeOpen(true);
+    } else if (nextAction.label === "Schedule Follow-up") {
+      setScheduleFollowUpOpen(true);
     } else {
       setStatusOpen(true);
     }
@@ -638,6 +659,12 @@ export default function LeadDetails() {
         onOpenChange={setContactOutcomeOpen}
         lead={lead}
         onConfirm={handleContactOutcomeConfirm}
+      />
+      <ScheduleFollowUpDialog
+        open={scheduleFollowUpOpen}
+        onOpenChange={setScheduleFollowUpOpen}
+        lead={lead}
+        onConfirm={handleScheduleFollowUpConfirm}
       />
     </div>
   );
