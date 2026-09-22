@@ -827,6 +827,17 @@ export class QuotationPdfService {
           : '';
       return `${structureLabel}${pipeNote}`;
     }
+    // Bug fix: the seeded "Hanging Pipe" row (a separate scope-of-supply
+    // line from "Hanging Structure" above — see seed-hvls-products.ts,
+    // e.g. "01 No. (2 ft length)") only ever showed that catalog-default
+    // length, even after staff entered a real Pipe Length for this item.
+    // Same fix as the Hanging Structure row: once Pipe Truss is chosen and
+    // a Pipe Length is actually entered, this row must reflect it instead
+    // of the generic default.
+    const isHangingPipeRow = rowLabel === 'hanging pipe' || rowLabel === 'hanging pipe (down rod)';
+    if (isHangingPipeRow && item.hangingStructureType === 'PIPE_TRUSS' && item.pipeLength?.trim()) {
+      return `01 No. (${item.pipeLength.trim()})`;
+    }
     return row.quantityPerFan;
   }
 

@@ -169,7 +169,8 @@ export class JeoPdfService {
       } else {
         this.drawTableHeaderRow(doc, ['Items', 'Quantity / Fan'], [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
         for (const row of scope) {
-          this.drawTwoColDataRow(doc, row.item, row.quantityPerFan, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+          const value = this.resolveScopeRowValue(row, jeo);
+          this.drawTwoColDataRow(doc, row.item, value, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
         }
       }
 
@@ -384,6 +385,35 @@ export class JeoPdfService {
     const raw = item.product.technicalSpec;
     if (!raw || typeof raw !== 'object') return undefined;
     return raw as ProductTechnicalSpec;
+  }
+
+  // Bug fix: the "Standard Scope of Supply Includes" table (per item, drawn
+  // above) previously printed the seeded technicalSpec.scopeOfSupply values
+  // verbatim — e.g. "Hanging Pipe: 01 No. (2 ft length)", "Hanging
+  // Structure: Customer to confirm" — even when this specific JEO's actual
+  // hanging structure/pipe length (jeo.hangingStructureType/jeo.pipeLength,
+  // entered on the Generate JEO form and already shown correctly in the
+  // separate SCOPE OF WORK block of the cover letter above) said otherwise.
+  // Mirrors quotation-pdf.service.ts's resolveScopeRowValue() — same fix,
+  // same two row labels — except the source of truth here is the JEO-level
+  // fields (this document has no per-item hanging structure/pipe length;
+  // see JeoPdfInput's own comment on those fields), not a per-item one.
+  private resolveScopeRowValue(row: { item: string; quantityPerFan: string }, jeo: JeoPdfInput): string {
+    const rowLabel = row.item.trim().toLowerCase();
+    const isHangingStructureRow = rowLabel === 'hanging structure';
+    if (isHangingStructureRow && jeo.hangingStructureType) {
+      const structureLabel = HANGING_STRUCTURE_LABELS[jeo.hangingStructureType];
+      const pipeNote =
+        jeo.hangingStructureType === 'PIPE_TRUSS' && jeo.pipeLength?.trim()
+          ? `, Pipe Length: ${jeo.pipeLength.trim()}`
+          : '';
+      return `${structureLabel}${pipeNote}`;
+    }
+    const isHangingPipeRow = rowLabel === 'hanging pipe' || rowLabel === 'hanging pipe (down rod)';
+    if (isHangingPipeRow && jeo.hangingStructureType === 'PIPE_TRUSS' && jeo.pipeLength?.trim()) {
+      return `01 No. (${jeo.pipeLength.trim()})`;
+    }
+    return row.quantityPerFan;
   }
 
   private buildSpecRows(item: JeoPdfItem): SpecRow[] {
