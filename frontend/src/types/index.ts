@@ -479,6 +479,13 @@ export interface LeadSiteVisitPhoto {
   originalName: string;
   mimeType: string;
   sizeBytes: number;
+  // Anti-fraud GPS capture — required on every upload (see
+  // uploadSiteVisitPhotos's own comment in api/leads.ts), never undefined
+  // for a real photo row. accuracyMeters can still be null on some
+  // devices/browsers even though lat/lng are always present.
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
   createdAt: string;
 }
 

@@ -245,10 +245,22 @@ export async function addLeadAiCallLog(id: string, payload: LeadAiCallLogPayload
 }
 
 // Site Visit photo evidence (SiteVisitOutcomeDialog) — see
-// LeadSiteVisitPhoto's own comment in types/index.ts.
-export async function uploadSiteVisitPhotos(id: string, files: File[]) {
+// LeadSiteVisitPhoto's own comment in types/index.ts. `location` is
+// required, not optional — SiteVisitOutcomeDialog always obtains a fresh
+// GPS fix before calling this (and refuses to upload if it can't), and the
+// backend independently rejects the request if these fields are missing.
+export async function uploadSiteVisitPhotos(
+  id: string,
+  files: File[],
+  location: { latitude: number; longitude: number; accuracyMeters?: number },
+) {
   const formData = new FormData();
   for (const file of files) formData.append("files", file);
+  formData.append("latitude", String(location.latitude));
+  formData.append("longitude", String(location.longitude));
+  if (location.accuracyMeters != null) {
+    formData.append("accuracyMeters", String(location.accuracyMeters));
+  }
   const res = await api.post<LeadSiteVisitPhoto[]>(`/api/v1/leads/${id}/site-visit-photos`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });

@@ -631,6 +631,21 @@ model LeadSiteVisitPhoto {
   mimeType     String
   sizeBytes    Int
   uploadedBy   String?
+  // Anti-fraud (user's own request: "i dont want them to fraud me they
+  // visited") — the phone's own GPS fix, captured fresh via the browser
+  // Geolocation API at the moment of upload (LeadsController requires
+  // both fields on every upload; see uploadSiteVisitPhotos's DTO). This is
+  // a deterrent, not forensic proof — a rooted/jailbroken phone with a
+  // mock-location app can still fake it — but it stops the common case of
+  // logging an outcome without actually being on site. Deliberately NOT
+  // cross-checked against the lead's address (that needs geocoding the
+  // lead's text address, a separate paid-API addition, not built here);
+  // sales managers eyeball the map pin themselves via the gallery's link.
+  latitude     Float
+  longitude    Float
+  // Nullable — the Geolocation API can omit accuracy on some
+  // devices/browsers even though it always returns lat/lng.
+  accuracyMeters Float?
   createdAt    DateTime @default(now())
 
   @@index([leadId])

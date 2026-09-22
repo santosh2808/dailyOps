@@ -18,6 +18,7 @@ import SiteVisitPhotoGallery from "./SiteVisitPhotoGallery";
 import { uploadSiteVisitPhotos } from "@/api/leads";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
+import { captureCurrentLocation } from "@/lib/geolocation";
 import { todayDateInputValue, isPastDateInputValue } from "@/lib/date";
 import type { Lead, LeadSiteVisitPhoto } from "@/types";
 
@@ -96,7 +97,25 @@ export default function SiteVisitOutcomeDialog({
     const files = Array.from(fileList);
     setUploading(true);
     try {
-      const uploaded = await uploadSiteVisitPhotos(lead.id, files);
+      // Anti-fraud (user's own request: "i dont want them to fraud me they
+      // visited") — a fresh GPS fix is required before any upload is even
+      // attempted. If the rep denies location access, or the device can't
+      // get a fix, the upload never happens; the backend independently
+      // rejects the request too if location is somehow missing, so this
+      // isn't just a frontend nicety.
+      let location;
+      try {
+        location = await captureCurrentLocation();
+      } catch (locationErr) {
+        toast.error(
+          locationErr instanceof Error
+            ? locationErr.message
+            : "Could not get your location. Please try again.",
+        );
+        return;
+      }
+
+      const uploaded = await uploadSiteVisitPhotos(lead.id, files, location);
       const next = [...photos, ...uploaded];
       setPhotos(next);
       onPhotosChanged?.(next);
@@ -220,7 +239,9 @@ export default function SiteVisitOutcomeDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Photos help the factory build to what's actually on site. No minimum required.
+            Photos help the factory build to what's actually on site. No minimum required. Your
+            device will ask for location access — this is required to confirm the photo was
+            taken on site.
           </p>
           <SiteVisitPhotoGallery
             leadId={lead.id}

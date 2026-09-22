@@ -186,9 +186,23 @@ export class LeadsController {
   uploadSiteVisitPhotos(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    // latitude/longitude/accuracyMeters arrive as plain multipart text
+    // fields alongside the files (see SiteVisitOutcomeDialog.tsx's
+    // FormData) — multer/Nest populate these onto @Body() the same as any
+    // other form field, still as strings, hence the Number(...) parsing
+    // below rather than a class-validator DTO.
+    @Body() body: { latitude?: string; longitude?: string; accuracyMeters?: string },
     @Req() req: any,
   ) {
-    return this.leadsService.uploadSiteVisitPhotos(id, files, req.user?.name);
+    const latitude = body?.latitude !== undefined ? Number(body.latitude) : undefined;
+    const longitude = body?.longitude !== undefined ? Number(body.longitude) : undefined;
+    const accuracyMeters =
+      body?.accuracyMeters !== undefined && body.accuracyMeters !== '' ? Number(body.accuracyMeters) : undefined;
+    return this.leadsService.uploadSiteVisitPhotos(id, files, req.user?.name, {
+      latitude,
+      longitude,
+      accuracyMeters,
+    });
   }
 
   // Streams the raw image bytes for one photo — an authenticated route, not

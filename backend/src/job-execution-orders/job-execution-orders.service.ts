@@ -62,7 +62,16 @@ const JEO_DETAIL_INCLUDE = {
         select: {
           id: true,
           siteVisitPhotos: {
-            select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+            select: {
+              id: true,
+              originalName: true,
+              mimeType: true,
+              sizeBytes: true,
+              latitude: true,
+              longitude: true,
+              accuracyMeters: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'asc' },
           },
         },

@@ -204,7 +204,16 @@ const LEAD_DETAIL_INCLUDE = {
   // only (never the on-disk fileName; the frontend fetches bytes via the
   // dedicated streaming endpoint below, keyed by id, not by filename).
   siteVisitPhotos: {
-    select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+    select: {
+      id: true,
+      originalName: true,
+      mimeType: true,
+      sizeBytes: true,
+      latitude: true,
+      longitude: true,
+      accuracyMeters: true,
+      createdAt: true,
+    },
     orderBy: { createdAt: 'asc' },
   },
 } satisfies Prisma.LeadInclude;
@@ -1476,10 +1485,38 @@ export class LeadsService {
 
   private static readonly MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 
-  async uploadSiteVisitPhotos(id: string, files: Express.Multer.File[], actorName?: string) {
+  // Anti-fraud (user's own request: "i dont want them to fraud me they
+  // visited") — latitude/longitude are required, not optional, on every
+  // upload. This is a server-side gate, not just a frontend nicety: the
+  // frontend already refuses to call this endpoint without a fresh GPS fix
+  // (see SiteVisitOutcomeDialog.tsx), but enforcing it again here means a
+  // request built by hand (bypassing the UI) can't skip location either.
+  // See LeadSiteVisitPhoto's own schema comment for the honest limits of
+  // what this does and doesn't prove.
+  async uploadSiteVisitPhotos(
+    id: string,
+    files: Express.Multer.File[],
+    actorName?: string,
+    location?: { latitude?: number; longitude?: number; accuracyMeters?: number },
+  ) {
     await this.findOne(id);
     if (!files || files.length === 0) {
       throw new BadRequestException('No photos uploaded. Attach at least one file.');
+    }
+    const { latitude, longitude, accuracyMeters } = location ?? {};
+    if (
+      latitude == null ||
+      longitude == null ||
+      Number.isNaN(latitude) ||
+      Number.isNaN(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      throw new BadRequestException(
+        'Location is required to upload site photos. Please allow location access on your device and try again.',
+      );
     }
 
     await fs.mkdir(LeadsService.SITE_VISIT_PHOTOS_DIR, { recursive: true });
@@ -1513,8 +1550,20 @@ export class LeadsService {
           mimeType: file.mimetype,
           sizeBytes: file.size,
           uploadedBy: actorName,
+          latitude,
+          longitude,
+          accuracyMeters: accuracyMeters ?? null,
         },
-        select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+        select: {
+          id: true,
+          originalName: true,
+          mimeType: true,
+          sizeBytes: true,
+          latitude: true,
+          longitude: true,
+          accuracyMeters: true,
+          createdAt: true,
+        },
       });
       created.push(photo);
     }

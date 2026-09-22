@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, MapPin, Trash2 } from "lucide-react";
 import { deleteSiteVisitPhoto, getSiteVisitPhotoBlobUrl } from "@/api/leads";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -123,6 +123,26 @@ export default function SiteVisitPhotoGallery({
                 )}
               </button>
             )}
+            {/* Anti-fraud GPS pin (see LeadSiteVisitPhoto's schema comment)
+                — every photo has one, since the upload endpoint rejects
+                requests without location. Opens Google Maps in a new tab so
+                whoever's reviewing can eyeball whether the pin actually
+                lands near the customer's site; the title shows the GPS
+                accuracy reading itself, since a 2000m-accuracy fix is much
+                less trustworthy than a 10m one. */}
+            <a
+              href={`https://www.google.com/maps?q=${photo.latitude},${photo.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              title={
+                photo.accuracyMeters != null
+                  ? `Captured location (accuracy: ~${Math.round(photo.accuracyMeters)}m) — open in Maps`
+                  : "Captured location — open in Maps"
+              }
+              className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-white"
+            >
+              <MapPin className="h-3 w-3" />
+            </a>
           </div>
         );
       })}
