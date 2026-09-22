@@ -18,6 +18,7 @@ import SiteVisitPhotoGallery from "./SiteVisitPhotoGallery";
 import SiteVisitCameraCapture from "./SiteVisitCameraCapture";
 import { useOfflineSiteVisitPhotoQueue } from "@/context/OfflineSiteVisitPhotoQueueContext";
 import { todayDateInputValue, isPastDateInputValue } from "@/lib/date";
+import { getErrorMessage } from "@/lib/errors";
 import type { Lead, LeadSiteVisitPhoto } from "@/types";
 
 export type SiteVisitOutcome = "READY_TO_QUOTE" | "NEEDS_ANOTHER_VISIT" | "NOT_VIABLE";
@@ -147,6 +148,19 @@ export default function SiteVisitOutcomeDialog({
 
   async function handleConfirm() {
     setError("");
+    // Anti-fraud (user's own request: "i think site visit photos mandatory
+    // if they go for site visit") — required for every outcome, not just
+    // the ones that move the lead out of Site Visit status, since logging
+    // ANY outcome here is itself the claim "I visited." A photo still
+    // uploading in the offline queue (no signal yet) counts — the rep did
+    // take it, see OfflineSiteVisitPhotoQueueContext's own comment on why
+    // that shouldn't block them. The backend enforces this independently
+    // too (see updateStatus()) for the outcomes that do change status, so
+    // this can't be skipped via the generic Change Status dropdown either.
+    if (photos.length === 0 && pendingPhotos.length === 0) {
+      setError("Add at least one site photo before logging this outcome.");
+      return;
+    }
     // Same pre-check ChangeStatusDialog already does for a direct Qualified
     // change — surfaced immediately here too, rather than only after a
     // round trip to the backend, which enforces this same rule.
@@ -168,8 +182,8 @@ export default function SiteVisitOutcomeDialog({
     try {
       await onConfirm(outcome, notes.trim(), nextVisitDate || undefined);
       onOpenChange(false);
-    } catch {
-      setError("Could not log this site visit outcome. Please try again.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not log this site visit outcome. Please try again."));
     } finally {
       setSubmitting(false);
     }

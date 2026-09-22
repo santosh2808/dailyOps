@@ -806,6 +806,27 @@ export class LeadsService {
       );
     }
 
+    // Anti-fraud (user's own request: "i think site visit photos mandatory
+    // if they go for site visit") — server-side twin of
+    // SiteVisitOutcomeDialog.tsx's own check, so this can't be skipped by
+    // going through the generic Change Status dropdown (or a direct API
+    // call) instead of that dialog. Only gates leaving SITE_VISIT for a
+    // DIFFERENT status (Qualified via Ready to Quote, Lost via Not
+    // Viable) — "Needs Another Visit" never calls this endpoint at all
+    // (see LeadDetails.handleSiteVisitOutcomeConfirm(), which only calls
+    // updateLead() for that outcome), so there's nothing to gate there.
+    // Checks the lead's photos cumulatively, not per-visit-session, since
+    // LeadSiteVisitPhoto has no separate visit-session concept.
+    if (
+      dto.status !== existing.status &&
+      existing.status === 'SITE_VISIT' &&
+      (!existing.siteVisitPhotos || existing.siteVisitPhotos.length === 0)
+    ) {
+      throw new BadRequestException(
+        'Add at least one site visit photo before moving this lead out of Site Visit status.',
+      );
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       // This endpoint only ever updates the status field. Setting status to
       // WON does not create a Customer — that only happens when the user
