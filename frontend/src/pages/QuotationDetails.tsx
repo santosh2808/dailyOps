@@ -335,9 +335,18 @@ export default function QuotationDetails() {
                         Change Status
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/quotations/${quotation.id}/edit`)}>
-                      Edit
-                    </DropdownMenuItem>
+                    {/* Bug fix: once ACCEPTED, editing is hard-rejected by
+                        the backend (QuotationsService.update()) — a Sales
+                        Order freezes its totals from this quotation's live
+                        data, not the frozen sentSnapshot the customer
+                        accepted, so post-acceptance edits could silently
+                        diverge from what was actually agreed to. Hidden
+                        here rather than letting staff hit that error. */}
+                    {quotation.status !== "ACCEPTED" && (
+                      <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/quotations/${quotation.id}/edit`)}>
+                        Edit
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem icon={Trash2} destructive onSelect={() => setDeleteOpen(true)}>
                       Delete

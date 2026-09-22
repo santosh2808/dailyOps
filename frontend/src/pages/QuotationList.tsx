@@ -331,14 +331,23 @@ export default function QuotationList() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit quotation"
-                          onClick={() => navigate(`/quotations/${quotation.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        {/* Bug fix: once ACCEPTED, the backend rejects
+                            edits (QuotationsService.update()) — a Sales
+                            Order freezes its totals from this quotation's
+                            live data, so a post-acceptance edit could
+                            silently diverge from what the customer actually
+                            agreed to. Hidden here rather than letting staff
+                            hit that error from the list view. */}
+                        {quotation.status !== "ACCEPTED" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Edit quotation"
+                            onClick={() => navigate(`/quotations/${quotation.id}/edit`)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

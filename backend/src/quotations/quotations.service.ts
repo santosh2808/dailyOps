@@ -450,6 +450,23 @@ export class QuotationsService {
   async update(id: string, dto: UpdateQuotationDto) {
     const existing = await this.findOne(id);
 
+    // Bug fix: once a quotation is ACCEPTED, it can no longer be edited.
+    // Reason: SalesOrdersService.freezeToQuotationTotalsIfUnmodified()
+    // freezes the Sales Order's totals by comparing against this
+    // Quotation's LIVE item data at the moment the Sales Order is created —
+    // not the frozen sentSnapshot the customer actually saw and accepted.
+    // "Create Sales Order" is a separate, later manual step (see
+    // performAccept()'s comment), so without this lock staff could edit
+    // prices/items here after the customer's acceptance and the Sales
+    // Order would silently freeze those edited numbers as if the customer
+    // had agreed to them. Same hard-lock rule as updateStatus() above —
+    // no role (including Administrator) bypasses it.
+    if (existing.status === 'ACCEPTED') {
+      throw new BadRequestException(
+        'This quotation has already been accepted and can no longer be edited.',
+      );
+    }
+
     // Recompute totals whenever items, gstPercent, installationCharge, or
     // transportationCharge are touched. If none of those are supplied, keep
     // the existing stored totals untouched. Note: if only gstPercent (say)
