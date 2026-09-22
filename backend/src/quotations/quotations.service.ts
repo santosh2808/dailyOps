@@ -549,7 +549,26 @@ export class QuotationsService {
   async updateStatus(id: string, dto: UpdateQuotationStatusDto, actor: QuotationActor = {}) {
     const existing = await this.findOne(id);
 
-    if (dto.status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
+    // Bug fix: once a quotation is ACCEPTED, its status can no longer be
+    // manually changed — accepting already ran the full cascade
+    // (performAccept() below created a Sales Order, which itself is the
+    // start of PI/JEO downstream). Reverting status here would silently
+    // orphan that Sales Order rather than actually undo it, and re-picking
+    // ACCEPTED again is a same-status no-op with no cascade guard. This is
+    // a hard lock, same as the Lead Phase 1 boundary above it — no role
+    // (including Administrator) bypasses it, since there is no code path
+    // that unwinds the Sales Order it already created.
+    if (existing.status === 'ACCEPTED') {
+      throw new BadRequestException(
+        'This quotation has already been accepted and a Sales Order has been created from it. Its status can no longer be changed.',
+      );
+    }
+
+    // existing.status is guaranteed not to be 'ACCEPTED' here — the guard
+    // above already returned for that case — so reaching ACCEPTED below is
+    // always a genuine DRAFT/READY/SENT/VIEWED/REJECTED/EXPIRED -> ACCEPTED
+    // transition, never a re-save of an already-accepted quotation.
+    if (dto.status === 'ACCEPTED') {
       // Lead Management Phase 1 boundary (requirement #14): Customer
       // Acceptance / Sales Order / PI / JEO are Phase 2. A quotation that
       // was generated straight from a Lead (no customerId yet — that only
@@ -572,25 +591,23 @@ export class QuotationsService {
     // customer deciding via the public link, or the ACCEPTED branch above)
     // must not leave stale, contradictory data behind. Two related risks:
     //
-    // 1. Leaving a prior ACCEPTED/REJECTED decision's fields in place after
-    //    moving to a different status — a quotation could otherwise end up
-    //    simultaneously "accepted on 1st" and "rejected on 3rd" once staff
-    //    later force it back to ACCEPTED/REJECTED again, or just carry
-    //    stale rejectionReason text around forever.
+    // 1. Leaving a prior REJECTED decision's fields in place after moving
+    //    to a different status — a quotation could otherwise carry stale
+    //    rejectionReason text around forever once staff later force it back
+    //    to REJECTED again. (ACCEPTED can no longer be left this way at
+    //    all — see the hard lock above — so only REJECTED needs this.)
     // 2. Leaving the OLD public link valid after this change — a customer
     //    who already decided (or whose link expired) could reopen that
     //    exact same link later and make a second, conflicting decision,
     //    since the token itself was never invalidated.
     //
     // Fix: whenever staff move a quotation to DRAFT/READY/EXPIRED, or move
-    // it AWAY from ACCEPTED/REJECTED to anything else, clear any prior
-    // decision fields and null out the public link entirely. Staff use
-    // Send Quotation again afterward, which issues a fresh token and a
-    // fresh sentSnapshot together — never a bare reactivation of the old
-    // one.
+    // it AWAY from REJECTED to anything else, clear any prior decision
+    // fields and null out the public link entirely. Staff use Send
+    // Quotation again afterward, which issues a fresh token and a fresh
+    // sentSnapshot together — never a bare reactivation of the old one.
     const linkInvalidatingTargets: string[] = ['DRAFT', 'READY', 'EXPIRED'];
-    const leavingADecision =
-      (existing.status === 'ACCEPTED' || existing.status === 'REJECTED') && dto.status !== existing.status;
+    const leavingADecision = existing.status === 'REJECTED' && dto.status !== existing.status;
     const shouldResetLink = linkInvalidatingTargets.includes(dto.status) || leavingADecision;
 
     const quotation = await this.prisma.quotation.update({

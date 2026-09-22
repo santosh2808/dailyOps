@@ -325,9 +325,16 @@ export default function QuotationDetails() {
                         Share via WhatsApp
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
-                      Change Status
-                    </DropdownMenuItem>
+                    {/* Bug fix: once ACCEPTED, a Sales Order has already
+                        been created from this quotation (performAccept()) —
+                        the backend now hard-rejects any further manual
+                        status change on it, so the option is hidden here
+                        too rather than letting staff hit that error. */}
+                    {quotation.status !== "ACCEPTED" && (
+                      <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                        Change Status
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/quotations/${quotation.id}/edit`)}>
                       Edit
                     </DropdownMenuItem>
