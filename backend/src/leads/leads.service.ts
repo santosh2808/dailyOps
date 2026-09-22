@@ -257,6 +257,60 @@ export class LeadsService {
     }
   }
 
+  // "Can we also have to send to customer for site visit that visit has
+  // planned for particular date" — the user's own request, right after
+  // confirming the internal reminder (LeadFollowUpReminderService) only
+  // ever reaches the assigned salesperson, never the customer. This is the
+  // customer-facing counterpart: an immediate confirmation the moment a
+  // lead actually moves into Site Visit (not the morning-of reminder that
+  // service sends — see updateStatus() below for exactly when this fires),
+  // sent to the customer's own email/phone rather than the assigned
+  // user's. Same independent, best-effort, never-throws shape as
+  // notifyLeadAssigned() above.
+  private async notifySiteVisitScheduled(lead: {
+    id: string;
+    leadNumber: string;
+    companyName: string;
+    contactPerson: string;
+    email: string | null;
+    phone: string;
+    nextFollowUp: Date | null;
+    reminderNote: string | null;
+  }): Promise<void> {
+    if (!lead.nextFollowUp) return;
+    const visitDate = lead.nextFollowUp.toLocaleDateString();
+
+    if (lead.email) {
+      await this.mailerService.send({
+        templateKey: 'SITE_VISIT_SCHEDULED',
+        fallbackSubject: `Your site visit is confirmed — ${lead.leadNumber}`,
+        fallbackBodyHtml:
+          '<p>Hi {{contactPerson}},</p>' +
+          '<p>Your site visit for {{companyName}} has been scheduled for {{visitDate}}.</p>' +
+          '<p>{{reminderNote}}</p>' +
+          '<p>If this date does not work for you, please contact us to reschedule.</p>',
+        vars: {
+          contactPerson: lead.contactPerson,
+          companyName: lead.companyName,
+          visitDate,
+          reminderNote: lead.reminderNote ?? '',
+        },
+        to: lead.email,
+        link: { module: 'Lead', leadId: lead.id },
+      });
+    }
+
+    if (lead.phone) {
+      const templateName =
+        process.env.INTERAKT_SITE_VISIT_SCHEDULED_TEMPLATE_NAME?.trim() || 'site_visit_scheduled';
+      await this.whatsAppService.sendTemplateMessage({
+        phone: lead.phone,
+        templateName,
+        bodyValues: [lead.contactPerson, lead.companyName, visitDate],
+      });
+    }
+  }
+
   // D.O.T. AI Lead Assistant Phase 1 — language default resolution. Used by
   // create() only. An explicit preferredLanguage on the DTO always wins
   // (languageSource MANUAL — a human, not the state map, chose it); with
@@ -702,7 +756,7 @@ export class LeadsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       // This endpoint only ever updates the status field. Setting status to
       // WON does not create a Customer — that only happens when the user
       // explicitly calls convertToCustomer() via POST /:id/convert below.
@@ -733,6 +787,23 @@ export class LeadsService {
 
       return updated;
     });
+
+    // Customer-facing Site Visit confirmation — fires on any transition
+    // *into* Site Visit (not just the ScheduleFollowUpDialog "mark as Site
+    // Visit" path, so the generic Change Status dropdown triggers it too),
+    // and only when there's an actual date to confirm.
+    // ScheduleFollowUpDialog always sets nextFollowUp (via updateLead())
+    // before calling this endpoint, so by the time updateStatus() reads it
+    // back here it's already the new visit date — see
+    // LeadDetails.handleScheduleFollowUpConfirm(). If a caller moves a lead
+    // into Site Visit without a date set first (e.g. the generic dropdown
+    // on a lead with no nextFollowUp), there is nothing to confirm and this
+    // silently does not send, rather than guessing or sending a stale date.
+    if (dto.status === 'SITE_VISIT' && existing.status !== 'SITE_VISIT' && updated.nextFollowUp) {
+      await this.notifySiteVisitScheduled(updated);
+    }
+
+    return updated;
   }
 
   async remove(id: string) {

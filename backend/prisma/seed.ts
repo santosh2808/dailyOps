@@ -557,6 +557,20 @@ async function main() {
         '<p>Contact: {{contactPerson}} — {{phone}}</p>' +
         '<p>{{reminderNote}}</p>',
     },
+    // Customer-facing counterpart to LEAD_FOLLOWUP_REMINDER above — sent to
+    // the customer themselves (LeadsService.notifySiteVisitScheduled(), via
+    // updateStatus()) the moment a lead moves into the Site Visit stage
+    // with a date set, not on a daily schedule.
+    {
+      key: 'SITE_VISIT_SCHEDULED',
+      name: 'Site Visit Scheduled (Customer)',
+      subject: 'Your site visit is confirmed — {{leadNumber}}',
+      bodyHtml:
+        '<p>Hi {{contactPerson}},</p>' +
+        '<p>Your site visit for {{companyName}} has been scheduled for {{visitDate}}.</p>' +
+        '<p>{{reminderNote}}</p>' +
+        '<p>If this date does not work for you, please contact us to reschedule.</p>',
+    },
   ];
   for (const template of emailTemplateSeed) {
     await prisma.emailTemplate.upsert({
