@@ -393,6 +393,14 @@ export class LeadsService {
               ...leadData,
               companyName: companyName?.trim() || '',
               leadNumber,
+              // CreateLeadDto requires assignedToUserId (see its own
+              // @IsUUID comment) — every lead made through the normal Create
+              // Lead form already has an owner from the moment it exists, so
+              // it should never sit at the schema's NEW default; same
+              // "assigned means no longer New" rule as update()'s
+              // shouldAutoAdvanceToAssigned, just applied at birth instead
+              // of on a later reassignment.
+              ...(leadData.assignedToUserId ? { status: 'ASSIGNED' as LeadStatus } : {}),
               expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
               nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : undefined,
               products: this.buildProductsCreateInput(products),
@@ -430,6 +438,20 @@ export class LeadsService {
     // overwrites a CUSTOMER/MANUAL/AI_DETECTED source.
     const languageUpdate = this.resolveLanguageOnUpdate(existing, preferredLanguage, leadData.state);
 
+    // Assigning a lead used to be a purely orthogonal action from its
+    // status — a lead could sit at NEW indefinitely even with an owner,
+    // which is exactly the gap the user flagged: "Change Status" kept
+    // offering New, and the Lead Progress tracker (getPipelineTimeline())
+    // never showed Assigned as reached. Only bump status the one direction
+    // that actually means something (NEW -> ASSIGNED, on first assignment);
+    // reassigning a lead that's already progressed further, or unassigning
+    // one, never touches status — those are separate, deliberate actions.
+    const shouldAutoAdvanceToAssigned =
+      existing.status === 'NEW' &&
+      assignedToUserId !== undefined &&
+      !!assignedToUserId &&
+      assignedToUserId !== existing.assignedToUserId;
+
     const updated = await this.prisma.$transaction(async (tx) => {
       if (products) {
         await tx.leadProduct.deleteMany({ where: { leadId: id } });
@@ -440,6 +462,7 @@ export class LeadsService {
         data: {
           ...leadData,
           ...(assignedToUserId !== undefined ? { assignedToUserId } : {}),
+          ...(shouldAutoAdvanceToAssigned ? { status: 'ASSIGNED' as LeadStatus } : {}),
           ...(expectedCloseDate !== undefined
             ? { expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null }
             : {}),
@@ -480,6 +503,30 @@ export class LeadsService {
           `Reassigned from ${previousUserName || 'Unassigned'} to ${newUserName || 'Unassigned'}`,
           actorName,
         );
+
+        // Mirrors the status-history bookkeeping updateStatus() does below —
+        // needed here too so getPipelineTimeline()'s "reached this status"
+        // check (which reads LeadStatusHistory, not just the current
+        // status) and Lead Details' Status History tab both see this
+        // transition, not just the raw column flipping underneath them.
+        if (shouldAutoAdvanceToAssigned) {
+          await tx.leadStatusHistory.create({
+            data: {
+              leadId: id,
+              oldStatus: existing.status,
+              newStatus: 'ASSIGNED',
+              remarks: 'Auto-advanced on assignment',
+              changedBy: actorName,
+            },
+          });
+          await this.logHistory(
+            tx,
+            id,
+            'STATUS_CHANGED',
+            `Status changed from ${existing.status} to ASSIGNED`,
+            actorName,
+          );
+        }
       }
 
       // Follow-up scheduling gets its own dedicated Timeline entry
@@ -767,6 +814,11 @@ export class LeadsService {
         sourceSubjectCode: input.subjectCode,
         webFormIntakeId: input.webFormIntakeId,
         assignedToUserId: input.assignedToUserId ?? undefined,
+        // Same rule as create()/update() above: a route with a configured
+        // assignedUserId hands this lead an owner immediately, so it starts
+        // at ASSIGNED rather than NEW. A route with no assignedUserId still
+        // creates a genuinely unassigned NEW lead, same as before.
+        ...(input.assignedToUserId ? { status: LeadStatus.ASSIGNED } : {}),
         products:
           input.productId
             ? {

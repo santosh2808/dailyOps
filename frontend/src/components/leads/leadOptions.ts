@@ -73,11 +73,16 @@ export interface NextAction {
 export function nextActionFor(lead: Lead): NextAction {
   switch (lead.status) {
     case "NEW":
-      // A lead can already have an assignee while still sitting at status
-      // NEW — assigning someone doesn't auto-advance the status, that's a
-      // separate manual step. So don't keep telling the user to "assign"
-      // a lead that already has an owner; offer to change the owner
-      // instead (still routes to the same Edit page either way).
+      // Assigning a lead now auto-advances status to ASSIGNED (see
+      // LeadsService's shouldAutoAdvanceToAssigned), so a lead only reaches
+      // this branch with an assignee already set for data created before
+      // that change shipped, or a web-form lead whose intake route has an
+      // assignedUserId configured on it directly (createFromWebFormIntake
+      // sets status the same way, so this is likewise now rare) — kept as a
+      // fallback rather than assumed unreachable. Don't keep telling the
+      // user to "assign" a lead that already has an owner in that case;
+      // offer to change the owner instead (still routes to the same Edit
+      // page either way).
       return lead.assignedToUserId
         ? { label: "Change Sales Person", hint: "Reassign this lead, or update the status to Contacted." }
         : { label: "Assign Sales Person", hint: "Pick who owns this lead to move it forward." };

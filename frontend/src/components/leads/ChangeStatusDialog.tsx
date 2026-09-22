@@ -74,6 +74,15 @@ export default function ChangeStatusDialog({
 
   if (!lead) return null;
 
+  // Once a lead has moved past New (which now includes the moment it gets
+  // assigned — see LeadsService's shouldAutoAdvanceToAssigned), offering
+  // "New" as a target here doesn't make sense: there's no "unassign and go
+  // back to New" workflow anywhere else in the app, so leaving it selectable
+  // just let staff put an already-owned lead back into a state that reads
+  // as unclaimed. Still shown while the lead genuinely is New (nothing to
+  // filter out yet).
+  const statusOptions = STATUS_OPTIONS.filter((s) => s.value !== "NEW" || lead.status === "NEW");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onClose={() => onOpenChange(false)}>
@@ -93,7 +102,7 @@ export default function ChangeStatusDialog({
             value={status}
             onChange={(e) => setStatus(e.target.value as LeadStatus)}
           >
-            {STATUS_OPTIONS.map((s) => (
+            {statusOptions.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>
