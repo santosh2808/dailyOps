@@ -121,18 +121,16 @@ export default function ChangeQuotationStatusDialog({
 
   if (!quotation) return null;
 
-  // Lead Management Phase 1 boundary (requirement #14): a lead-sourced
-  // quotation (no customerId yet) can never reach ACCEPTED — the backend
-  // refuses this transition outright (see QuotationsService.updateStatus()).
-  // Hiding the option here means the user never sees a status they could
-  // pick and then get an error back for.
-  // VIEWED is a customer-triggered transition only (set automatically when
-  // the customer opens the public /quote/:token link) — never offered as a
-  // manual choice here.
-  const statusOptions = (quotation.customerId
-    ? STATUS_OPTIONS
-    : STATUS_OPTIONS.filter((s) => s.value !== "ACCEPTED")
-  ).filter((s) => s.value !== "VIEWED");
+  // Bug fix: ACCEPTED used to be hidden here for a lead-sourced quotation
+  // (no customerId yet) because the backend used to hard-refuse that
+  // transition. It no longer does — a lead-sourced quotation can reach
+  // ACCEPTED the same way the customer's own public accept link always
+  // could; converting the Lead to a Customer only becomes necessary later,
+  // at "Create Sales Order" time (see QuotationsService.updateStatus()).
+  // VIEWED is still a customer-triggered transition only (set automatically
+  // when the customer opens the public /quote/:token link) — never offered
+  // as a manual choice here.
+  const statusOptions = STATUS_OPTIONS.filter((s) => s.value !== "VIEWED");
 
   // Mirrors QuotationsService.updateStatus()'s own rule: moving to
   // DRAFT/READY/EXPIRED, or away from an already-decided ACCEPTED/REJECTED

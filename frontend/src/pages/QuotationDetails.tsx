@@ -224,10 +224,11 @@ export default function QuotationDetails() {
                     row to at most two controls at any width instead of up
                     to six buttons that wrap unpredictably. */}
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  {/* Lead Management Phase 1 boundary (requirement #14): a
-                      lead-sourced quotation (no customerId) can never reach
-                      ACCEPTED — see QuotationsService.updateStatus() — so
-                      the Sales Order button never applies to one. */}
+                  {/* A lead-sourced quotation (no customerId) CAN reach
+                      ACCEPTED now (see QuotationsService.updateStatus()) —
+                      the Sales Order button still only applies once a
+                      Customer exists, via "Convert to Customer" on the
+                      originating Lead. */}
                   {quotation.status === "ACCEPTED" &&
                     quotation.customerId &&
                     (existingSalesOrderId ? (

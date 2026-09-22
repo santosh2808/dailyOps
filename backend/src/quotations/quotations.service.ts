@@ -586,19 +586,17 @@ export class QuotationsService {
     // always a genuine DRAFT/READY/SENT/VIEWED/REJECTED/EXPIRED -> ACCEPTED
     // transition, never a re-save of an already-accepted quotation.
     if (dto.status === 'ACCEPTED') {
-      // Lead Management Phase 1 boundary (requirement #14): Customer
-      // Acceptance / Sales Order / PI / JEO are Phase 2. A quotation that
-      // was generated straight from a Lead (no customerId yet — that only
-      // gets set once the not-yet-built Phase 2 "Convert to Customer" step
-      // runs) can never reach ACCEPTED, so the whole cascade below it stays
-      // unreachable from this workflow. This applies even to
-      // Administrators — it's a phase boundary, not a pricing/approval
-      // rule, so it isn't something any role should be able to bypass.
-      if (!existing.customerId) {
-        throw new BadRequestException(
-          'This quotation is linked to a Lead and has no Customer yet. Customer acceptance and Sales Order creation are part of Phase 2 and are not available yet.',
-        );
-      }
+      // Bug fix: this used to hard-block a lead-sourced quotation
+      // (customerId still null) from ever being marked ACCEPTED here,
+      // requiring "Convert to Customer" first — a leftover from when
+      // accepting used to auto-cascade into a Sales Order (which does need
+      // a customer). That cascade was removed (see performAccept() below);
+      // creating the Sales Order is now its own separate, explicit "Create
+      // Sales Order" step that already requires a customer on its own. The
+      // customer's public accept link (acceptViaPublicLink()) never had
+      // this restriction either, so staff marking ACCEPTED manually inside
+      // DailyOps now matches that: Convert to Customer only becomes
+      // necessary later, at Create Sales Order time.
       await this.assertCanAccept(existing, actor.roles ?? []);
       const { quotation, salesOrder } = await this.performAccept(id, actor.name);
       return { ...quotation, salesOrder };

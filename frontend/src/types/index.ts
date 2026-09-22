@@ -672,8 +672,8 @@ export interface Quotation {
   quotationNumber: string;
   // Lead Management Phase 1 (requirement #8): a Quotation now originates
   // from exactly one of a Customer or a Lead — customerId/customer are
-  // null for a lead-sourced quotation until the not-yet-built Phase 2
-  // "Convert to Customer" step runs.
+  // null for a lead-sourced quotation until "Convert to Customer" is run
+  // on the originating Lead (which backfills it onto the quotation).
   customerId?: string | null;
   customer?: Customer | null;
   leadId?: string | null;

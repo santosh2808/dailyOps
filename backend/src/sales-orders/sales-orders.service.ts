@@ -190,13 +190,12 @@ export class SalesOrdersService {
     if (quotation.status !== 'ACCEPTED') {
       throw new BadRequestException('Sales Orders can only be created from an Accepted Quotation');
     }
-    // Lead Management Phase 1 boundary (requirement #14): QuotationsService
-    // now permits Quotation.customerId to be null (lead-sourced quotations),
-    // but QuotationsService.updateStatus() already refuses to ever move such
-    // a quotation to ACCEPTED — so in practice this can't be null here. This
-    // check exists purely to satisfy TypeScript's narrowed `string | null`
-    // type and as a defensive belt-and-suspenders guard, not because this
-    // path is expected to be reachable.
+    // A lead-sourced quotation (Quotation.customerId null) can now reach
+    // ACCEPTED without ever having a Customer (see
+    // QuotationsService.updateStatus()) — this is the actual, reachable
+    // gate that requires one before a Sales Order can be created: staff run
+    // "Convert to Customer" on the originating Lead first (which backfills
+    // customerId onto the quotation), then this endpoint proceeds normally.
     if (!quotation.customerId) {
       throw new BadRequestException('This Quotation has no Customer linked and cannot be converted to a Sales Order');
     }
