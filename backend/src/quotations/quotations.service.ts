@@ -1601,7 +1601,24 @@ export class QuotationsService {
   }
 
   async remove(id: string, actorName?: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+
+    // Bug fix: once a quotation is ACCEPTED, it can no longer be deleted.
+    // Soft-deleting it (deletedAt) hides it from every list-based surface —
+    // the Quotations list, a Customer's quotation history, Dashboard
+    // revenue/funnel counts — via findOne()'s own convention that only
+    // list endpoints filter deletedAt. A direct lookup (e.g. a Sales
+    // Order's "View Quotation" link) would still resolve it, but the
+    // record would otherwise vanish from every place staff could find or
+    // report on it, even though its Sales Order (and possibly PI/Tax
+    // Invoice/JEO) keeps running downstream referencing it. Same hard
+    // lock as updateStatus()/update() above — no role bypasses it.
+    if (existing.status === 'ACCEPTED') {
+      throw new BadRequestException(
+        'This quotation has already been accepted and can no longer be deleted.',
+      );
+    }
+
     const removed = await this.prisma.quotation.update({
       where: { id },
       data: { deletedAt: new Date() },
