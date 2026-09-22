@@ -122,7 +122,14 @@ export default function SiteVisitOutcomeDialog({
           <Select
             id="site-visit-outcome"
             value={outcome}
-            onChange={(e) => setOutcome(e.target.value as SiteVisitOutcome)}
+            onChange={(e) => {
+              // Same fix as ContactOutcomeDialog: an outcome-specific error
+              // (missing products for Ready to Quote, missing date for
+              // Needs Another Visit) shouldn't linger once the user picks a
+              // different outcome it no longer applies to.
+              setOutcome(e.target.value as SiteVisitOutcome);
+              setError("");
+            }}
           >
             {OUTCOME_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

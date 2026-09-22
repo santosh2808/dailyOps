@@ -124,7 +124,14 @@ export default function ContactOutcomeDialog({
           <Select
             id="contact-outcome"
             value={outcome}
-            onChange={(e) => setOutcome(e.target.value as ContactOutcome)}
+            onChange={(e) => {
+              // BUG FIX: switching outcome (e.g. away from Interested,
+              // after the Next Follow-up-required error above had already
+              // fired) used to leave that stale error on screen even
+              // though it no longer applies to the newly selected outcome.
+              setOutcome(e.target.value as ContactOutcome);
+              setError("");
+            }}
           >
             {OUTCOME_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
