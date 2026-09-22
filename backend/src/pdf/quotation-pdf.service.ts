@@ -657,6 +657,15 @@ export class QuotationPdfService {
 
   // ---- Commercial terms (Annexure-II + part of Annexure-I) ---------------
 
+  // Bug fix: the Installation/Transportation "(Total, all fans)" suffix was
+  // always appended whenever a real charge amount was shown, even for a
+  // single-fan quotation — where "total, all fans" is misleading (there's
+  // nothing being totaled across fans). Only append it once there's
+  // actually more than one fan to total across.
+  private hasMultipleFans(quotation: QuotationPdfInput): boolean {
+    return quotation.items.reduce((sum, item) => sum + item.quantity, 0) > 1;
+  }
+
   private resolveCommercialTerms(quotation: QuotationPdfInput): QuotationCommercialTerms {
     const raw = quotation.commercialTerms;
     const given = raw && typeof raw === 'object' ? (raw as QuotationCommercialTerms) : {};
@@ -709,7 +718,7 @@ export class QuotationPdfService {
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
-              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
               : quotation.transportationCharge === 0
                 ? 'Included'
                 : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
@@ -737,7 +746,7 @@ export class QuotationPdfService {
       value: includesCharges
         ? 'Included'
         : quotation.installationCharge > 0
-          ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
+          ? `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
           : quotation.installationCharge === 0
             ? 'Included'
             : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
@@ -909,7 +918,7 @@ export class QuotationPdfService {
         value: includesCharges
           ? 'Included'
           : quotation.installationCharge > 0
-            ? `${this.formatCurrency(quotation.installationCharge)} (Total, all fans)`
+            ? `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
             : quotation.installationCharge === 0
               ? 'Included'
               : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
@@ -926,7 +935,7 @@ export class QuotationPdfService {
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
-              ? `${this.formatCurrency(quotation.transportationCharge)} (Total, all fans)`
+              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
               : quotation.transportationCharge === 0
                 ? 'Included'
                 : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
