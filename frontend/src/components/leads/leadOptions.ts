@@ -87,7 +87,11 @@ export function nextActionFor(lead: Lead): NextAction {
         ? { label: "Change Sales Person", hint: "Reassign this lead, or update the status to Contacted." }
         : { label: "Assign Sales Person", hint: "Pick who owns this lead to move it forward." };
     case "ASSIGNED":
-      return { label: "Contact Customer", hint: "Reach out, then update the status to Contacted." };
+      // Clicking this now opens ContactOutcomeDialog directly (see
+      // LeadDetails.handleContactOutcomeConfirm) — logging Interested /
+      // Not Interested / Could Not Reach moves the status forward on its
+      // own, no separate manual Change Status trip needed.
+      return { label: "Contact Customer", hint: "Reach out, then log what happened." };
     case "CONTACTED":
       return {
         label: "Schedule Follow-up",

@@ -12,6 +12,7 @@ import ChangeStatusDialog from "@/components/leads/ChangeStatusDialog";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog";
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
+import ContactOutcomeDialog, { type ContactOutcome } from "@/components/leads/ContactOutcomeDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import PipelineTimeline from "@/components/shared/PipelineTimeline";
@@ -20,10 +21,12 @@ import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
 import {
+  addLeadNote,
   convertLeadToCustomer,
   deleteLead,
   getLead,
   getLeadPipelineTimeline,
+  updateLead,
   updateLeadStatus,
 } from "@/api/leads";
 import { generateQuotationFromLead } from "@/api/quotations";
@@ -73,6 +76,7 @@ export default function LeadDetails() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [confirmQuoteOpen, setConfirmQuoteOpen] = useState(false);
+  const [contactOutcomeOpen, setContactOutcomeOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -135,6 +139,50 @@ export default function LeadDetails() {
     await fetchPipelineTimeline();
   }
 
+  // UX fix: "Contact Customer" used to just navigate to the Edit Lead form,
+  // which has no concept of a call outcome — logging what happened and
+  // moving the status forward were two disconnected manual steps (see
+  // ContactOutcomeDialog's comment for the full context). This is the
+  // single place that decides what each outcome actually does:
+  //  - Interested: advance status to Contacted (mirrors the existing
+  //    auto-advance-on-assignment pattern — one meaningful step forward).
+  //  - Not Interested: close the lead out as Lost, same hard-terminal path
+  //    as Change Status, just reached in one click instead of two.
+  //  - Could Not Reach: no status change — this attempt didn't actually
+  //    move the lead's stage — but the note and an optional retry
+  //    reminder are still recorded.
+  // The note is always logged to the Notes/Timeline tab regardless of
+  // outcome, so "what happened on this call" is never buried inside a
+  // status-change remark only.
+  async function handleContactOutcomeConfirm(
+    outcome: ContactOutcome,
+    note: string,
+    nextFollowUp?: string,
+  ) {
+    if (!id) return;
+    const outcomeLabel =
+      outcome === "INTERESTED"
+        ? "Interested"
+        : outcome === "NOT_INTERESTED"
+          ? "Not Interested"
+          : "Could Not Reach";
+    await addLeadNote(id, note ? `Contact attempt — ${outcomeLabel}: ${note}` : `Contact attempt — ${outcomeLabel}`);
+
+    if (outcome === "INTERESTED") {
+      await updateLeadStatus(id, "CONTACTED");
+      if (nextFollowUp) await updateLead(id, { nextFollowUp });
+    } else if (outcome === "NOT_INTERESTED") {
+      await updateLeadStatus(id, "LOST", note || "Not interested");
+    } else if (nextFollowUp) {
+      await updateLead(id, { nextFollowUp });
+    }
+
+    toast.success("Contact outcome logged.");
+    await fetchLead();
+    setHistoryRefreshKey((k) => k + 1);
+    await fetchPipelineTimeline();
+  }
+
   async function handleDeleteConfirm() {
     if (!id) return;
     await deleteLead(id);
@@ -189,12 +237,10 @@ export default function LeadDetails() {
       if (latestQuotation) navigate(`/quotations/${latestQuotation.id}`);
     } else if (nextAction.label === "Convert to Customer") {
       setConvertOpen(true);
-    } else if (
-      nextAction.label === "Assign Sales Person" ||
-      nextAction.label === "Change Sales Person" ||
-      nextAction.label === "Contact Customer"
-    ) {
+    } else if (nextAction.label === "Assign Sales Person" || nextAction.label === "Change Sales Person") {
       navigate(`/leads/${id}/edit`);
+    } else if (nextAction.label === "Contact Customer") {
+      setContactOutcomeOpen(true);
     } else {
       setStatusOpen(true);
     }
@@ -586,6 +632,12 @@ export default function LeadDetails() {
         onOpenChange={setConfirmQuoteOpen}
         lead={lead}
         onConfirm={handleGenerateQuotation}
+      />
+      <ContactOutcomeDialog
+        open={contactOutcomeOpen}
+        onOpenChange={setContactOutcomeOpen}
+        lead={lead}
+        onConfirm={handleContactOutcomeConfirm}
       />
     </div>
   );
