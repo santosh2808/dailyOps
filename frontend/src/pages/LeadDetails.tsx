@@ -243,9 +243,18 @@ export default function LeadDetails() {
                       Convert to Customer
                     </Button>
                   )}
-                  <Button variant="outline" onClick={() => setStatusOpen(true)}>
-                    Change Status
-                  </Button>
+                  {/* WON and LOST are both terminal — the backend already
+                      hard-blocks any status change away from either (see
+                      LeadsService.LEAD_TERMINAL_STATUSES / updateStatus()),
+                      so showing this button there just invited an always-
+                      failing action. There's no "reopen a closed lead" path
+                      anywhere in the app; if a Lost customer comes back,
+                      staff create a fresh Lead instead. */}
+                  {lead.status !== "WON" && lead.status !== "LOST" && (
+                    <Button variant="outline" onClick={() => setStatusOpen(true)}>
+                      Change Status
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => navigate(`/leads/${lead.id}/edit`)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit

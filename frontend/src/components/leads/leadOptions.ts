@@ -138,9 +138,16 @@ export function nextActionFor(lead: Lead): NextAction {
         ? { label: "Deal Won", hint: "This lead has been converted to a Customer." }
         : { label: "Convert to Customer", hint: "Convert this Won lead into a Customer record." };
     case "LOST":
+      // Bug fix: this used to say "change the status to Qualified to
+      // requote them" — a reopen path that hasn't actually worked since
+      // TC-080 made WON/LOST hard-terminal (LeadsService.updateStatus()
+      // rejects any change away from either), and Change Status is no
+      // longer even shown once a lead reaches here. Lost is final, same as
+      // Won; if the customer comes back, that's a new opportunity —
+      // capture it as a new Lead rather than reopening this one.
       return {
         label: "Lead Lost",
-        hint: "If the customer comes back, change the status to Qualified to requote them.",
+        hint: "This lead is closed. If the customer comes back, create a new Lead for them.",
       };
     default:
       return { label: "", hint: "" };
