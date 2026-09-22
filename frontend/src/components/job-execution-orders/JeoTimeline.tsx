@@ -32,47 +32,40 @@ export default function JeoTimeline({ steps, loading }: JeoTimelineProps) {
     return <p className="text-sm text-muted-foreground">No timeline data available.</p>;
   }
 
-  // Bug fix / UX request: was a vertical list, hard to scan at a glance.
-  // Rebuilt as a horizontal stepper — circles connected by a line across the
-  // top, labels/timestamps stacked underneath each circle. Each step has a
-  // fixed width and the row scrolls horizontally (rather than wrapping)
-  // when there isn't enough space for all steps, so the stepper never
-  // collapses into an unreadable wrapped grid on narrower screens.
   return (
-    <div className="overflow-x-auto pb-1">
-      <ol className="flex items-start">
-        {steps.map((step, index) => {
-          const isLast = index === steps.length - 1;
-          const at = formatDateTime(step.at);
-          return (
-            <li key={step.key} className="flex w-28 flex-shrink-0 flex-col items-center">
-              <div className="flex w-full items-center">
-                <span
-                  className={cn(
-                    "z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full",
-                    step.done ? "bg-orange text-white" : "bg-slate-200 text-slate-400"
-                  )}
-                >
-                  {step.done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-2 w-2 fill-current" />}
-                </span>
-                {!isLast && (
-                  <span
-                    className={cn("h-px flex-1", step.done ? "bg-orange/40" : "bg-slate-200")}
-                  />
+    <ol className="space-y-0">
+      {steps.map((step, index) => {
+        const isLast = index === steps.length - 1;
+        const at = formatDateTime(step.at);
+        return (
+          <li key={step.key} className="relative flex gap-3 pb-6 last:pb-0">
+            {!isLast && (
+              <span
+                className={cn(
+                  "absolute left-[11px] top-6 h-full w-px",
+                  step.done ? "bg-orange/40" : "bg-slate-200"
                 )}
-              </div>
-              <div className="mt-2 px-1 text-center">
-                <p className={cn("text-xs font-medium leading-tight", step.done ? "text-slate-900" : "text-muted-foreground")}>
-                  {step.label}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                  {step.done ? at ?? "Completed" : "Not reached yet"}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+              />
+            )}
+            <span
+              className={cn(
+                "z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full",
+                step.done ? "bg-orange text-white" : "bg-slate-200 text-slate-400"
+              )}
+            >
+              {step.done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-2 w-2 fill-current" />}
+            </span>
+            <div className="pt-0.5">
+              <p className={cn("text-sm font-medium", step.done ? "text-slate-900" : "text-muted-foreground")}>
+                {step.label}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {step.done ? at ?? "Completed" : "Not reached yet"}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
