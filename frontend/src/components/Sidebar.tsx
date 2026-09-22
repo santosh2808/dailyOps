@@ -263,7 +263,16 @@ export default function Sidebar() {
       )}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out",
+          // pt/pb-[env(safe-area-inset-*)] — this is a fixed-position panel
+          // that reaches the physical screen edge on mobile (no browser
+          // chrome to absorb it in standalone PWA mode), so it needs to pad
+          // itself around the notch/Dynamic Island and the home-indicator
+          // area rather than let its logo row or last nav item sit under
+          // them. No-ops on desktop/non-notched devices (env() resolves to
+          // 0 there). Requires viewport-fit=cover in index.html's viewport
+          // meta, otherwise env(safe-area-inset-*) is always 0.
+          "fixed inset-y-0 left-0 z-50 flex h-dvh w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out",
+          "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
           "lg:static lg:z-auto lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}

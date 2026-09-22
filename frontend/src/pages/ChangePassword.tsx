@@ -57,7 +57,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-sm border-none shadow-lg">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground">

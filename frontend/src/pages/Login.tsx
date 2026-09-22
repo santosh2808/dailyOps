@@ -2,7 +2,7 @@ import LoginRobot from "@/components/LoginRobot";
 
 export default function Login() {
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       {/* Page header — full SR DailyOps lockup image (icon + wordmark +
           "By Smart Rotamach" caption all baked in), shared across both
           panels below. No separate caption element needed anymore. */}

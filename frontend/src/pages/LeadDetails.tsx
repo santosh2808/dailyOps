@@ -201,7 +201,7 @@ export default function LeadDetails() {
     );
 
   return (
-    <div className="flex h-screen bg-app-grid">
+    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title="Lead Details" />

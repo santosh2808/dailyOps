@@ -67,7 +67,7 @@ function CenteredMessage({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-dvh flex-col bg-slate-50">
       <BrandHeader />
       <div className="flex flex-1 items-center justify-center px-4">
         <Card className="max-w-md text-center">
@@ -158,7 +158,7 @@ export default function PublicQuotation() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="flex min-h-dvh flex-col bg-slate-50">
         <BrandHeader />
         <PageLoader label="Loading your quotation..." />
       </div>
@@ -177,7 +177,7 @@ export default function PublicQuotation() {
 
   if (loadError) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="flex min-h-dvh flex-col bg-slate-50">
         <BrandHeader />
         <div className="flex flex-1 items-center justify-center px-4">
           <Card className="max-w-md text-center">
@@ -215,7 +215,7 @@ export default function PublicQuotation() {
   const isDecided = quotation.status === "ACCEPTED" || quotation.status === "REJECTED";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-dvh bg-slate-50">
       <BrandHeader />
 
       <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">

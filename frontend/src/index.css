@@ -45,6 +45,30 @@ body {
   @apply bg-background text-foreground;
 }
 
+/* Installed-PWA polish — makes the app feel native rather than like a
+   scrollable webpage wrapped in a title bar:
+   - overscroll-behavior-y stops the rubber-band bounce/pull-to-refresh
+     gesture from reaching the browser chrome once you're past the top/
+     bottom of a scroll container (each individual scroll area, e.g. a
+     page's <main>, still scrolls and bounces locally — this only stops
+     that bounce from chaining up to the whole page).
+   - -webkit-tap-highlight-color removes the gray/blue flash Safari/Chrome
+     show on every tap by default; every interactive element here already
+     has its own hover/active state, so the flash is redundant, not
+     accessibility-load-bearing.
+   - text-size-adjust stops iOS Safari auto-enlarging text after a device
+     rotation, which otherwise randomly breaks layouts mid-session. */
+html,
+body {
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Post-login app shell background — flat off-white, replacing the previous
    bg-slate-50 (and the grid-pattern version tried before this) on every
    authenticated page's root wrapper. */

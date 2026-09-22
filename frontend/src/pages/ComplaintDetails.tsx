@@ -193,7 +193,7 @@ export default function ComplaintDetails() {
   const recipientEmail = complaint?.reporterEmail || customer?.email || null;
 
   return (
-    <div className="flex h-screen bg-app-grid">
+    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Bug fix (TC-085): SalesOrderDetails/JobExecutionOrderDetails/
