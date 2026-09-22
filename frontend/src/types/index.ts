@@ -468,6 +468,18 @@ export interface Lead {
     status: LeadStatus;
     createdAt: string;
   }[];
+  // Site Visit photo evidence (SiteVisitOutcomeDialog) — metadata only; the
+  // actual bytes are fetched per-photo via getSiteVisitPhotoBlobUrl() in
+  // api/leads.ts, never embedded here.
+  siteVisitPhotos?: LeadSiteVisitPhoto[];
+}
+
+export interface LeadSiteVisitPhoto {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
 }
 
 // D.O.T. AI Lead Assistant Phase 1 — one row per D.O.T. call attempt
@@ -1041,7 +1053,16 @@ export interface JobExecutionOrder {
   customerId: string;
   customer?: Customer;
   quotationId: string;
-  quotation?: { id: string; quotationNumber: string; status?: QuotationStatus };
+  quotation?: {
+    id: string;
+    quotationNumber: string;
+    status?: QuotationStatus;
+    // Only present for lead-originated quotations (quotation.leadId is
+    // nullable — a JEO from a Customer-originated quotation has no lead at
+    // all, so no site visit ever happened for it). See
+    // JobExecutionOrderDetails.tsx's Site Visit Photos card.
+    lead?: { id: string; siteVisitPhotos: LeadSiteVisitPhoto[] };
+  };
   deliveryDate?: string | null;
   priority: JeoPriority;
   status: JeoStatus;

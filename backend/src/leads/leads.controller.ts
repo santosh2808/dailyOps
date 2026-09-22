@@ -12,10 +12,11 @@ import {
   Req,
   Res,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -171,6 +172,48 @@ export class LeadsController {
   @RequirePermission('Lead', 'View')
   getEmailHistory(@Param('id') id: string) {
     return this.leadsService.getEmailHistory(id);
+  }
+
+  // Site Visit photo evidence — see LeadsService's own comment on why these
+  // exist (SiteVisitOutcomeDialog on the frontend). Upload/delete require
+  // Lead.Edit like every other Lead-mutating route here; the file-streaming
+  // route only requires Lead.View, matching getPipelineTimeline() etc.
+  // above, since it's a read, not a mutation.
+  @Post(':id/site-visit-photos')
+  @RequirePermission('Lead', 'Edit')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('files', 10))
+  uploadSiteVisitPhotos(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Req() req: any,
+  ) {
+    return this.leadsService.uploadSiteVisitPhotos(id, files, req.user?.name);
+  }
+
+  // Streams the raw image bytes for one photo — an authenticated route, not
+  // a static-served directory (this app has no static-asset serving
+  // anywhere else either), so the frontend fetches it as a blob rather than
+  // a bare <img src>. See LeadsService.getSiteVisitPhotoFile()'s comment.
+  @Get(':id/site-visit-photos/:photoId/file')
+  @RequirePermission('Lead', 'View')
+  async getSiteVisitPhotoFile(
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, mimeType, originalName } = await this.leadsService.getSiteVisitPhotoFile(id, photoId);
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `inline; filename="${originalName.replace(/"/g, '')}"`,
+    });
+    res.send(buffer);
+  }
+
+  @Delete(':id/site-visit-photos/:photoId')
+  @RequirePermission('Lead', 'Edit')
+  deleteSiteVisitPhoto(@Param('id') id: string, @Param('photoId') photoId: string) {
+    return this.leadsService.deleteSiteVisitPhoto(id, photoId);
   }
 
   // D.O.T. AI Lead Assistant Phase 1 — internal-only endpoints (existing

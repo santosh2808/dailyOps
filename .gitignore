@@ -28,3 +28,8 @@ backend/prisma/dev.db
 
 # Coverage
 coverage/
+
+# Uploaded user content (Lead Site Visit photos etc.) — LEAD_SITE_VISIT_PHOTOS_DIR
+# defaults to backend/uploads/, see backend/.env.example. Never committed;
+# these live on the server's own disk, not in git.
+backend/uploads/

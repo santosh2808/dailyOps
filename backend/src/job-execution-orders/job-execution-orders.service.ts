@@ -45,7 +45,30 @@ const SORTABLE_FIELDS = [
 // on the Timeline (see getTimeline()).
 const JEO_DETAIL_INCLUDE = {
   customer: true,
-  quotation: { select: { id: true, quotationNumber: true, status: true, createdAt: true } },
+  quotation: {
+    select: {
+      id: true,
+      quotationNumber: true,
+      status: true,
+      createdAt: true,
+      // Site Visit photo evidence (user's own request — "for site it is
+      // better we came photos mandatory so that engineer in factory it is
+      // correct"). Only lead-originated quotations have a lead at all
+      // (quotation.leadId is nullable — see schema.prisma's own comment on
+      // Quotation.leadId/customerId being mutually exclusive at creation),
+      // so this walks quotation -> lead -> siteVisitPhotos rather than a
+      // direct JEO -> Lead FK, which doesn't exist.
+      lead: {
+        select: {
+          id: true,
+          siteVisitPhotos: {
+            select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
+    },
+  },
   salesOrder: {
     include: { items: { include: { product: true } } },
   },

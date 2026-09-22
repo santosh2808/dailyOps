@@ -16,6 +16,9 @@ import {
 } from '@prisma/client';
 import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
+import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
@@ -196,6 +199,13 @@ const LEAD_DETAIL_INCLUDE = {
   reengagedLeads: {
     select: { id: true, leadNumber: true, companyName: true, status: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
+  },
+  // Site Visit photo evidence — id/originalName/mimeType/sizeBytes/createdAt
+  // only (never the on-disk fileName; the frontend fetches bytes via the
+  // dedicated streaming endpoint below, keyed by id, not by filename).
+  siteVisitPhotos: {
+    select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
   },
 } satisfies Prisma.LeadInclude;
 
@@ -1435,6 +1445,120 @@ export class LeadsService {
       },
       orderBy: { sentAt: 'desc' },
     });
+  }
+
+  // Site Visit photo evidence — user's own request: "for site it is better
+  // we came photos mandatory so that engineer in factory it is correct."
+  // No hard-minimum gate was chosen in the end (design confirmed via
+  // AskUserQuestion: local disk storage, no fixed minimum count, scoped to
+  // Site Visit only rather than a general Attachments system) — this just
+  // makes attaching photos easy from SiteVisitOutcomeDialog, and surfaces
+  // them back on Lead Details and on JEO Details (see
+  // job-execution-orders.service.ts) so the factory actually sees them,
+  // not just the sales team.
+  //
+  // Files live on local disk under LEAD_SITE_VISIT_PHOTOS_DIR (defaults to
+  // <backend cwd>/uploads/lead-site-visit-photos — override via env if you
+  // want them somewhere else, e.g. a mounted volume). Only metadata is in
+  // Postgres (LeadSiteVisitPhoto) — same "reference, not the blob"
+  // convention as LeadAiCallLog.recordingRef elsewhere in this schema.
+  private static readonly SITE_VISIT_PHOTOS_DIR =
+    process.env.LEAD_SITE_VISIT_PHOTOS_DIR?.trim() ||
+    join(process.cwd(), 'uploads', 'lead-site-visit-photos');
+
+  private static readonly ALLOWED_PHOTO_MIME_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+  ]);
+
+  private static readonly MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
+
+  async uploadSiteVisitPhotos(id: string, files: Express.Multer.File[], actorName?: string) {
+    await this.findOne(id);
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No photos uploaded. Attach at least one file.');
+    }
+
+    await fs.mkdir(LeadsService.SITE_VISIT_PHOTOS_DIR, { recursive: true });
+
+    const created = [];
+    for (const file of files) {
+      if (!LeadsService.ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
+        throw new BadRequestException(
+          `"${file.originalname}" is not a supported image type (jpg, png, webp, heic only).`,
+        );
+      }
+      if (file.size > LeadsService.MAX_PHOTO_SIZE_BYTES) {
+        throw new BadRequestException(`"${file.originalname}" is larger than the 15MB limit per photo.`);
+      }
+
+      // Generated filename — never derived from the browser-supplied
+      // originalname, so nothing here is exposed to path traversal or
+      // filename-collision issues. Extension kept only for on-disk
+      // readability; the streaming endpoint always sets its own
+      // Content-Type from the stored mimeType, never by sniffing the
+      // extension.
+      const ext = extname(file.originalname).slice(0, 10);
+      const fileName = `${randomUUID()}${ext}`;
+      await fs.writeFile(join(LeadsService.SITE_VISIT_PHOTOS_DIR, fileName), file.buffer);
+
+      const photo = await this.prisma.leadSiteVisitPhoto.create({
+        data: {
+          leadId: id,
+          fileName,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          uploadedBy: actorName,
+        },
+        select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
+      });
+      created.push(photo);
+    }
+
+    return created;
+  }
+
+  // Streams the raw bytes for one photo. Deliberately its own endpoint
+  // rather than a globally static-served directory (see main.ts — this app
+  // has no static-asset serving anywhere else either) so it stays behind
+  // the same JwtAuthGuard/PermissionsGuard as every other Lead route;
+  // LeadDetails.tsx fetches it as an authenticated blob rather than a bare
+  // <img src>, since a plain <img> tag can't carry the Authorization
+  // header this endpoint requires.
+  async getSiteVisitPhotoFile(id: string, photoId: string) {
+    const photo = await this.prisma.leadSiteVisitPhoto.findFirst({
+      where: { id: photoId, leadId: id },
+    });
+    if (!photo) {
+      throw new NotFoundException('Photo not found');
+    }
+    const filePath = join(LeadsService.SITE_VISIT_PHOTOS_DIR, photo.fileName);
+    const buffer = await fs.readFile(filePath);
+    return { buffer, mimeType: photo.mimeType, originalName: photo.originalName };
+  }
+
+  async deleteSiteVisitPhoto(id: string, photoId: string) {
+    const photo = await this.prisma.leadSiteVisitPhoto.findFirst({
+      where: { id: photoId, leadId: id },
+    });
+    if (!photo) {
+      throw new NotFoundException('Photo not found');
+    }
+    await this.prisma.leadSiteVisitPhoto.delete({ where: { id: photoId } });
+    // Best-effort — the DB row (the source of truth for what the app shows)
+    // is already gone at this point regardless of whether the on-disk file
+    // actually existed or could be removed, so a stray file left behind by
+    // a failed unlink is a disk-cleanliness issue, not a correctness one.
+    try {
+      await fs.unlink(join(LeadsService.SITE_VISIT_PHOTOS_DIR, photo.fileName));
+    } catch {
+      // Ignore — see comment above.
+    }
+    return { success: true };
   }
 
   // Quick-glance Lead-stage tracker for Lead Details — shows the Lead's own

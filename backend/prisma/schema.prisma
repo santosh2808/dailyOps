@@ -397,6 +397,8 @@ model Lead {
   updatedAt         DateTime      @updatedAt
   deletedAt         DateTime?
   products          LeadProduct[]
+  // Site Visit photo evidence — see LeadSiteVisitPhoto's own comment.
+  siteVisitPhotos   LeadSiteVisitPhoto[]
 
   // Additive: web-originated Lead traceability (Website Enquiries ->
   // Lead/Complaint refactor). A Lead created from a public form submission
@@ -601,6 +603,35 @@ model LeadStatusHistory {
   remarks   String?
   changedBy String?
   createdAt DateTime    @default(now())
+
+  @@index([leadId])
+}
+
+// Site Visit photo evidence (user's own request: "for site it is better we
+// make photos mandatory so that engineer in factory it is correct") — a
+// rep attaches photos from SiteVisitOutcomeDialog when logging what was
+// found on site, so the person actually building the order (see the JEO
+// detail endpoint, which reads these back through
+// quotation.lead.siteVisitPhotos) isn't working from a text note alone.
+// Files themselves live on local disk (LEAD_SITE_VISIT_PHOTOS_DIR, see
+// leads.service.ts) — only the metadata needed to serve/list/delete them
+// is stored here, same "reference, not the blob" convention already used
+// for LeadAiCallLog's recordingRef. Cascade-deleted with the parent Lead,
+// but leads.service.ts also removes the on-disk file itself when a photo
+// row is deleted, since Postgres cascading a row away doesn't touch disk.
+model LeadSiteVisitPhoto {
+  id           String   @id @default(uuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Generated (uuid-based) on-disk filename — never derived from the
+  // user-supplied original name, so there's no path-traversal or
+  // collision risk from what a browser sends as the filename.
+  fileName     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
 
   @@index([leadId])
 }

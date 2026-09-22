@@ -15,6 +15,7 @@ import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import ContactOutcomeDialog, { type ContactOutcome } from "@/components/leads/ContactOutcomeDialog";
 import ScheduleFollowUpDialog from "@/components/leads/ScheduleFollowUpDialog";
 import SiteVisitOutcomeDialog, { type SiteVisitOutcome } from "@/components/leads/SiteVisitOutcomeDialog";
+import SiteVisitPhotoGallery from "@/components/leads/SiteVisitPhotoGallery";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
 import PipelineTimeline from "@/components/shared/PipelineTimeline";
@@ -624,6 +625,21 @@ export default function LeadDetails() {
                     </CardContent>
                   </Card>
 
+                  {/* Site Visit photo evidence — see SiteVisitOutcomeDialog's
+                      own comment on why these exist. Only shown once photos
+                      actually exist, same as the Website Submission /
+                      Quotations cards above. */}
+                  {lead.siteVisitPhotos && lead.siteVisitPhotos.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Site Visit Photos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <SiteVisitPhotoGallery leadId={lead.id} photos={lead.siteVisitPhotos} />
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">Description & Remarks</CardTitle>
@@ -728,6 +744,9 @@ export default function LeadDetails() {
         onOpenChange={setSiteVisitOutcomeOpen}
         lead={lead}
         onConfirm={handleSiteVisitOutcomeConfirm}
+        onPhotosChanged={(photos) =>
+          setLead((prev) => (prev ? { ...prev, siteVisitPhotos: photos } : prev))
+        }
       />
     </div>
   );

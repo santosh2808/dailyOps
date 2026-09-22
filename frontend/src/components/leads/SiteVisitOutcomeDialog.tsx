@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +14,12 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
+import SiteVisitPhotoGallery from "./SiteVisitPhotoGallery";
+import { uploadSiteVisitPhotos } from "@/api/leads";
+import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { todayDateInputValue, isPastDateInputValue } from "@/lib/date";
-import type { Lead } from "@/types";
+import type { Lead, LeadSiteVisitPhoto } from "@/types";
 
 export type SiteVisitOutcome = "READY_TO_QUOTE" | "NEEDS_ANOTHER_VISIT" | "NOT_VIABLE";
 
@@ -41,6 +46,11 @@ interface SiteVisitOutcomeDialogProps {
   onOpenChange: (open: boolean) => void;
   lead: Lead | null;
   onConfirm: (outcome: SiteVisitOutcome, notes: string, nextVisitDate?: string) => Promise<void>;
+  // Fires immediately after a photo upload/delete succeeds, independent of
+  // Log Outcome — lets LeadDetails.tsx keep its own `lead.siteVisitPhotos`
+  // (and the gallery card built from it) in sync even if the user closes
+  // this dialog with Cancel instead of submitting an outcome.
+  onPhotosChanged?: (photos: LeadSiteVisitPhoto[]) => void;
 }
 
 // UX fix, same shape as ContactOutcomeDialog: "Complete Site Visit" used to
@@ -55,6 +65,7 @@ export default function SiteVisitOutcomeDialog({
   onOpenChange,
   lead,
   onConfirm,
+  onPhotosChanged,
 }: SiteVisitOutcomeDialogProps) {
   const [outcome, setOutcome] = useState<SiteVisitOutcome>("READY_TO_QUOTE");
   const [notes, setNotes] = useState("");
@@ -62,14 +73,49 @@ export default function SiteVisitOutcomeDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Site visit photo evidence (see notifySiteVisitScheduled's sibling
+  // feature) — deliberately independent of the outcome form's own
+  // submitting/error state above, since photos upload immediately on
+  // selection rather than waiting for "Log Outcome".
+  const [photos, setPhotos] = useState<LeadSiteVisitPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (open) {
       setOutcome("READY_TO_QUOTE");
       setNotes("");
       setNextVisitDate("");
       setError("");
+      setPhotos(lead?.siteVisitPhotos ?? []);
     }
-  }, [open]);
+  }, [open, lead]);
+
+  async function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0 || !lead) return;
+    const files = Array.from(fileList);
+    setUploading(true);
+    try {
+      const uploaded = await uploadSiteVisitPhotos(lead.id, files);
+      const next = [...photos, ...uploaded];
+      setPhotos(next);
+      onPhotosChanged?.(next);
+      toast.success(
+        uploaded.length === 1 ? "Photo uploaded." : `${uploaded.length} photos uploaded.`,
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not upload these photos. Please try again."));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function handlePhotoDeleted(photoId: string) {
+    const next = photos.filter((p) => p.id !== photoId);
+    setPhotos(next);
+    onPhotosChanged?.(next);
+  }
 
   async function handleConfirm() {
     setError("");
@@ -147,6 +193,41 @@ export default function SiteVisitOutcomeDialog({
             placeholder="What did you find on site? What does the customer need?"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Site Photos (optional)</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? <Spinner className="mr-2 h-4 w-4" /> : <ImagePlus className="mr-2 h-4 w-4" />}
+              {uploading ? "Uploading..." : "Add Photos"}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              capture="environment"
+              className="hidden"
+              onChange={(e) => handleFilesSelected(e.target.files)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Photos help the factory build to what's actually on site. No minimum required.
+          </p>
+          <SiteVisitPhotoGallery
+            leadId={lead.id}
+            photos={photos}
+            editable
+            onPhotoDeleted={handlePhotoDeleted}
+            emptyHint="No site photos added yet."
           />
         </div>
 

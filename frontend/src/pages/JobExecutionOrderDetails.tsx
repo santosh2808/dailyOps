@@ -27,6 +27,7 @@ import SendJeoDialog from "@/components/job-execution-orders/SendJeoDialog";
 import ProductionChecklistCard from "@/components/job-execution-orders/ProductionChecklistCard";
 import JeoTimeline from "@/components/job-execution-orders/JeoTimeline";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
+import SiteVisitPhotoGallery from "@/components/leads/SiteVisitPhotoGallery";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -427,6 +428,27 @@ export default function JobExecutionOrderDetails() {
                   <Field label="Fan Colour" value={jeo.color} />
                 </CardContent>
               </Card>
+
+              {/* Site Visit photo evidence — only present when this JEO's
+                  Quotation originated from a Lead that had a site visit with
+                  photos attached (quotation.leadId is nullable, see
+                  types/index.ts's own comment). This is the actual reason
+                  the feature exists: the factory engineer building to spec
+                  gets to see what's really on site, not just the written
+                  Scope of Work above. */}
+              {jeo.quotation?.lead?.siteVisitPhotos && jeo.quotation.lead.siteVisitPhotos.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Site Visit Photos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SiteVisitPhotoGallery
+                      leadId={jeo.quotation.lead.id}
+                      photos={jeo.quotation.lead.siteVisitPhotos}
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
               <ProductionChecklistCard
                 checklist={jeo.checklist}

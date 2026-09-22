@@ -12,6 +12,7 @@ import type {
   LeadImportSummary,
   LeadNote,
   LeadPriority,
+  LeadSiteVisitPhoto,
   LeadSource,
   LeadStatus,
   LeadStatusHistoryEntry,
@@ -241,4 +242,32 @@ export async function updateLeadAi(id: string, payload: LeadAiPayload) {
 export async function addLeadAiCallLog(id: string, payload: LeadAiCallLogPayload) {
   const res = await api.post<Lead>(`/api/v1/leads/${id}/ai-call-history`, payload);
   return res.data;
+}
+
+// Site Visit photo evidence (SiteVisitOutcomeDialog) — see
+// LeadSiteVisitPhoto's own comment in types/index.ts.
+export async function uploadSiteVisitPhotos(id: string, files: File[]) {
+  const formData = new FormData();
+  for (const file of files) formData.append("files", file);
+  const res = await api.post<LeadSiteVisitPhoto[]>(`/api/v1/leads/${id}/site-visit-photos`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+export async function deleteSiteVisitPhoto(id: string, photoId: string) {
+  await api.delete(`/api/v1/leads/${id}/site-visit-photos/${photoId}`);
+}
+
+// The streaming endpoint requires the same Authorization header every other
+// API call carries, which a plain <img src="..."> can't send — so this
+// fetches the bytes as an authenticated blob and hands back an object URL
+// the caller can drop straight into an <img>. Callers own the returned URL
+// and must revokeObjectURL() it on unmount/replacement to avoid leaking
+// memory (see SiteVisitOutcomeDialog.tsx / LeadDetails.tsx usage).
+export async function getSiteVisitPhotoBlobUrl(id: string, photoId: string) {
+  const res = await api.get(`/api/v1/leads/${id}/site-visit-photos/${photoId}/file`, {
+    responseType: "blob",
+  });
+  return URL.createObjectURL(res.data as Blob);
 }
