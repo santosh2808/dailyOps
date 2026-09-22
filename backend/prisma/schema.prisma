@@ -359,6 +359,14 @@ model Lead {
   // off `nextFollowUp` above; this is just displayed alongside it, not used
   // in any query.
   reminderNote      String?
+  // Follow-up email/WhatsApp reminder (LeadFollowUpReminderService's daily
+  // @Cron job) — set the moment a reminder is actually sent for the
+  // *current* nextFollowUp value, so the job never nags the same person
+  // twice for the same date. Reset back to null in create()/update()
+  // whenever nextFollowUp itself changes (same block that already detects
+  // that change for the "Follow-up scheduled" Timeline entry below), so
+  // rescheduling a follow-up correctly re-arms the reminder.
+  followUpReminderSentAt DateTime?
   // Lead Assignment enhancement: a real FK to User (Enterprise RBAC's User
   // model didn't exist yet when Lead was first designed, hence this being
   // a relation now rather than the plain scalar convention used elsewhere).

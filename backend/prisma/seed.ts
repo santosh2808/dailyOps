@@ -542,6 +542,21 @@ async function main() {
         '<p>Lead {{leadNumber}} — {{title}} ({{companyName}}) has been assigned to you.</p>' +
         '<p>Contact: {{contactPerson}} — {{phone}}</p>',
     },
+    // LeadFollowUpReminderService's daily @Cron job — sent once, on the
+    // morning of a lead's Next Follow-up date, to the assigned salesperson.
+    // {{reminderNote}} renders as an empty paragraph when no note was set on
+    // Schedule Follow-up, same as every other optional {{var}} in this
+    // project's templates.
+    {
+      key: 'LEAD_FOLLOWUP_REMINDER',
+      name: 'Lead Follow-up Reminder',
+      subject: 'Reminder: follow up on Lead {{leadNumber}} today',
+      bodyHtml:
+        '<p>Hi {{assigneeName}},</p>' +
+        '<p>Today is the scheduled follow-up date for Lead {{leadNumber}} — {{title}} ({{companyName}}).</p>' +
+        '<p>Contact: {{contactPerson}} — {{phone}}</p>' +
+        '<p>{{reminderNote}}</p>',
+    },
   ];
   for (const template of emailTemplateSeed) {
     await prisma.emailTemplate.upsert({

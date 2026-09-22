@@ -517,6 +517,16 @@ export class LeadsService {
       !!assignedToUserId &&
       assignedToUserId !== existing.assignedToUserId;
 
+    // Re-arm the follow-up reminder (LeadFollowUpReminderService's daily
+    // @Cron job) whenever nextFollowUp itself actually changes to a new
+    // value — computed once here, ahead of the transaction, so both the
+    // update() call below and the "Follow-up scheduled" Timeline entry
+    // further down can use the same resolved date.
+    const newNextFollowUp =
+      nextFollowUp !== undefined ? (nextFollowUp ? new Date(nextFollowUp) : null) : undefined;
+    const nextFollowUpDateChanged =
+      newNextFollowUp !== undefined && newNextFollowUp?.getTime() !== existing.nextFollowUp?.getTime();
+
     const updated = await this.prisma.$transaction(async (tx) => {
       if (products) {
         await tx.leadProduct.deleteMany({ where: { leadId: id } });
@@ -534,6 +544,7 @@ export class LeadsService {
           ...(nextFollowUp !== undefined
             ? { nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : null }
             : {}),
+          ...(nextFollowUpDateChanged ? { followUpReminderSentAt: null } : {}),
           products: this.buildProductsCreateInput(products),
           ...(languageUpdate ?? {}),
         },
@@ -599,9 +610,9 @@ export class LeadsService {
       // the generic "Edited" bucket below — deliberately fires on every
       // change to nextFollowUp/reminderNote/priority together, since in
       // practice a salesperson updates them as one "schedule a follow-up"
-      // action, not three separate edits.
-      const newNextFollowUp =
-        nextFollowUp !== undefined ? (nextFollowUp ? new Date(nextFollowUp) : null) : undefined;
+      // action, not three separate edits. newNextFollowUp is computed once,
+      // above the transaction (see followUpReminderSentAt reset logic), and
+      // reused here via closure rather than recomputed.
       const followUpFieldsChanged = this.diffLeadFields(existing, {
         nextFollowUp: newNextFollowUp,
         priority: leadData.priority,
