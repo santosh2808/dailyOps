@@ -127,6 +127,12 @@ export default function LeadDetails() {
     toast.success("Lead status updated.");
     await fetchLead();
     setHistoryRefreshKey((k) => k + 1);
+    // Bug fix: a manual status change updated the Overview fields and the
+    // Timeline/Notes tab (historyRefreshKey above) but left the Lead
+    // Progress tracker showing whatever it fetched on page load — a stale
+    // step list until the next full reload, even though the status change
+    // that just happened is exactly what that tracker is meant to reflect.
+    await fetchPipelineTimeline();
   }
 
   async function handleDeleteConfirm() {
