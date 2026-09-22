@@ -252,8 +252,30 @@ export default function QuotationItemsEditor({
                       <Input
                         type="number"
                         min={1}
-                        value={row.quantity}
-                        onChange={(e) => updateRow(index, { quantity: Number(e.target.value) || 1 })}
+                        // Bug fix: onChange used to force `|| 1` on every
+                        // keystroke, so the instant the field went blank
+                        // while backspacing (e.target.value === ""), it
+                        // snapped straight back to "1" before the next
+                        // keystroke could register — backspace looked
+                        // completely broken, and typing a replacement
+                        // value (e.g. "3") landed after that phantom "1"
+                        // instead of replacing it. quantity can't be
+                        // `undefined` (it's a required number, unlike
+                        // unitPrice below), so 0 is used as the "still
+                        // typing / momentarily blank" sentinel — safe
+                        // here since 1 is the real minimum and 0 is never
+                        // a valid quantity — and blank is shown for 0
+                        // rather than a literal "0". onBlur snaps back to
+                        // 1 only if the field was left blank/invalid.
+                        value={row.quantity === 0 ? "" : row.quantity}
+                        onChange={(e) =>
+                          updateRow(index, { quantity: e.target.value ? Number(e.target.value) || 0 : 0 })
+                        }
+                        onBlur={(e) => {
+                          if (!e.target.value || Number(e.target.value) < 1) {
+                            updateRow(index, { quantity: 1 });
+                          }
+                        }}
                       />
                     </TableCell>
                     <TableCell>
