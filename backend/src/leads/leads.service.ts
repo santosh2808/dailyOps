@@ -1521,7 +1521,21 @@ export class LeadsService {
 
     await fs.mkdir(LeadsService.SITE_VISIT_PHOTOS_DIR, { recursive: true });
 
-    const created = [];
+    // Explicitly typed (matching the select below exactly) rather than
+    // left as `const created = []` — TS's "evolving array" inference for
+    // an untyped empty array can widen to `never[]` across a for-of loop
+    // with an intervening await, which then rejects every created.push()
+    // below with "not assignable to parameter of type 'never'".
+    const created: {
+      id: string;
+      originalName: string;
+      mimeType: string;
+      sizeBytes: number;
+      latitude: number;
+      longitude: number;
+      accuracyMeters: number | null;
+      createdAt: Date;
+    }[] = [];
     for (const file of files) {
       if (!LeadsService.ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
         throw new BadRequestException(
