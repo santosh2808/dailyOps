@@ -504,6 +504,37 @@ export class LeadsService {
               (previousLead ? ` — re-engagement of Lead ${previousLead.leadNumber} (previously Lost)` : ''),
             actorName,
           );
+          // BUG FIX: a lead created with an owner already jumps straight to
+          // status ASSIGNED above (see the comment on that field), but
+          // unlike update()'s shouldAutoAdvanceToAssigned path, this never
+          // wrote the matching LeadStatusHistory row — so
+          // getPipelineTimeline()'s "reached this status" check (which
+          // reads LeadStatusHistory, not just whatever the current status
+          // is) could never mark Assigned as reached, even though the lead
+          // was assigned from the moment it existed. Every lead made
+          // through the normal Create Lead form hit this, since
+          // assignedToUserId is required there — the Lead Progress tracker
+          // would show Assigned still gray while Contacted/Site
+          // Visit/Qualified were already checked off. Same bookkeeping as
+          // the reassignment block below, just for the creation-time case.
+          if (created.assignedToUserId) {
+            await tx.leadStatusHistory.create({
+              data: {
+                leadId: created.id,
+                oldStatus: 'NEW',
+                newStatus: 'ASSIGNED',
+                remarks: 'Assigned at creation',
+                changedBy: actorName,
+              },
+            });
+            await this.logHistory(
+              tx,
+              created.id,
+              'STATUS_CHANGED',
+              'Status changed from NEW to ASSIGNED',
+              actorName,
+            );
+          }
           // Cross-record history entry, same pattern already used for
           // Lead<->Complaint conversion (see convertToLead()/convertToComplaint()
           // below) — one transaction, two records, each gets its own
