@@ -171,4 +171,16 @@ export class CreateLeadDto {
   @IsOptional()
   @IsEnum(PreferredLanguage)
   preferredLanguage?: PreferredLanguage;
+
+  // Lead re-engagement: optionally link this brand-new Lead back to an
+  // older Lost lead it's a re-engagement of — purely for traceability, the
+  // old lead itself stays exactly as closed as it was (see
+  // LeadsService.create()'s validation, which requires the referenced lead
+  // to actually be LOST). Set only here, at creation; UpdateLeadDto strips
+  // it back out so it can never be changed afterward — see
+  // LeadsService.update().
+  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @IsOptional()
+  @IsUUID(undefined, { message: 'previousLeadId must be a valid lead id' })
+  previousLeadId?: string;
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRightCircle, CheckCircle2, FileText, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRightCircle, CheckCircle2, FileText, History, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -312,6 +312,53 @@ export default function LeadDetails() {
                     <Button variant="outline" size="sm" onClick={() => navigate("/customers")}>
                       View Customer
                     </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Lead re-engagement — both directions. previousLead: this
+                  lead was created as a follow-up on an old Lost lead.
+                  reengagedLeads: this (Lost) lead has since been followed up
+                  on by one or more newer leads. Purely informational — the
+                  link never reopens the old lead (see PreviousLeadSelect). */}
+              {lead.previousLead && (
+                <Card className="border-amber-200 bg-amber-50">
+                  <CardContent className="flex items-center gap-3 py-4">
+                    <History className="h-5 w-5 shrink-0 text-amber-700" />
+                    <p className="text-sm text-amber-900">
+                      Re-engagement of{" "}
+                      <button
+                        type="button"
+                        className="font-medium underline underline-offset-2"
+                        onClick={() => navigate(`/leads/${lead.previousLead!.id}`)}
+                      >
+                        {lead.previousLead.leadNumber}
+                      </button>{" "}
+                      — {lead.previousLead.companyName} (previously Lost)
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {lead.reengagedLeads && lead.reengagedLeads.length > 0 && (
+                <Card className="border-amber-200 bg-amber-50">
+                  <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="flex shrink-0 items-center gap-2 text-amber-900">
+                      <History className="h-5 w-5" />
+                      <span className="text-sm font-medium">Re-opened as:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {lead.reengagedLeads.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className="text-sm font-medium text-amber-900 underline underline-offset-2"
+                          onClick={() => navigate(`/leads/${r.id}`)}
+                        >
+                          {r.leadNumber}
+                        </button>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               )}

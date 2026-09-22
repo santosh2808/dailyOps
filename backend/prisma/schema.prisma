@@ -477,6 +477,22 @@ model Lead {
   // Lead); see TelephonyTestCall model comment.
   telephonyTestCalls   TelephonyTestCall[]
 
+  // Additive: Lead re-engagement. WON/LOST are hard-terminal (see
+  // LeadsService.LEAD_TERMINAL_STATUSES / updateStatus()) — there is no
+  // "reopen a closed lead" action anywhere in the app, deliberately. When a
+  // Lost customer comes back, staff create a brand-new Lead instead and can
+  // optionally link it back to the old (still-closed, still-immutable) one
+  // here, purely for traceability — set once at creation
+  // (LeadsService.create()), never changed afterward. Self-relation, so
+  // both sides need their own explicit name; SetNull mirrors the
+  // assignedToUser/sourceWebsite convention above (never blocks deleting
+  // the old lead). `reengagedLeads` can hold more than one entry — the same
+  // company can come back, get lost again, and come back again over the
+  // years.
+  previousLeadId String?
+  previousLead   Lead?   @relation("LeadPreviousLead", fields: [previousLeadId], references: [id], onDelete: SetNull)
+  reengagedLeads Lead[]  @relation("LeadPreviousLead")
+
   @@index([status])
   @@index([priority])
   @@index([source])
@@ -485,6 +501,7 @@ model Lead {
   @@index([sourceWebsiteId])
   @@index([webFormIntakeId])
   @@index([aiStatus])
+  @@index([previousLeadId])
 }
 
 // Tracks every action listed in the Lead History requirement. "Quotation

@@ -188,6 +188,15 @@ const LEAD_DETAIL_INCLUDE = {
   webFormIntake: {
     select: { id: true, referenceNumber: true, subjectLabel: true, submittedData: true, createdAt: true },
   },
+  // Lead re-engagement — both directions. previousLead is the closed Lost
+  // lead this one is a re-engagement of (set once at creation); reengagedLeads
+  // is the reverse — every newer Lead that named *this* lead as its
+  // previousLead, so a Lost lead's own page can show "re-opened as ...".
+  previousLead: { select: { id: true, leadNumber: true, companyName: true, status: true } },
+  reengagedLeads: {
+    select: { id: true, leadNumber: true, companyName: true, status: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  },
 } satisfies Prisma.LeadInclude;
 
 @Injectable()
@@ -384,6 +393,30 @@ export class LeadsService {
     // reliable single-language default (falls back to AUTO).
     const language = this.resolveLanguageOnCreate(preferredLanguage, dto.state);
 
+    // Lead re-engagement — validated once up front rather than inside the
+    // lead-number retry loop below, since it's unrelated to the numbering
+    // race that loop exists for. The referenced lead must actually be LOST:
+    // WON/LOST are both hard-terminal (LEAD_TERMINAL_STATUSES), and this
+    // link is explicitly NOT a way to reopen it — it only ever records that
+    // the new lead being created here is a fresh follow-up on an old,
+    // still-closed one.
+    let previousLead: { id: string; leadNumber: string } | null = null;
+    if (leadData.previousLeadId) {
+      const found = await this.prisma.lead.findUnique({
+        where: { id: leadData.previousLeadId },
+        select: { id: true, leadNumber: true, status: true },
+      });
+      if (!found) {
+        throw new NotFoundException('The lead selected as "Previous Lead" was not found.');
+      }
+      if (found.status !== 'LOST') {
+        throw new BadRequestException(
+          'Only a Lost lead can be linked as a Previous Lead. It stays closed either way — this just records that the new lead is a follow-up on it.',
+        );
+      }
+      previousLead = { id: found.id, leadNumber: found.leadNumber };
+    }
+
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
       try {
@@ -409,7 +442,27 @@ export class LeadsService {
             },
             include: LEAD_DETAIL_INCLUDE,
           });
-          await this.logHistory(tx, created.id, 'CREATED', `Lead ${created.leadNumber} created`, actorName);
+          await this.logHistory(
+            tx,
+            created.id,
+            'CREATED',
+            `Lead ${created.leadNumber} created` +
+              (previousLead ? ` — re-engagement of Lead ${previousLead.leadNumber} (previously Lost)` : ''),
+            actorName,
+          );
+          // Cross-record history entry, same pattern already used for
+          // Lead<->Complaint conversion (see convertToLead()/convertToComplaint()
+          // below) — one transaction, two records, each gets its own
+          // timeline entry. Doesn't touch previousLead.status; it stays LOST.
+          if (previousLead) {
+            await this.logHistory(
+              tx,
+              previousLead.id,
+              'EDITED',
+              `Re-opened as new Lead ${created.leadNumber}`,
+              actorName,
+            );
+          }
           return created;
         });
         if (lead.assignedToUserId) {
@@ -430,7 +483,19 @@ export class LeadsService {
 
   async update(id: string, dto: UpdateLeadDto, actorName?: string) {
     const existing = await this.findOne(id);
-    const { products, expectedCloseDate, nextFollowUp, assignedToUserId, preferredLanguage, ...leadData } = dto;
+    // previousLeadId is immutable after creation (see create-lead.dto.ts) —
+    // destructured out here and intentionally discarded so it can never be
+    // set/changed via an update payload, even though UpdateLeadDto inherits
+    // the field from CreateLeadDto via PartialType.
+    const {
+      products,
+      expectedCloseDate,
+      nextFollowUp,
+      assignedToUserId,
+      preferredLanguage,
+      previousLeadId: _previousLeadId,
+      ...leadData
+    } = dto;
 
     // D.O.T. AI Lead Assistant Phase 1: recompute the state-based language
     // default only when appropriate — see resolveLanguageOnUpdate() below.

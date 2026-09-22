@@ -77,6 +77,10 @@ export interface LeadPayload {
   // D.O.T. AI Lead Assistant Phase 1: an explicit choice here always wins
   // over the state-based default the backend would otherwise compute.
   preferredLanguage?: PreferredLanguage;
+  // Lead re-engagement: only meaningful on create — the backend silently
+  // discards this field on update (see LeadsService.update()), so there's
+  // no point sending it there.
+  previousLeadId?: string;
 }
 
 // D.O.T. AI Lead Assistant Phase 1 — AI-specific fields, updated only

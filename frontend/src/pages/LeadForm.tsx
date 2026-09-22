@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
+import PreviousLeadSelect from "@/components/leads/PreviousLeadSelect";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
 import { INDIA_STATES } from "@/lib/indiaStates";
 import { Spinner } from "@/components/ui/spinner";
@@ -44,6 +45,8 @@ interface FormState {
   reminderNote: string;
   remarks: string;
   assignedToUserId: string;
+  // Lead re-engagement — create mode only, see the form field below.
+  previousLeadId: string;
 }
 
 const emptyForm: FormState = {
@@ -67,6 +70,7 @@ const emptyForm: FormState = {
   reminderNote: "",
   remarks: "",
   assignedToUserId: "",
+  previousLeadId: "",
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -119,6 +123,10 @@ export default function LeadForm() {
           reminderNote: lead.reminderNote ?? "",
           remarks: lead.remarks ?? "",
           assignedToUserId: lead.assignedToUserId ?? "",
+          // Immutable / create-only — never edited, so there's nothing from
+          // the loaded lead to populate here (the field isn't even shown in
+          // edit mode). Kept at "" just to satisfy FormState.
+          previousLeadId: "",
         });
         setProducts(
           (lead.products ?? []).map((p) => ({
@@ -236,6 +244,9 @@ export default function LeadForm() {
       // unassigns a lead actually clears it rather than being ignored by
       // updateLead()'s partial-payload semantics.
       assignedToUserId: form.assignedToUserId || null,
+      // Immutable after creation (see LeadsService.update()) — only ever
+      // sent on the create request, never on an edit.
+      ...(!isEdit && form.previousLeadId ? { previousLeadId: form.previousLeadId } : {}),
     };
 
     setSubmitting(true);
@@ -507,6 +518,21 @@ export default function LeadForm() {
                       <p className="text-xs text-destructive">{errors.assignedToUserId}</p>
                     )}
                   </div>
+
+                  {!isEdit && (
+                    <div className="space-y-2">
+                      <Label htmlFor="previousLeadId">Previous Lead (Re-engagement)</Label>
+                      <PreviousLeadSelect
+                        id="previousLeadId"
+                        value={form.previousLeadId}
+                        onChange={(leadId) => update("previousLeadId", leadId)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        If this is a Lost customer coming back, link the old lead here for traceability —
+                        it stays closed either way, this is just a note that the new lead is a follow-up.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="remarks">Remarks</Label>

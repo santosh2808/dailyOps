@@ -455,6 +455,19 @@ export interface Lead {
   aiSiteVisitRequested: boolean;
   aiCallbackRequested: boolean;
   aiCallbackAt?: string | null;
+  // Lead re-engagement: set once at creation only (immutable — see
+  // UpdateLeadDto on the backend). previousLead is the closed Lost lead this
+  // one is a follow-up on; reengagedLeads is the reverse direction, so a
+  // Lost lead's own page can show every newer Lead that named it.
+  previousLeadId?: string | null;
+  previousLead?: { id: string; leadNumber: string; companyName: string; status: LeadStatus } | null;
+  reengagedLeads?: {
+    id: string;
+    leadNumber: string;
+    companyName: string;
+    status: LeadStatus;
+    createdAt: string;
+  }[];
 }
 
 // D.O.T. AI Lead Assistant Phase 1 — one row per D.O.T. call attempt
