@@ -15,6 +15,7 @@ import type {
   LeadSource,
   LeadStatus,
   LeadStatusHistoryEntry,
+  JeoTimelineResponse,
   PaginatedResponse,
   PreferredLanguage,
 } from "@/types";
@@ -167,6 +168,15 @@ export async function getLeadStatusHistory(id: string) {
 
 export async function getLeadEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/leads/${id}/email-history`);
+  return res.data;
+}
+
+// Quick-glance cross-module pipeline tracker (Lead Created -> ... ->
+// Completed) — same response shape as the JEO Details Timeline
+// (GET /job-execution-orders/:id/timeline), so it's typed with the same
+// JeoTimelineResponse rather than duplicating an identical interface.
+export async function getLeadPipelineTimeline(id: string) {
+  const res = await api.get<JeoTimelineResponse>(`/api/v1/leads/${id}/pipeline-timeline`);
   return res.data;
 }
 

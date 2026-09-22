@@ -1207,6 +1207,99 @@ export class LeadsService {
     });
   }
 
+  // Quick-glance cross-module pipeline tracker for Lead Details — the same
+  // 10-stage lifecycle (Lead Created -> Customer Created -> Quotation
+  // Created -> Sales Order Created -> Proforma Invoice Generated -> JEO
+  // Generated -> Production Started -> QC -> Dispatch -> Completed) already
+  // shown on a JEO's own Details page (JobExecutionOrdersService.getTimeline()),
+  // but walked forward from the Lead instead of backward from a known JEO —
+  // so it renders correctly for a lead that hasn't reached later stages yet
+  // (those steps are simply not-done, never guessed at). Distinct from the
+  // Lead's own "Timeline" tab (getHistory() above, a chronological
+  // note/status/assignment log) — this is the fixed-stage pipeline view.
+  //
+  // A lead can in principle have more than one Quotation (a revision, or a
+  // second quotation later) — this always follows the earliest one, since
+  // that's the one that actually started this lead's pipeline; likewise the
+  // earliest Sales Order/Proforma Invoice/JEO off of it.
+  async getPipelineTimeline(id: string) {
+    const lead = await this.findOne(id);
+
+    const customer = lead.customerId
+      ? await this.prisma.customer.findUnique({ where: { id: lead.customerId } })
+      : null;
+
+    const quotation = await this.prisma.quotation.findFirst({
+      where: { leadId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const salesOrder = quotation
+      ? await this.prisma.salesOrder.findUnique({ where: { quotationId: quotation.id } })
+      : null;
+
+    const [proformaInvoice, jeo] = salesOrder
+      ? await Promise.all([
+          this.prisma.proformaInvoice.findFirst({
+            where: { salesOrderId: salesOrder.id },
+            orderBy: { createdAt: 'asc' },
+          }),
+          this.prisma.jobExecutionOrder.findFirst({
+            where: { salesOrderId: salesOrder.id },
+            include: { checklist: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+        ])
+      : [null, null];
+
+    const checklist = jeo?.checklist;
+    const status = jeo?.status;
+    const productionStarted =
+      !!jeo &&
+      (['ASSEMBLY_STARTED', 'QC', 'READY_FOR_DISPATCH', 'COMPLETED'].includes(status!) ||
+        !!checklist?.assemblyStarted);
+    const qcDone =
+      !!jeo && (['QC', 'READY_FOR_DISPATCH', 'COMPLETED'].includes(status!) || !!checklist?.qcPassed);
+    const dispatchDone =
+      !!jeo && (['READY_FOR_DISPATCH', 'COMPLETED'].includes(status!) || !!checklist?.readyForDispatch);
+    const completedDone = status === 'COMPLETED';
+
+    return {
+      steps: [
+        { key: 'leadCreated', label: 'Lead Created', done: true, at: lead.createdAt },
+        { key: 'customerCreated', label: 'Customer Created', done: !!customer, at: customer?.createdAt ?? null },
+        { key: 'quotationCreated', label: 'Quotation Created', done: !!quotation, at: quotation?.createdAt ?? null },
+        { key: 'salesOrderCreated', label: 'Sales Order Created', done: !!salesOrder, at: salesOrder?.createdAt ?? null },
+        {
+          key: 'proformaInvoiceGenerated',
+          label: 'Proforma Invoice Generated',
+          done: !!proformaInvoice,
+          at: proformaInvoice?.createdAt ?? null,
+        },
+        { key: 'jeoGenerated', label: 'JEO Generated', done: !!jeo, at: jeo?.createdAt ?? null },
+        {
+          key: 'productionStarted',
+          label: 'Production Started',
+          done: productionStarted,
+          at: productionStarted && status === 'ASSEMBLY_STARTED' ? jeo!.updatedAt : null,
+        },
+        {
+          key: 'qc',
+          label: 'QC',
+          done: qcDone,
+          at: qcDone && status === 'QC' ? jeo!.updatedAt : null,
+        },
+        {
+          key: 'dispatch',
+          label: 'Dispatch',
+          done: dispatchDone,
+          at: dispatchDone && status === 'READY_FOR_DISPATCH' ? jeo!.updatedAt : null,
+        },
+        { key: 'completed', label: 'Completed', done: completedDone, at: checklist?.completedAt ?? null },
+      ],
+    };
+  }
+
   // D.O.T. AI Lead Assistant Phase 1 — "D.O.T. AI Follow-up" section +
   // Call History list on Lead Details. Read-only; the AI-interaction fields
   // themselves are written only by updateAi()/addAiCallLog() below.

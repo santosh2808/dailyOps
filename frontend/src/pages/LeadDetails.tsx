@@ -14,13 +14,20 @@ import ConvertToCustomerDialog from "@/components/leads/ConvertToCustomerDialog"
 import ConfirmQuotationDialog from "@/components/leads/ConfirmQuotationDialog";
 import LeadActivityPanel from "@/components/leads/LeadActivityPanel";
 import LeadAiFollowUpCard from "@/components/leads/LeadAiFollowUpCard";
+import PipelineTimeline from "@/components/shared/PipelineTimeline";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
-import { convertLeadToCustomer, deleteLead, getLead, updateLeadStatus } from "@/api/leads";
+import {
+  convertLeadToCustomer,
+  deleteLead,
+  getLead,
+  getLeadPipelineTimeline,
+  updateLeadStatus,
+} from "@/api/leads";
 import { generateQuotationFromLead } from "@/api/quotations";
-import type { Lead, LeadStatus } from "@/types";
+import type { JeoTimelineStep, Lead, LeadStatus } from "@/types";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -74,6 +81,12 @@ export default function LeadDetails() {
   // independently of the main lead record.
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
+  // Quick-glance horizontal pipeline tracker (see PipelineTimeline) — fetched
+  // independently of the main lead record, same pattern as
+  // LeadActivityPanel's history feed.
+  const [pipelineSteps, setPipelineSteps] = useState<JeoTimelineStep[]>([]);
+  const [pipelineLoading, setPipelineLoading] = useState(true);
+
   const fetchLead = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -90,9 +103,23 @@ export default function LeadDetails() {
     }
   }, [id]);
 
+  const fetchPipelineTimeline = useCallback(async () => {
+    if (!id) return;
+    setPipelineLoading(true);
+    try {
+      const res = await getLeadPipelineTimeline(id);
+      setPipelineSteps(res.steps);
+    } catch {
+      setPipelineSteps([]);
+    } finally {
+      setPipelineLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchLead();
-  }, [fetchLead]);
+    fetchPipelineTimeline();
+  }, [fetchLead, fetchPipelineTimeline]);
 
   async function handleStatusConfirm(status: LeadStatus, remarks?: string) {
     if (!id) return;
@@ -291,6 +318,19 @@ export default function LeadDetails() {
 
               {tab === "overview" && (
                 <div className="space-y-6">
+                  {/* Quick-glance cross-module pipeline tracker (Lead Created
+                      -> ... -> Completed) as a horizontal stepper, so status
+                      can be read at a glance without opening the Quotation/
+                      Sales Order/JEO records individually. */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Pipeline Progress</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <PipelineTimeline steps={pipelineSteps} loading={pipelineLoading} />
+                    </CardContent>
+                  </Card>
+
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">Pipeline</CardTitle>
