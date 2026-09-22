@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Pencil, Plus, Trash2, UserSquare2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
+import GenerateQuotationFromLeadDialog from "@/components/quotations/GenerateQuotationFromLeadDialog";
 import {
   Table,
   TableBody,
@@ -62,6 +63,7 @@ export default function QuotationList() {
   // Quotation creation — this just hides the action from a role that can't use it.
   const { hasPermission } = useAuth();
 
+  const [generateFromLeadOpen, setGenerateFromLeadOpen] = useState(false);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -201,12 +203,29 @@ export default function QuotationList() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <QuotationFiltersBar filters={filters} onChange={setFilters} />
             {hasPermission("Quotation", "Create") && (
-              <Button onClick={() => navigate("/quotations/new")} className="shrink-0">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Quotation
-              </Button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {/* Generates a quotation straight from a Qualified lead's
+                    own linked products — no Customer required until
+                    Convert to Customer later, at Create Sales Order time.
+                    Same one-click action as Lead Details' Generate
+                    Quotation button, just reachable from here too. */}
+                <Button variant="outline" onClick={() => setGenerateFromLeadOpen(true)}>
+                  <UserSquare2 className="mr-2 h-4 w-4" />
+                  Generate from Lead
+                </Button>
+                <Button onClick={() => navigate("/quotations/new")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Quotation
+                </Button>
+              </div>
             )}
           </div>
+
+          <GenerateQuotationFromLeadDialog
+            open={generateFromLeadOpen}
+            onOpenChange={setGenerateFromLeadOpen}
+            onGenerated={(quotationId) => navigate(`/quotations/${quotationId}`)}
+          />
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
