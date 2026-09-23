@@ -446,7 +446,11 @@ export default function LeadDetails() {
                         {lead.companyName}
                       </span>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => navigate("/customers")}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => (lead.customerId ? navigate(`/customers/${lead.customerId}`) : navigate("/customers"))}
+                    >
                       View Customer
                     </Button>
                   </CardContent>
