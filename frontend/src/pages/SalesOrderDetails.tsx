@@ -409,10 +409,22 @@ export default function SalesOrderDetails() {
                     <p className="text-sm text-muted-foreground">No items on this sales order.</p>
                   )}
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-4">
+                  <div className="mt-4 grid grid-cols-2 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Subtotal</p>
                       <p className="font-medium text-slate-900">{formatCurrency(salesOrder.subtotal)}</p>
+                    </div>
+                    {/* QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL):
+                        these were already inside grandTotal below (carried
+                        forward from the accepted quotation), just never shown
+                        as their own line — see the SalesOrder type's comment. */}
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Installation</p>
+                      <p className="font-medium text-slate-900">{formatCurrency(salesOrder.installationCharge)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Transportation</p>
+                      <p className="font-medium text-slate-900">{formatCurrency(salesOrder.transportationCharge)}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>

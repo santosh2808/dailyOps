@@ -901,6 +901,16 @@ export interface SalesOrder {
   discount: number;
   tax: number;
   grandTotal: number;
+  // QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL): frozen
+  // from the originating Quotation's installationCharge/transportationCharge
+  // at creation time (only when the Sales Order is an unmodified pass-through
+  // of the quotation's items — see SalesOrdersService.freezeToQuotationTotalsIfUnmodified);
+  // 0 when items were edited before creation, since scaling these with a
+  // changed quantity is a business decision the backend deliberately doesn't
+  // guess at. Already folded into grandTotal either way — these are for
+  // display as their own line items, same as on QuotationDetails.tsx.
+  installationCharge: number;
+  transportationCharge: number;
   billingAddress?: string | null;
   shippingAddress?: string | null;
   specialInstructions?: string | null;

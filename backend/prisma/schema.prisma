@@ -1000,6 +1000,18 @@ model SalesOrder {
   discount            Float            @default(0)
   tax                 Float            @default(0)
   grandTotal          Float            @default(0)
+  // Bug fix (QA: "Quotation -> Sales Order" charge breakdown FAIL) — the
+  // accepted Quotation's installationCharge/transportationCharge were
+  // already folded into this SalesOrder's grandTotal via
+  // freezeToQuotationTotalsIfUnmodified(), but with no columns of their own
+  // to land in, the split was never stored anywhere: the Sales Order
+  // preview (before creation) and SalesOrderDetails.tsx (after) had no way
+  // to show them as their own line items, only the opaque combined total.
+  // Additive, defaulted to 0 for existing rows — SalesOrdersService now
+  // populates these from the originating Quotation at create() time,
+  // mirroring how subtotal/tax/grandTotal are already frozen from it.
+  installationCharge   Float           @default(0)
+  transportationCharge Float           @default(0)
   billingAddress      String?
   shippingAddress     String?
   specialInstructions String?

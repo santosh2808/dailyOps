@@ -282,7 +282,29 @@ export default function SalesOrderForm() {
   const totalDiscount = itemDiscountSum + extraDiscount;
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
   const tax = (subtotal - itemDiscountSum) * (gstPercentNum / 100);
-  const grandTotal = subtotal - totalDiscount + tax;
+
+  // Bug fix (QA: "Quotation -> Sales Order" charge breakdown FAIL) — this
+  // preview used to sum items + GST only, silently leaving out
+  // Installation/Transportation entirely, so it showed a Grand Total far
+  // below what the backend actually saves (which already carries these
+  // charges forward from the accepted quotation — see
+  // SalesOrdersService.freezeToQuotationTotalsIfUnmodified). Mirrors that
+  // same backend condition exactly: charges only carry forward when every
+  // item still matches the quotation's own quantity with no per-line
+  // discount, and there's no additional order-level discount — otherwise
+  // the backend doesn't guess how they should scale with a changed
+  // quantity, and neither does this preview.
+  const matchesQuotationExactly =
+    !!quotation &&
+    items.length === (quotation.items?.length ?? 0) &&
+    items.every((item) => {
+      const qi = quotation.items?.find((q) => q.productId === item.productId);
+      return !!qi && qi.quantity === item.quantity && (item.discount ?? 0) === 0;
+    }) &&
+    extraDiscount === 0;
+  const installationCharge = matchesQuotationExactly ? quotation!.installationCharge : 0;
+  const transportationCharge = matchesQuotationExactly ? quotation!.transportationCharge : 0;
+  const grandTotal = subtotal - totalDiscount + tax + installationCharge + transportationCharge;
 
   return (
     <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -360,11 +382,34 @@ export default function SalesOrderForm() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 rounded-md border bg-slate-50 p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Subtotal</p>
                       <p className="font-medium text-slate-900">{formatCurrency(subtotal)}</p>
                     </div>
+                    {/* QA bug fix ("Quotation -> Sales Order" charge breakdown
+                        FAIL) — these were missing from this preview entirely,
+                        so the Grand Total below looked far lower than what
+                        the backend actually saves. Shown as "—" (not ₹0) when
+                        items no longer match the quotation exactly, since
+                        that's also when the backend stops carrying them
+                        forward — see matchesQuotationExactly above. */}
+                    {quotation && (
+                      <>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Installation</p>
+                          <p className="font-medium text-slate-900">
+                            {matchesQuotationExactly ? formatCurrency(installationCharge) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Transportation</p>
+                          <p className="font-medium text-slate-900">
+                            {matchesQuotationExactly ? formatCurrency(transportationCharge) : "—"}
+                          </p>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>
                       <p className="font-medium text-slate-900">{formatCurrency(totalDiscount)}</p>
@@ -380,6 +425,12 @@ export default function SalesOrderForm() {
                       <p className="font-semibold text-slate-900">{formatCurrency(grandTotal)}</p>
                     </div>
                   </div>
+                  {quotation && !matchesQuotationExactly && (
+                    <p className="text-xs text-muted-foreground">
+                      Installation/Transportation charges from the quotation are only carried forward
+                      when quantities and discounts are unchanged from it.
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Totals shown above are a live preview — the backend recalculates and stores the
                     authoritative figures when you save.

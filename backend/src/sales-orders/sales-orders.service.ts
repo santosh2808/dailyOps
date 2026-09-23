@@ -95,6 +95,15 @@ interface ComputedTotals {
   discount: number;
   tax: number;
   grandTotal: number;
+  // QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL): only
+  // ever populated by freezeToQuotationTotalsIfUnmodified() below, from the
+  // Quotation's own installationCharge/transportationCharge — computeTotals()
+  // leaves these at 0 when items were edited from the quotation, matching
+  // that function's existing, deliberate "don't guess how charges should
+  // scale with a changed quantity" design (see the comment above
+  // freezeToQuotationTotalsIfUnmodified).
+  installationCharge: number;
+  transportationCharge: number;
 }
 
 @Injectable()
@@ -232,6 +241,8 @@ export class SalesOrdersService {
             discount: totals.discount,
             tax: totals.tax,
             grandTotal: totals.grandTotal,
+            installationCharge: totals.installationCharge,
+            transportationCharge: totals.transportationCharge,
             items: { create: totals.items },
           },
           include: SALES_ORDER_DETAIL_INCLUDE,
@@ -655,6 +666,8 @@ export class SalesOrdersService {
       subtotal: number;
       gstAmount: number;
       grandTotal: number;
+      installationCharge: number;
+      transportationCharge: number;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
   ): void {
@@ -670,6 +683,15 @@ export class SalesOrdersService {
 
     totals.subtotal = quotation.subtotal;
     totals.tax = quotation.gstAmount;
+    // QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL): these
+    // charges were already reaching totals.grandTotal below (it's derived
+    // from quotation.grandTotal, which itself includes them — see
+    // QuotationsService.computeTotals()), but with no SalesOrder columns to
+    // land in they were never stored anywhere of their own, so neither the
+    // Sales Order creation preview nor SalesOrderDetails.tsx could show
+    // them as separate line items — only the opaque combined total.
+    totals.installationCharge = quotation.installationCharge;
+    totals.transportationCharge = quotation.transportationCharge;
     // Bug fix: the Quotation itself no longer charges GST (it's quoted as
     // "Extra" — see QuotationsService.computeTotals(), which stopped
     // summing gstAmount into Quotation.grandTotal). GST is only actually
@@ -704,7 +726,15 @@ export class SalesOrdersService {
     const tax = Math.round(computedItems.reduce((sum, i) => sum + i.tax, 0) * 100) / 100;
     const grandTotal = Math.round((subtotal - discount + tax) * 100) / 100;
 
-    return { items: computedItems, subtotal, discount, tax, grandTotal };
+    return {
+      items: computedItems,
+      subtotal,
+      discount,
+      tax,
+      grandTotal,
+      installationCharge: 0,
+      transportationCharge: 0,
+    };
   }
 
   private async generateSalesOrderNumber(): Promise<string> {
