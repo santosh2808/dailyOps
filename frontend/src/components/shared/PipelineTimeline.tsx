@@ -51,7 +51,9 @@ export default function PipelineTimeline({ steps, loading, clickableKeys, onStep
     <div className="overflow-x-auto pb-1">
       <ol className="flex items-start">
         {steps.map((step, index) => {
+          const isFirst = index === 0;
           const isLast = index === steps.length - 1;
+          const prevDone = index > 0 && steps[index - 1].done;
           const at = formatDateTime(step.at);
           const clickable = step.done && !!onStepClick && !!clickableKeys?.includes(step.key);
           const labelBlock = (
@@ -72,7 +74,23 @@ export default function PipelineTimeline({ steps, loading, clickableKeys, onStep
           );
           return (
             <li key={step.key} className="flex w-28 flex-shrink-0 flex-col items-center">
+              {/* Bug fix: the circle used to sit flush against the left edge
+                  of this fixed-width column (with the connecting line
+                  filling the rest to the right), while the label below was
+                  centered in the full column — so circle and label drifted
+                  further out of alignment the further along the tracker you
+                  looked. A symmetric left/right connector (each a flex-1
+                  span, present but transparent at the very first/last step
+                  so the circle still sits dead-center) keeps the circle
+                  centered in its column, matching the centered label below
+                  it. The two halves of the segment BETWEEN two circles are
+                  colored by the same thing (the earlier step's `done`
+                  state) so a connecting line still reads as one continuous
+                  color across the boundary between columns. */}
               <div className="flex w-full items-center">
+                <span
+                  className={cn("h-px flex-1", !isFirst && (prevDone ? "bg-orange/40" : "bg-slate-200"))}
+                />
                 <span
                   className={cn(
                     "z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full",
@@ -81,11 +99,9 @@ export default function PipelineTimeline({ steps, loading, clickableKeys, onStep
                 >
                   {step.done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-2 w-2 fill-current" />}
                 </span>
-                {!isLast && (
-                  <span
-                    className={cn("h-px flex-1", step.done ? "bg-orange/40" : "bg-slate-200")}
-                  />
-                )}
+                <span
+                  className={cn("h-px flex-1", !isLast && (step.done ? "bg-orange/40" : "bg-slate-200"))}
+                />
               </div>
               {clickable ? (
                 <button
