@@ -72,6 +72,18 @@ export default function LeadDetails() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
+  // User feedback: clicking through to a quotation from here, then hitting
+  // QuotationDetails.tsx's own "Back to Quotations" button, always dumped
+  // people on the full list instead of back on this lead. Passing this
+  // router state lets that button return here instead — see its own
+  // comment. Every navigate() to a quotation from this page should go
+  // through this helper rather than calling navigate() directly, so none
+  // of the entry points (tracker, Quotations card, next-action banner,
+  // freshly-generated quotation) are missed.
+  function goToQuotation(quotationId: string) {
+    navigate(`/quotations/${quotationId}`, { state: { from: "lead", leadId: id } });
+  }
+
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -289,7 +301,7 @@ export default function LeadDetails() {
     try {
       const quotation = await generateQuotationFromLead(id);
       toast.success("Quotation generated.");
-      navigate(`/quotations/${quotation.id}`);
+      goToQuotation(quotation.id);
     } catch (err: any) {
       const message =
         err?.response?.data?.message || "Could not generate a quotation for this lead. Please try again.";
@@ -309,7 +321,7 @@ export default function LeadDetails() {
       // isn't enforced against lead status/history.
       setConfirmQuoteOpen(true);
     } else if (nextAction.label === "Send Quotation" || nextAction.label === "View Quotation") {
-      if (latestQuotation) navigate(`/quotations/${latestQuotation.id}`);
+      if (latestQuotation) goToQuotation(latestQuotation.id);
     } else if (nextAction.label === "Convert to Customer") {
       setConvertOpen(true);
     } else if (nextAction.label === "Assign Sales Person" || nextAction.label === "Change Sales Person") {
@@ -529,7 +541,7 @@ export default function LeadDetails() {
                         clickableKeys={latestQuotation ? ["quotation_sent"] : []}
                         onStepClick={(key) => {
                           if (key === "quotation_sent" && latestQuotation) {
-                            navigate(`/quotations/${latestQuotation.id}`);
+                            goToQuotation(latestQuotation.id);
                           }
                         }}
                       />
@@ -678,7 +690,7 @@ export default function LeadDetails() {
                           <button
                             key={q.id}
                             type="button"
-                            onClick={() => navigate(`/quotations/${q.id}`)}
+                            onClick={() => goToQuotation(q.id)}
                             className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-slate-50"
                           >
                             <span className="font-medium text-slate-900">{q.quotationNumber}</span>

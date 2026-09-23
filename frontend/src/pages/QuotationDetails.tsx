@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRightCircle,
@@ -72,6 +72,19 @@ function formatDateTime(value?: string | null) {
 export default function QuotationDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // User feedback: the fixed "Back to Quotations" button always dropped
+  // people on the full Quotations list, even when they'd just clicked
+  // through from a specific Lead's "Quotation Sent" tracker step (or its
+  // Quotations card / next-action banner) — losing their place on that
+  // lead. LeadDetails.tsx now passes { from: "lead", leadId } as router
+  // state on every one of its navigate()-to-quotation calls; when present,
+  // this button returns there instead. Falls back to the Quotations list
+  // for every other entry point (direct URL, Dashboard, Customer Details,
+  // etc.) exactly as before.
+  const backTo = (location.state as { from?: string; leadId?: string } | null)?.from === "lead"
+    ? (location.state as { leadId?: string }).leadId
+    : undefined;
 
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,9 +203,14 @@ export default function QuotationDetails() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title="Quotation Details" />
         <main className="flex-1 overflow-y-auto p-6">
-          <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/quotations")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-4"
+            onClick={() => navigate(backTo ? `/leads/${backTo}` : "/quotations")}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Quotations
+            {backTo ? "Back to Lead" : "Back to Quotations"}
           </Button>
 
           {loading ? (
