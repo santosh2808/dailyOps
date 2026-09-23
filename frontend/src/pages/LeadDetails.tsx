@@ -287,7 +287,7 @@ export default function LeadDetails() {
     if (!id) return;
     const { customer } = await convertLeadToCustomer(id);
     toast.success("Lead converted to customer.");
-    navigate(`/customers/${customer.id}`);
+    navigate(`/customers/${customer.id}`, { state: { from: "lead", leadId: id } });
   }
 
   // Lead Management Phase 1 (requirement #8) — one-click Generate
@@ -449,7 +449,11 @@ export default function LeadDetails() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => (lead.customerId ? navigate(`/customers/${lead.customerId}`) : navigate("/customers"))}
+                      onClick={() =>
+                        lead.customerId
+                          ? navigate(`/customers/${lead.customerId}`, { state: { from: "lead", leadId: id } })
+                          : navigate("/customers")
+                      }
                     >
                       View Customer
                     </Button>

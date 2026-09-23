@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ClipboardList, ExternalLink, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -46,6 +46,14 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Same "smart back" pattern as Quotation Details: when this page was
+  // reached from a Lead (either the post-conversion redirect or the "View
+  // Customer" button on Lead Details), Back returns to that lead instead of
+  // dumping the user on the full Customers list they never asked to see.
+  const location = useLocation();
+  const backToLeadId = (location.state as { from?: string; leadId?: string } | null)?.from === "lead"
+    ? (location.state as { leadId?: string }).leadId
+    : undefined;
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -193,9 +201,14 @@ export default function CustomerDetails() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar title="Customer Details" />
         <main className="flex-1 overflow-y-auto p-6">
-          <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/customers")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-4"
+            onClick={() => navigate(backToLeadId ? `/leads/${backToLeadId}` : "/customers")}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Customers
+            {backToLeadId ? "Back to Lead" : "Back to Customers"}
           </Button>
 
           {loading ? (
