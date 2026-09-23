@@ -11,6 +11,15 @@ function formatDateTime(value?: string | null) {
 interface PipelineTimelineProps {
   steps: JeoTimelineStep[];
   loading?: boolean;
+  // Optional: lets a caller make specific reached steps clickable (e.g. Lead
+  // Details wiring "Quotation Sent" straight to that quotation) without this
+  // shared component needing to know anything about quotations, JEOs, or any
+  // other domain concept. Only step.key values listed in clickableKeys get
+  // button/hover treatment — everything else stays plain, so the tracker
+  // doesn't invite clicks on steps that have nowhere to go. Never applied to
+  // a step that isn't `done` yet, since there's nothing to navigate to.
+  clickableKeys?: string[];
+  onStepClick?: (key: string) => void;
 }
 
 // Horizontal cross-module pipeline stepper — circles connected by a line
@@ -25,7 +34,7 @@ interface PipelineTimelineProps {
 // than wrapping) when there isn't room for every step, so it stays
 // readable on narrower screens instead of collapsing into an uneven
 // wrapped grid.
-export default function PipelineTimeline({ steps, loading }: PipelineTimelineProps) {
+export default function PipelineTimeline({ steps, loading, clickableKeys, onStepClick }: PipelineTimelineProps) {
   if (loading) {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -44,6 +53,23 @@ export default function PipelineTimeline({ steps, loading }: PipelineTimelinePro
         {steps.map((step, index) => {
           const isLast = index === steps.length - 1;
           const at = formatDateTime(step.at);
+          const clickable = step.done && !!onStepClick && !!clickableKeys?.includes(step.key);
+          const labelBlock = (
+            <div className="mt-2 px-1 text-center">
+              <p
+                className={cn(
+                  "text-xs font-medium leading-tight",
+                  step.done ? "text-slate-900" : "text-muted-foreground",
+                  clickable && "underline decoration-dotted underline-offset-2 group-hover:text-orange"
+                )}
+              >
+                {step.label}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                {step.done ? at ?? "Completed" : "Not reached yet"}
+              </p>
+            </div>
+          );
           return (
             <li key={step.key} className="flex w-28 flex-shrink-0 flex-col items-center">
               <div className="flex w-full items-center">
@@ -61,14 +87,18 @@ export default function PipelineTimeline({ steps, loading }: PipelineTimelinePro
                   />
                 )}
               </div>
-              <div className="mt-2 px-1 text-center">
-                <p className={cn("text-xs font-medium leading-tight", step.done ? "text-slate-900" : "text-muted-foreground")}>
-                  {step.label}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                  {step.done ? at ?? "Completed" : "Not reached yet"}
-                </p>
-              </div>
+              {clickable ? (
+                <button
+                  type="button"
+                  onClick={() => onStepClick(step.key)}
+                  className="group flex flex-col items-center"
+                  title={`View ${step.label}`}
+                >
+                  {labelBlock}
+                </button>
+              ) : (
+                labelBlock
+              )}
             </li>
           );
         })}

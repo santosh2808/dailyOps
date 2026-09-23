@@ -514,7 +514,25 @@ export default function LeadDetails() {
                       <CardTitle className="text-base">Lead Progress</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <PipelineTimeline steps={pipelineSteps} loading={pipelineLoading} />
+                      <PipelineTimeline
+                        steps={pipelineSteps}
+                        loading={pipelineLoading}
+                        // Direct click-through from "Quotation Sent" straight
+                        // to the quotation itself — user feedback: having to
+                        // leave this page, go to the Quotations list, and
+                        // search for the customer just to look at a
+                        // quotation they can already see was sent right here
+                        // was unnecessary friction. Uses the same
+                        // lead.quotations[0] this page already fetches for
+                        // the "Quotations" card and the next-action banner
+                        // below, so no extra request.
+                        clickableKeys={latestQuotation ? ["quotation_sent"] : []}
+                        onStepClick={(key) => {
+                          if (key === "quotation_sent" && latestQuotation) {
+                            navigate(`/quotations/${latestQuotation.id}`);
+                          }
+                        }}
+                      />
                     </CardContent>
                   </Card>
 
