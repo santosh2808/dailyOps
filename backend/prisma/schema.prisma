@@ -1151,6 +1151,21 @@ model ProformaInvoice {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
+  // Additive: JEO-based tracking — staff identify and search for
+  // day-to-day paperwork by JEO number, not by this invoice's own
+  // invoiceNumber, so surface it directly instead of forcing a click
+  // through Sales Order every time. Captured once, at create() time, as
+  // whichever JobExecutionOrder was most recently linked to this
+  // invoice's Sales Order (see ProformaInvoicesService.create()) — a
+  // Sales Order can accumulate more than one JEO over its life (a
+  // completed one doesn't block a later one), so this intentionally
+  // freezes "the JEO this invoice was generated against" rather than
+  // recomputing it live, matching how staff actually associate one
+  // invoice with one job. Nullable because a PI can be generated before
+  // any JEO exists yet for the Sales Order.
+  jeoId String?
+  jeo   JobExecutionOrder? @relation(fields: [jeoId], references: [id])
+
   // Additive: Sales Automation Email History (requirement #12 — Proforma
   // Invoice is emailed to the customer, CC Finance, on generation).
   emailHistory EmailHistory[]
@@ -1158,6 +1173,7 @@ model ProformaInvoice {
   @@index([status])
   @@index([salesOrderId])
   @@index([customerId])
+  @@index([jeoId])
 }
 
 enum TaxInvoiceStatus {
@@ -1253,10 +1269,19 @@ model TaxInvoice {
   // against) this invoice for warranty verification.
   complaints Complaint[]
 
+  // Additive: JEO-based tracking — same rationale and freeze-at-create
+  // semantics as ProformaInvoice.jeoId above (see its comment). By the
+  // time a Tax Invoice is generated (post-dispatch-gate, near the end of
+  // the workflow) a JEO almost always already exists for the Sales
+  // Order, but this stays nullable for consistency with ProformaInvoice.
+  jeoId String?
+  jeo   JobExecutionOrder? @relation(fields: [jeoId], references: [id])
+
   @@index([status])
   @@index([salesOrderId])
   @@index([customerId])
   @@index([fiscalYear])
+  @@index([jeoId])
 }
 
 // Additive: Website Enquiries -> Lead/Complaint refactor. Immutable
@@ -1817,6 +1842,14 @@ model JobExecutionOrder {
   // Additive: Sales Automation Email History (requirement #13 — Production
   // Team / Factory is emailed on generation, with the JEO PDF attached).
   emailHistory EmailHistory[]
+
+  // Additive: back-relations for ProformaInvoice.jeoId / TaxInvoice.jeoId
+  // (JEO-based tracking — see their comments). A single JEO can in
+  // principle be the "latest JEO" frozen onto more than one invoice
+  // (e.g. both the Proforma and the Tax Invoice for the same job), so
+  // these are plain arrays, not enforced 1:1.
+  proformaInvoices ProformaInvoice[]
+  taxInvoices      TaxInvoice[]
 
   @@index([status])
   @@index([priority])

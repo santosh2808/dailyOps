@@ -266,6 +266,24 @@ export default function SalesOrderDetails() {
                       {salesOrder.quotation?.quotationNumber ?? salesOrder.quotationId}
                     </button>
                   </p>
+                  {/* Additive: JEO-based tracking (see SalesOrder.jobExecutionOrders
+                      type comment) — staff identify this order by its JEO
+                      number day-to-day, so surface it right under the header
+                      instead of only reachable via the "View JEO" button. */}
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    JEO:{" "}
+                    {salesOrder.jobExecutionOrders?.[0] ? (
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => navigate(`/job-execution-orders/${salesOrder.jobExecutionOrders![0].id}`)}
+                      >
+                        {salesOrder.jobExecutionOrders[0].jeoNumber}
+                      </button>
+                    ) : (
+                      "Not generated yet"
+                    )}
+                  </p>
                 </div>
                 {/* The three "next step" workflow actions (Proforma Invoice,
                     Tax Invoice, JEO — each independently either "View" or

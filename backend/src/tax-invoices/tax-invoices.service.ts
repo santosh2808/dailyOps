@@ -40,11 +40,16 @@ const TAX_INVOICE_DETAIL_INCLUDE = {
   customer: true,
   items: { include: { product: true } },
   salesOrder: true,
+  // Additive: JEO-based tracking — see TaxInvoice.jeoId schema comment.
+  // Frozen at create() time, so this is a plain to-one include, not
+  // something recomputed live.
+  jeo: { select: { id: true, jeoNumber: true } },
 } satisfies Prisma.TaxInvoiceInclude;
 
 const TAX_INVOICE_LIST_INCLUDE = {
   customer: true,
   salesOrder: { select: { id: true, salesOrderNumber: true } },
+  jeo: { select: { id: true, jeoNumber: true } },
 } satisfies Prisma.TaxInvoiceInclude;
 
 @Injectable()
@@ -83,6 +88,9 @@ export class TaxInvoicesService {
               { salesOrder: { salesOrderNumber: { contains: search, mode: 'insensitive' } } },
               { customer: { companyName: { contains: search, mode: 'insensitive' } } },
               { customer: { contactPerson: { contains: search, mode: 'insensitive' } } },
+              // Staff track invoices day-to-day by JEO number, not by this
+              // invoice's own number — see TaxInvoice.jeoId comment.
+              { jeo: { jeoNumber: { contains: search, mode: 'insensitive' } } },
             ],
           }
         : {}),
@@ -134,7 +142,15 @@ export class TaxInvoicesService {
   async create(dto: CreateTaxInvoiceDto, actorName?: string) {
     const salesOrder = await this.prisma.salesOrder.findUnique({
       where: { id: dto.salesOrderId },
-      include: { items: { include: { product: true } } },
+      include: {
+        items: { include: { product: true } },
+        // Additive: JEO-based tracking — same "most recent, any status"
+        // capture as ProformaInvoicesService.create() (see its comment).
+        // By the time a Tax Invoice is generated (post-dispatch-gate,
+        // near the end of the workflow) a JEO almost always already
+        // exists for the Sales Order.
+        jobExecutionOrders: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
     });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
@@ -182,6 +198,7 @@ export class TaxInvoicesService {
               tax: salesOrder.tax,
               grandTotal: salesOrder.grandTotal,
               createdBy: actorName,
+              jeoId: salesOrder.jobExecutionOrders[0]?.id,
             },
           });
 

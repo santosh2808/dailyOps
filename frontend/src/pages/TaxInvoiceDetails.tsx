@@ -142,6 +142,23 @@ export default function TaxInvoiceDetails() {
                   <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {invoice.customer?.companyName ?? "Unknown customer"}
                   </p>
+                  {/* Additive: JEO-based tracking (see TaxInvoice.jeo type
+                      comment) — staff identify invoices by JEO number
+                      day-to-day, not by this invoice's own number. */}
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    JEO:{" "}
+                    {invoice.jeo ? (
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => navigate(`/job-execution-orders/${invoice.jeo!.id}`)}
+                      >
+                        {invoice.jeo.jeoNumber}
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {invoice.status !== "CANCELLED" && (

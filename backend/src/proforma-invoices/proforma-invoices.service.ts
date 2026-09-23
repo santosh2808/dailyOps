@@ -38,11 +38,16 @@ const PROFORMA_INVOICE_DETAIL_INCLUDE = {
   salesOrder: {
     include: { items: { include: { product: true } } },
   },
+  // Additive: JEO-based tracking — see ProformaInvoice.jeoId schema
+  // comment. Frozen at create() time, so this is a plain to-one include,
+  // not something recomputed live.
+  jeo: { select: { id: true, jeoNumber: true } },
 } satisfies Prisma.ProformaInvoiceInclude;
 
 const PROFORMA_INVOICE_LIST_INCLUDE = {
   customer: true,
   salesOrder: { select: { id: true, salesOrderNumber: true } },
+  jeo: { select: { id: true, jeoNumber: true } },
 } satisfies Prisma.ProformaInvoiceInclude;
 
 @Injectable()
@@ -81,6 +86,9 @@ export class ProformaInvoicesService {
               { salesOrder: { salesOrderNumber: { contains: search, mode: 'insensitive' } } },
               { customer: { companyName: { contains: search, mode: 'insensitive' } } },
               { customer: { contactPerson: { contains: search, mode: 'insensitive' } } },
+              // Staff track invoices day-to-day by JEO number, not by this
+              // invoice's own number — see ProformaInvoice.jeoId comment.
+              { jeo: { jeoNumber: { contains: search, mode: 'insensitive' } } },
             ],
           }
         : {}),
@@ -123,7 +131,16 @@ export class ProformaInvoicesService {
   }
 
   async create(dto: CreateProformaInvoiceDto, actorName?: string) {
-    const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: dto.salesOrderId },
+      // Additive: JEO-based tracking — capture whichever JEO is currently
+      // linked to this Sales Order (most recently created, any status) so
+      // it can be frozen onto the invoice at create() time below. A Sales
+      // Order can accumulate more than one JEO over its life (a completed
+      // one doesn't block a later one), so "most recent" is the one that
+      // actually corresponds to this invoice being generated now.
+      include: { jobExecutionOrders: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
     }
@@ -164,6 +181,7 @@ export class ProformaInvoicesService {
             branch: dto.branch,
             notes: dto.notes,
             advanceReceived: dto.advanceReceived ?? 0,
+            jeoId: salesOrder.jobExecutionOrders[0]?.id,
           },
           include: PROFORMA_INVOICE_DETAIL_INCLUDE,
         });

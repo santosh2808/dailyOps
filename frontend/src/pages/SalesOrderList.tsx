@@ -313,6 +313,10 @@ export default function SalesOrderList() {
                     rendered at once, which forced a horizontal scroll on
                     anything narrower than a wide desktop monitor. */}
                 <TableHead className="hidden xl:table-cell">Quotation</TableHead>
+                {/* Additive: JEO-based tracking — staff identify orders by
+                    JEO number day-to-day (see SalesOrder.jobExecutionOrders
+                    type comment). */}
+                <TableHead className="hidden xl:table-cell">JEO</TableHead>
                 <TableHead className="hidden lg:table-cell">Sales Executive</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden md:table-cell">
@@ -341,7 +345,7 @@ export default function SalesOrderList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading sales orders...
                     </span>
@@ -349,7 +353,7 @@ export default function SalesOrderList() {
                 </TableRow>
               ) : salesOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                     No sales orders found.
                   </TableCell>
                 </TableRow>
@@ -374,6 +378,7 @@ export default function SalesOrderList() {
                       <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—"}</TableCell>
                     <TableCell className="hidden lg:table-cell">{salesOrder.createdBy ?? "—"}</TableCell>
                     <TableCell>
                       <SalesOrderStatusBadge status={salesOrder.status} />

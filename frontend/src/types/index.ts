@@ -928,6 +928,13 @@ export interface SalesOrder {
   dispatchOverrideBy?: string | null;
   dispatchOverrideApprovedBy?: string | null;
   dispatchOverrideAt?: string | null;
+  // Additive: JEO-based tracking — staff identify/search Sales Orders by
+  // JEO number day-to-day, not by this order's own number. A Sales Order
+  // can accumulate more than one JEO over its life (a completed one
+  // doesn't block a later one), so this is only ever the single most
+  // recently created one, read live — not a frozen snapshot like
+  // ProformaInvoice.jeo / TaxInvoice.jeo below.
+  jobExecutionOrders?: { id: string; jeoNumber: string }[];
 }
 
 export const PROFORMA_INVOICE_STATUSES = ["DRAFT", "SENT", "EXPIRED", "CANCELLED"] as const;
@@ -962,6 +969,15 @@ export interface ProformaInvoice {
   status: ProformaInvoiceStatus;
   createdAt: string;
   updatedAt: string;
+  // Additive: JEO-based tracking — staff identify/search invoices by JEO
+  // number, not by this invoice's own invoiceNumber. Captured once, at
+  // create() time, as whichever JobExecutionOrder was most recently
+  // linked to this invoice's Sales Order — frozen, not recomputed live,
+  // so it stays "the JEO this invoice was generated against" even if the
+  // Sales Order later gets a newer JEO. Null when generated before any
+  // JEO existed yet for the order.
+  jeoId?: string | null;
+  jeo?: { id: string; jeoNumber: string } | null;
 }
 
 export const TAX_INVOICE_STATUSES = ["DRAFT", "SENT", "CANCELLED"] as const;
@@ -1004,6 +1020,10 @@ export interface TaxInvoice {
   qrCodeImage?: string | null;
   eInvoiceUpdatedBy?: string | null;
   eInvoiceUpdatedAt?: string | null;
+  // Additive: JEO-based tracking — same freeze-at-create semantics as
+  // ProformaInvoice.jeoId above (see its comment).
+  jeoId?: string | null;
+  jeo?: { id: string; jeoNumber: string } | null;
 }
 
 // Additive: Website Enquiries -> Lead/Complaint refactor. Immutable

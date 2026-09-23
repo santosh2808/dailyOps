@@ -145,6 +145,9 @@ export default function ProformaInvoiceList() {
                 </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                {/* Additive: JEO-based tracking — see ProformaInvoice.jeo
+                    type comment. */}
+                <TableHead className="hidden md:table-cell">JEO</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden md:table-cell">
                   <button
@@ -172,7 +175,7 @@ export default function ProformaInvoiceList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading proforma invoices...
                     </span>
@@ -180,7 +183,7 @@ export default function ProformaInvoiceList() {
                 </TableRow>
               ) : invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No proforma invoices found.
                   </TableCell>
                 </TableRow>
@@ -198,6 +201,7 @@ export default function ProformaInvoiceList() {
                       <TruncatedText text={invoice.customer?.companyName ?? "—"} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
                     <TableCell>
                       <ProformaInvoiceStatusBadge status={invoice.status} />
                     </TableCell>

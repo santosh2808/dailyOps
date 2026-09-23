@@ -63,16 +63,29 @@ const SORTABLE_FIELDS = [
   'status',
 ] as const;
 
+// Additive: JEO-based tracking — staff identify/search for Sales Orders by
+// JEO number day-to-day (see ProformaInvoice.jeoId schema comment for the
+// full rationale). Unlike the frozen-at-create jeoId on the two invoice
+// models, a Sales Order's own jobExecutionOrders relation is a live list
+// (a Sales Order can accumulate more than one JEO over its life), so this
+// is read live here — "the latest one" is just the most recently created,
+// any status — rather than stored as its own column.
+const LATEST_JEO_INCLUDE = {
+  jobExecutionOrders: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { id: true, jeoNumber: true } },
+};
+
 const SALES_ORDER_DETAIL_INCLUDE = {
   customer: true,
   quotation: { select: { id: true, quotationNumber: true, status: true } },
   items: { include: { product: true } },
+  ...LATEST_JEO_INCLUDE,
 } satisfies Prisma.SalesOrderInclude;
 
 const SALES_ORDER_LIST_INCLUDE = {
   customer: true,
   quotation: { select: { id: true, quotationNumber: true } },
   _count: { select: { items: true } },
+  ...LATEST_JEO_INCLUDE,
 } satisfies Prisma.SalesOrderInclude;
 
 interface RawItem {
@@ -144,6 +157,10 @@ export class SalesOrdersService {
               { quotation: { quotationNumber: { contains: search, mode: 'insensitive' } } },
               { customer: { companyName: { contains: search, mode: 'insensitive' } } },
               { customer: { contactPerson: { contains: search, mode: 'insensitive' } } },
+              // Staff track Sales Orders day-to-day by JEO number — search
+              // across every JEO ever linked (not just the latest), since
+              // a match on an older, completed JEO is still a useful find.
+              { jobExecutionOrders: { some: { jeoNumber: { contains: search, mode: 'insensitive' } } } },
             ],
           }
         : {}),

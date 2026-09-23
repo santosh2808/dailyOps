@@ -144,6 +144,9 @@ export default function TaxInvoiceList() {
                 </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                {/* Additive: JEO-based tracking — see TaxInvoice.jeo type
+                    comment. */}
+                <TableHead className="hidden md:table-cell">JEO</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden md:table-cell">
                   <button
@@ -171,7 +174,7 @@ export default function TaxInvoiceList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading tax invoices...
                     </span>
@@ -179,7 +182,7 @@ export default function TaxInvoiceList() {
                 </TableRow>
               ) : invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No tax invoices found.
                   </TableCell>
                 </TableRow>
@@ -197,6 +200,7 @@ export default function TaxInvoiceList() {
                       <TruncatedText text={invoice.customer?.companyName ?? "—"} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
                     <TableCell>
                       <TaxInvoiceStatusBadge status={invoice.status} />
                     </TableCell>

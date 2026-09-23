@@ -36,7 +36,7 @@ export default function ProformaInvoiceFiltersBar({ filters, onChange }: Proform
       <div className="relative w-full max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by invoice #, order #, company, or contact"
+          placeholder="Search by invoice #, JEO #, order #, company, or contact"
           className="pl-9"
           value={filters.search}
           onChange={(e) => update("search", e.target.value)}
