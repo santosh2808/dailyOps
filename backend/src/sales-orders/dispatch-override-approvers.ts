@@ -1,7 +1,9 @@
 // The two people who may authorize dispatching an order that hasn't yet
-// received 50% advance (see SalesOrdersService.updateStatus()) — and, as of
-// SC-011, recording an advance payment below that same 50% (see
-// ProformaInvoicesService.updateAdvance()). Neither is a real User account
+// received 50% advance (see SalesOrdersService.updateStatus()) — recording
+// an advance payment below that same 50% (see
+// ProformaInvoicesService.updateAdvance(), SC-011) — and, as of the
+// production-start gate, generating a JEO below that same 50% (see
+// JobExecutionOrdersService.create()). Neither is a real User account
 // in this system (no login/RBAC entity for them), so this is a fixed
 // allow-list compared against a plain scalar, not a User relation — same
 // "fixed named constant" convention as jeo-pdf.service.ts's CHANNEL_NAME.
@@ -10,9 +12,9 @@
 // ever.
 //
 // Split into its own file (rather than living in sales-orders.service.ts)
-// so both that service and proforma-invoices.service.ts — plus
-// UpdateSalesOrderStatusDto's and UpdateProformaInvoiceAdvanceDto's
-// @IsIn() validators — can import it without a circular import.
+// so all three services — plus UpdateSalesOrderStatusDto's,
+// UpdateProformaInvoiceAdvanceDto's, and CreateJeoDto's @IsIn() validators
+// — can import it without a circular import.
 export const DISPATCH_OVERRIDE_APPROVERS = ['Santosh Kumar Chegondi', 'Amarpal Gampa'] as const;
 export type DispatchOverrideApprover = (typeof DISPATCH_OVERRIDE_APPROVERS)[number];
 

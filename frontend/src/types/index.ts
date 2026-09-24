@@ -1118,6 +1118,14 @@ export interface JobExecutionOrder {
   pipeLength?: string | null;
   hangingStructureType?: HangingStructureType | null;
   color: string;
+  // Production-start gate: set when this JEO was generated below the
+  // MINIMUM_ADVANCE_PERCENT (50%) advance threshold via the named-approver
+  // override — mirrors SalesOrder's dispatchOverride* and ProformaInvoice's
+  // advanceOverride* fields above.
+  productionOverrideNote?: string | null;
+  productionOverrideBy?: string | null;
+  productionOverrideApprovedBy?: string | null;
+  productionOverrideAt?: string | null;
   createdAt: string;
   updatedAt: string;
   checklist?: ProductionChecklist;

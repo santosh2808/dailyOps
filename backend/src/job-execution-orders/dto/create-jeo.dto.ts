@@ -1,6 +1,7 @@
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { HangingStructureType, JeoPriority } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { DISPATCH_OVERRIDE_APPROVERS } from '../../sales-orders/dispatch-override-approvers';
 
 export class CreateJeoDto {
   @ApiProperty({ description: 'Id (uuid) of the existing Sales Order to generate this JEO from' })
@@ -39,4 +40,28 @@ export class CreateJeoDto {
   @IsOptional()
   @IsString()
   color?: string;
+
+  // Production-start gate: minimum-advance gate (MINIMUM_ADVANCE_PERCENT%
+  // of the Sales Order's grandTotal) — only required/used when the active
+  // Proforma Invoice's advanceReceived is below that minimum. See
+  // JobExecutionOrdersService.create() for the actual gate (which also
+  // requires the acting user to hold the Administrator role). Same shape as
+  // UpdateSalesOrderStatusDto's dispatchOverrideApprovedBy/dispatchOverrideNote
+  // and UpdateProformaInvoiceAdvanceDto's advanceOverrideApprovedBy/advanceOverrideNote.
+  @ApiPropertyOptional({
+    enum: DISPATCH_OVERRIDE_APPROVERS,
+    description:
+      'Required only to generate a JEO below the required advance minimum. Must be one of the two fixed approvers; the acting user must also be an Administrator.',
+  })
+  @IsOptional()
+  @IsIn(DISPATCH_OVERRIDE_APPROVERS)
+  productionOverrideApprovedBy?: string;
+
+  @ApiPropertyOptional({
+    example: 'Customer confirmed payment on delivery — production approved per Sales Manager.',
+    description: 'Optional context for the below-minimum override. Recorded against the JEO.',
+  })
+  @IsOptional()
+  @IsString()
+  productionOverrideNote?: string;
 }

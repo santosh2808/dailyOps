@@ -1839,6 +1839,21 @@ model JobExecutionOrder {
   // being left unrecorded — still fully overridable per JEO for a
   // customer-requested custom colour.
   color                String                @default("Aluminium")
+  // Production-start gate (per business owner, following SC-011's Record
+  // Advance Payment minimum): generating a JEO now requires at least
+  // MINIMUM_ADVANCE_PERCENT (50%) advance received against the Sales
+  // Order's active Proforma Invoice — see
+  // JobExecutionOrdersService.create(). Below the minimum, one of the same
+  // two fixed named approvers (Santosh Kumar Chegondi / Amarpal Gampa) may
+  // authorize an exception, mirroring SalesOrder.dispatchOverride* and
+  // ProformaInvoice.advanceOverride* exactly — kept as its own set of
+  // columns since starting production is a third independent action (after
+  // recording the advance and before dispatch) that can each need their
+  // own override on the same order.
+  productionOverrideNote        String?
+  productionOverrideBy          String?
+  productionOverrideAt          DateTime?
+  productionOverrideApprovedBy  String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 

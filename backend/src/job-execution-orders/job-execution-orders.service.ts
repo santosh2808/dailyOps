@@ -1,10 +1,29 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { JeoStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
+import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
+
+// Passed by the controller from the JWT payload (req.user) — never trusted
+// from the request body. `roles` drives the below-minimum-advance
+// Administrator check in create() below; `name` is the existing
+// actor-display-name convention used everywhere else in this file. Same
+// shape/convention as SalesOrdersService's SalesOrderActor and
+// ProformaInvoicesService's ProformaInvoiceActor.
+export interface JeoActor {
+  name?: string;
+  roles?: string[];
+}
 
 // QA bug-fix pass (TC-080): the linear production sequence a JEO moves
 // through. COMPLETED is terminal — no further status change allowed once
@@ -233,7 +252,8 @@ export class JobExecutionOrdersService {
     return jeo;
   }
 
-  async create(dto: CreateJeoDto, actorName?: string) {
+  async create(dto: CreateJeoDto, actor: JeoActor = {}) {
+    const actorName = actor.name;
     // `customer` is included here specifically so generateJeoNumber() can
     // pick the right state-wise series (see StateSeriesCodesService) —
     // nothing else in create() needed it before.
@@ -266,6 +286,51 @@ export class JobExecutionOrdersService {
       );
     }
 
+    // Production-start gate (per business owner): starting production
+    // (generating a JEO) now requires at least MINIMUM_ADVANCE_PERCENT
+    // (50%) advance received against the Sales Order's active Proforma
+    // Invoice — same threshold and named-approver override as the existing
+    // dispatch gate (SalesOrdersService.updateStatus()) and the Record
+    // Advance Payment minimum (ProformaInvoicesService.updateAdvance()).
+    const activeInvoice = await this.prisma.proformaInvoice.findFirst({
+      where: { salesOrderId: dto.salesOrderId, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      select: { advanceReceived: true },
+    });
+    const advanceReceived = activeInvoice?.advanceReceived ?? 0;
+    // grandTotal <= 0 is a degenerate order with nothing to collect
+    // against — treat the threshold as already met rather than making it
+    // impossible to ever satisfy.
+    const requiredAdvance = salesOrder.grandTotal > 0 ? (salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
+
+    let productionOverrideNote: string | null = null;
+    let productionOverrideBy: string | null = null;
+    let productionOverrideApprovedBy: string | null = null;
+    let productionOverrideAt: Date | null = null;
+
+    if (advanceReceived < requiredAdvance) {
+      const approvedBy = dto.productionOverrideApprovedBy?.trim();
+      if (!approvedBy) {
+        throw new BadRequestException(
+          `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — production cannot be started. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a production override.`,
+        );
+      }
+      if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
+        throw new BadRequestException(
+          `"${approvedBy}" is not a recognized production-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize starting production below the ${MINIMUM_ADVANCE_PERCENT}% advance threshold.`,
+        );
+      }
+      if (!(actor.roles ?? []).includes('Administrator')) {
+        throw new ForbiddenException(
+          'Only an Administrator can start production with advance payment below the required threshold.',
+        );
+      }
+      productionOverrideNote = dto.productionOverrideNote?.trim() || null;
+      productionOverrideApprovedBy = approvedBy;
+      productionOverrideBy = actorName ?? null;
+      productionOverrideAt = new Date();
+    }
+
     // Customer, Quotation reference, Sales Order reference, and Delivery
     // Date are all copied straight from the Sales Order — never re-entered
     // by hand. Products are not duplicated either; they're read live via
@@ -293,6 +358,10 @@ export class JobExecutionOrdersService {
             pipeLength: dto.pipeLength?.trim() || undefined,
             hangingStructureType: dto.hangingStructureType,
             color: dto.color?.trim() || undefined,
+            productionOverrideNote,
+            productionOverrideBy,
+            productionOverrideApprovedBy,
+            productionOverrideAt,
             // Created together with its JEO, all steps unchecked — never
             // created standalone (see schema.prisma comment).
             checklist: { create: {} },

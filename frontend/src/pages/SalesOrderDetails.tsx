@@ -594,6 +594,8 @@ export default function SalesOrderDetails() {
         open={generateJeoOpen}
         onOpenChange={setGenerateJeoOpen}
         salesOrder={salesOrder}
+        advanceReceived={activeInvoice?.advanceReceived ?? 0}
+        isAdmin={isAdmin}
         onConfirm={handleGenerateJeoConfirm}
       />
       <GenerateTaxInvoiceDialog

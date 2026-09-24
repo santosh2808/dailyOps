@@ -12,6 +12,7 @@ import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDial
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
+import { useAuth } from "@/context/AuthContext";
 import { getCustomer } from "@/api/customers";
 import { listQuotations, updateQuotationStatus, type QuotationApprovalErrorBody } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
@@ -46,6 +47,11 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Production-start gate (GenerateJeoDialog): whether the acting user may
+  // authorize generating a JEO below the advance-payment minimum — same
+  // convention as SalesOrderDetails.tsx.
+  const isAdmin = !!user?.roles?.includes("Administrator");
   // Same "smart back" pattern as Quotation Details: when this page was
   // reached from a Lead (either the post-conversion redirect or the "View
   // Customer" button on Lead Details), Back returns to that lead instead of
@@ -62,6 +68,10 @@ export default function CustomerDetails() {
   const [error, setError] = useState("");
 
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
+  // Production-start gate: advance received on the active Proforma Invoice
+  // (0 if none), passed into GenerateJeoDialog below — same value/purpose
+  // as SalesOrderDetails.tsx's own activeInvoice?.advanceReceived.
+  const [activeAdvanceReceived, setActiveAdvanceReceived] = useState(0);
   const [activeJeoId, setActiveJeoId] = useState<string | null>(null);
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
   const [generateJeoOpen, setGenerateJeoOpen] = useState(false);
@@ -111,14 +121,17 @@ export default function CustomerDetails() {
   const checkActiveInvoice = useCallback(async () => {
     if (!salesOrder) {
       setActiveInvoiceId(null);
+      setActiveAdvanceReceived(0);
       return;
     }
     try {
       const res = await listProformaInvoices({ salesOrderId: salesOrder.id, limit: 20 });
       const active = res.data.find((inv) => inv.status !== "CANCELLED");
       setActiveInvoiceId(active?.id ?? null);
+      setActiveAdvanceReceived(active?.advanceReceived ?? 0);
     } catch {
       setActiveInvoiceId(null);
+      setActiveAdvanceReceived(0);
     }
   }, [salesOrder]);
 
@@ -414,6 +427,8 @@ export default function CustomerDetails() {
         open={generateJeoOpen}
         onOpenChange={setGenerateJeoOpen}
         salesOrder={salesOrder ?? null}
+        advanceReceived={activeAdvanceReceived}
+        isAdmin={isAdmin}
         onConfirm={handleGenerateJeoConfirm}
       />
     </div>

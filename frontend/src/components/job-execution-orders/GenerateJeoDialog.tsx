@@ -18,7 +18,18 @@ import { isAxiosError } from "axios";
 import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
 import { getQuotation } from "@/api/quotations";
-import type { HangingStructureType, JeoPriority, SalesOrder } from "@/types";
+import { DISPATCH_OVERRIDE_APPROVERS, type HangingStructureType, type JeoPriority, type SalesOrder } from "@/types";
+
+// Production-start gate: generating a JEO now requires at least
+// MINIMUM_ADVANCE_PERCENT (50%) advance received against the Sales Order's
+// active Proforma Invoice — same threshold and named-approver override as
+// the existing dispatch gate (ChangeSalesOrderStatusDialog.tsx) and Record
+// Advance Payment minimum (RecordAdvancePaymentDialog.tsx).
+const MINIMUM_ADVANCE_PERCENT = 50;
+
+function formatRupees(value: number) {
+  return `₹${value.toLocaleString("en-IN")}`;
+}
 
 // Additive: pre-fill Scope of Work (pipe length / hanging structure / color)
 // from the source quotation's own per-item choices, so staff generating a
@@ -49,6 +60,17 @@ interface GenerateJeoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   salesOrder: SalesOrder | null;
+  // Current advance received on the active Proforma Invoice (0 if none) —
+  // passed in from SalesOrderDetails.tsx, same value already used for
+  // ChangeSalesOrderStatusDialog's dispatch gate, so the production-start
+  // threshold can be checked proactively instead of only reacting to a
+  // backend rejection.
+  advanceReceived: number;
+  // Whether the acting user holds the Administrator role — only an Admin
+  // may record a production-start override (see
+  // JobExecutionOrdersService.create()). This only drives which UI is
+  // shown; the backend enforces it for real.
+  isAdmin: boolean;
   onConfirm: (payload: Omit<JeoPayload, "salesOrderId">) => Promise<void>;
 }
 
@@ -59,6 +81,8 @@ interface FormState {
   pipeLength: string;
   hangingStructureType: HangingStructureType | "";
   color: string;
+  productionOverrideApprovedBy: string;
+  productionOverrideNote: string;
 }
 
 const emptyForm: FormState = {
@@ -68,6 +92,8 @@ const emptyForm: FormState = {
   pipeLength: "",
   hangingStructureType: "",
   color: "Aluminium",
+  productionOverrideApprovedBy: "",
+  productionOverrideNote: "",
 };
 
 // Generates a JEO from an existing Sales Order. Customer, Quotation
@@ -80,6 +106,8 @@ export default function GenerateJeoDialog({
   open,
   onOpenChange,
   salesOrder,
+  advanceReceived,
+  isAdmin,
   onConfirm,
 }: GenerateJeoDialogProps) {
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -118,6 +146,11 @@ export default function GenerateJeoDialog({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  const grandTotal = salesOrder?.grandTotal ?? 0;
+  const requiredAdvance = grandTotal > 0 ? (grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
+  const belowThreshold = advanceReceived < requiredAdvance;
+  const canSubmit = !belowThreshold || (isAdmin && !!form.productionOverrideApprovedBy);
+
   async function handleConfirm() {
     setSubmitting(true);
     setError("");
@@ -129,6 +162,8 @@ export default function GenerateJeoDialog({
         pipeLength: form.pipeLength.trim() || undefined,
         hangingStructureType: form.hangingStructureType || undefined,
         color: form.color.trim() || undefined,
+        productionOverrideApprovedBy: belowThreshold ? form.productionOverrideApprovedBy || undefined : undefined,
+        productionOverrideNote: belowThreshold ? form.productionOverrideNote.trim() || undefined : undefined,
       });
       onOpenChange(false);
     } catch (err) {
@@ -237,6 +272,52 @@ export default function GenerateJeoDialog({
           </div>
         </div>
 
+        {belowThreshold && !isAdmin && (
+          <div className="mt-3 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <p className="text-sm font-medium text-destructive">
+              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
+              {MINIMUM_ADVANCE_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Only an Administrator can start production below the threshold, and only with
+              authorization from Santosh Kumar Chegondi or Amarpal Gampa.
+            </p>
+          </div>
+        )}
+
+        {belowThreshold && isAdmin && (
+          <div className="mt-3 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-900">
+              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
+              {MINIMUM_ADVANCE_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="production-override-approved-by">Approved By (required)</Label>
+              <Select
+                id="production-override-approved-by"
+                value={form.productionOverrideApprovedBy}
+                onChange={(e) => update("productionOverrideApprovedBy", e.target.value)}
+              >
+                <option value="">Select...</option>
+                {DISPATCH_OVERRIDE_APPROVERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="production-override-note">Note (optional)</Label>
+              <Textarea
+                id="production-override-note"
+                placeholder="e.g. Customer confirmed payment on delivery — production approved per Sales Manager."
+                value={form.productionOverrideNote}
+                onChange={(e) => update("productionOverrideNote", e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
@@ -248,7 +329,7 @@ export default function GenerateJeoDialog({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting}>
+          <Button type="button" onClick={handleConfirm} disabled={submitting || !canSubmit}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Generating..." : "Generate JEO"}
           </Button>

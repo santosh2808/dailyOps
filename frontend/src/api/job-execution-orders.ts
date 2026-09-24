@@ -32,6 +32,13 @@ export interface JeoPayload {
   pipeLength?: string;
   hangingStructureType?: HangingStructureType;
   color?: string;
+  // Production-start gate: required only when the linked Sales Order's
+  // advance received is below MINIMUM_ADVANCE_PERCENT (50%) of its
+  // grandTotal — the backend rejects a below-minimum JEO generation
+  // without a recognized approver, and requires the acting user to be an
+  // Administrator. Create-only — not part of UpdateJeoPayload below.
+  productionOverrideApprovedBy?: string;
+  productionOverrideNote?: string;
 }
 
 export interface ProductionChecklistPayload {

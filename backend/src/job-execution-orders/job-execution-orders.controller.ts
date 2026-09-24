@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
-import { JobExecutionOrdersService } from './job-execution-orders.service';
+import { JobExecutionOrdersService, type JeoActor } from './job-execution-orders.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
 import { UpdateJeoDto } from './dto/update-jeo.dto';
 import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
@@ -55,7 +55,8 @@ export class JobExecutionOrdersController {
   @Post()
   @RequirePermission('JEO', 'Create')
   create(@Body() dto: CreateJeoDto, @Req() req: any) {
-    return this.jobExecutionOrdersService.create(dto, req.user?.name);
+    const actor: JeoActor = { name: req.user?.name, roles: req.user?.roles ?? [] };
+    return this.jobExecutionOrdersService.create(dto, actor);
   }
 
   // Edit a JEO's own fields (priority/assignedTo/remarks/Scope of Work) —
