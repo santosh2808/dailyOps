@@ -34,7 +34,6 @@ interface FormState {
   paymentTerms: string;
   advancePercentage: string;
   gstPercent: string;
-  discount: string;
   billingAddress: string;
   shippingAddress: string;
   specialInstructions: string;
@@ -47,7 +46,6 @@ const emptyForm: FormState = {
   paymentTerms: "",
   advancePercentage: "",
   gstPercent: "18",
-  discount: "0",
   billingAddress: "",
   shippingAddress: "",
   specialInstructions: "",
@@ -86,7 +84,10 @@ export default function SalesOrderForm() {
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  // "items" isn't a FormState field (it's the separate items[] array edited
+  // via SalesOrderItemsEditor) but shares this same error-bag/scroll-to-
+  // first-error convention — see the per-line discount check in validate().
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>> & { items?: string }>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -128,15 +129,12 @@ export default function SalesOrderForm() {
         const so = await getSalesOrder(salesOrderId);
         if (cancelled) return;
         setCustomerLabel(so.customer ? `${so.customer.companyName} — ${so.customer.contactPerson}` : "");
-        const itemDiscountSum = (so.items ?? []).reduce((sum, i) => sum + i.discount, 0);
-        const extraDiscount = Math.max(0, so.discount - itemDiscountSum);
         setForm({
           orderDate: toDateInputValue(so.orderDate),
           deliveryDate: toDateInputValue(so.deliveryDate),
           paymentTerms: so.paymentTerms ?? "",
           advancePercentage: so.advancePercentage != null ? String(so.advancePercentage) : "",
           gstPercent: "18",
-          discount: String(extraDiscount),
           billingAddress: so.billingAddress ?? "",
           shippingAddress: so.shippingAddress ?? "",
           specialInstructions: so.specialInstructions ?? "",
@@ -191,7 +189,7 @@ export default function SalesOrderForm() {
   }, [sameAsBilling, form.billingAddress]);
 
   function validate(): boolean {
-    const next: Partial<Record<keyof FormState, string>> = {};
+    const next: Partial<Record<keyof FormState, string>> & { items?: string } = {};
 
     // You can't promise delivery on a date that's already passed. Order
     // Date is left unrestricted — backdating the order itself (catching up
@@ -214,11 +212,17 @@ export default function SalesOrderForm() {
       }
     }
 
-    if (form.discount.trim()) {
-      const parsed = Number(form.discount);
-      if (Number.isNaN(parsed) || parsed < 0) {
-        next.discount = "Discount must be a positive number";
-      }
+    // QA bug fix (SC-004): the order-level "Additional Discount" field was
+    // removed (redundant with Quotation.discount, and unclamped — a
+    // discount larger than the subtotal drove the grand total negative).
+    // Per-line item discount is the one discounting mechanism left here, so
+    // it needs the same "can't exceed what it's discounting off of" check
+    // the backend now enforces (SalesOrdersService.computeTotals()) —
+    // otherwise a single line's discount could still push its own line
+    // total (and the order total) negative before the user ever submits.
+    const invalidItem = items.find((item) => (item.discount ?? 0) > item.quantity * (item.unitPrice ?? 0));
+    if (invalidItem) {
+      next.items = `${invalidItem.productName}'s discount can't exceed that line's own amount (Qty × Unit Price).`;
     }
 
     // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
@@ -247,7 +251,6 @@ export default function SalesOrderForm() {
       paymentTerms: form.paymentTerms.trim() || undefined,
       advancePercentage: form.advancePercentage.trim() ? Number(form.advancePercentage) : undefined,
       gstPercent: form.gstPercent.trim() ? Number(form.gstPercent) : undefined,
-      discount: form.discount.trim() ? Number(form.discount) : undefined,
       billingAddress: form.billingAddress.trim() || undefined,
       shippingAddress: form.shippingAddress.trim() || undefined,
       specialInstructions: form.specialInstructions.trim() || undefined,
@@ -278,10 +281,16 @@ export default function SalesOrderForm() {
 
   const subtotal = computeSubtotal(items);
   const itemDiscountSum = computeItemDiscountTotal(items);
-  const extraDiscount = form.discount.trim() ? Number(form.discount) || 0 : 0;
-  const totalDiscount = itemDiscountSum + extraDiscount;
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
-  const tax = (subtotal - itemDiscountSum) * (gstPercentNum / 100);
+  const tax = Math.max(0, subtotal - itemDiscountSum) * (gstPercentNum / 100);
+  // QA bug fix (SC-004): mirrors SalesOrdersService.computeTotals()'s own
+  // clamp — validate() already stops any single line's discount from
+  // exceeding that line's own amount before submit, but the SUM across
+  // lines could still exceed subtotal+tax if several lines are discounted
+  // generously at once. Clamping here keeps this preview (and the Grand
+  // Total below) from ever showing a negative figure the backend wouldn't
+  // actually save.
+  const totalDiscount = Math.min(Math.max(0, itemDiscountSum), subtotal + tax);
 
   // Bug fix (QA: "Quotation -> Sales Order" charge breakdown FAIL) — this
   // preview used to sum items + GST only, silently leaving out
@@ -291,17 +300,15 @@ export default function SalesOrderForm() {
   // SalesOrdersService.freezeToQuotationTotalsIfUnmodified). Mirrors that
   // same backend condition exactly: charges only carry forward when every
   // item still matches the quotation's own quantity with no per-line
-  // discount, and there's no additional order-level discount — otherwise
-  // the backend doesn't guess how they should scale with a changed
-  // quantity, and neither does this preview.
+  // discount — otherwise the backend doesn't guess how they should scale
+  // with a changed quantity, and neither does this preview.
   const matchesQuotationExactly =
     !!quotation &&
     items.length === (quotation.items?.length ?? 0) &&
     items.every((item) => {
       const qi = quotation.items?.find((q) => q.productId === item.productId);
       return !!qi && qi.quantity === item.quantity && (item.discount ?? 0) === 0;
-    }) &&
-    extraDiscount === 0;
+    });
   const installationCharge = matchesQuotationExactly ? quotation!.installationCharge : 0;
   const transportationCharge = matchesQuotationExactly ? quotation!.transportationCharge : 0;
   const grandTotal = subtotal - totalDiscount + tax + installationCharge + transportationCharge;
@@ -355,8 +362,18 @@ export default function SalesOrderForm() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <SalesOrderItemsEditor value={items} onChange={setItems} />
+                  {/* QA bug fix (SC-004): the separate order-level "Additional
+                      Discount" field was removed — it duplicated Quotation's
+                      own discount mechanism and wasn't clamped against the
+                      subtotal, so a large enough value drove the Grand Total
+                      negative. Per-line item discount (in the editor above)
+                      is the one discounting mechanism left at this stage; a
+                      validation error for it (line discount exceeding that
+                      line's own amount) surfaces here since there's no
+                      single input field of its own to attach to. */}
+                  {errors.items && <p className="text-xs text-destructive">{errors.items}</p>}
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:max-w-xs">
                     <div className="space-y-2">
                       <Label htmlFor="gstPercent">GST %</Label>
                       <Input
@@ -368,17 +385,6 @@ export default function SalesOrderForm() {
                       {errors.gstPercent && (
                         <p className="text-xs text-destructive">{errors.gstPercent}</p>
                       )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="discount">Additional Discount</Label>
-                      <Input
-                        id="discount"
-                        inputMode="decimal"
-                        value={form.discount}
-                        onChange={(e) => update("discount", e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">On top of any per-line discounts</p>
-                      {errors.discount && <p className="text-xs text-destructive">{errors.discount}</p>}
                     </div>
                   </div>
 

@@ -33,7 +33,6 @@ export interface SalesOrderPayload {
   paymentTerms?: string;
   advancePercentage?: number;
   gstPercent?: number;
-  discount?: number;
   billingAddress?: string;
   shippingAddress?: string;
   specialInstructions?: string;

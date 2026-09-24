@@ -60,16 +60,16 @@ export class CreateSalesOrderDto {
   @Min(0, { message: 'GST percent must be a positive number' })
   gstPercent?: number;
 
-  @ApiPropertyOptional({
-    example: 0,
-    default: 0,
-    description: 'Additional flat discount applied at the order level, on top of any per-line discounts',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0, { message: 'Discount must be a positive number' })
-  discount?: number;
+  // Removed: a separate order-level "Additional Discount" field used to
+  // live here, on top of each line's own discount. Dropped per QA SC-004 —
+  // Quotation already has its own discount mechanism (Quotation.discount),
+  // which is what's negotiated before a Sales Order even exists and already
+  // flows through into this Sales Order's grandTotal (see
+  // SalesOrdersService.freezeToQuotationTotalsIfUnmodified()). Stacking a
+  // second, independent order-level discount on top of that was redundant
+  // and — because it wasn't clamped against the subtotal — could drive
+  // grandTotal negative. Per-line item discounts (SalesOrderItemInputDto.discount)
+  // are unaffected and remain the one discounting mechanism at this stage.
 
   @ApiPropertyOptional({ example: 'Acme Corp, 123 Industrial Estate, Pune' })
   @IsOptional()

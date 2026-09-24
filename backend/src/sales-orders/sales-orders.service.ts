@@ -232,7 +232,7 @@ export class SalesOrdersService {
     }
 
     const rawItems = this.resolveItemsAgainstQuotation(dto.items, quotation.items);
-    const totals = this.computeTotals(rawItems, dto.gstPercent ?? DEFAULT_GST_PERCENT, dto.discount ?? 0);
+    const totals = this.computeTotals(rawItems, dto.gstPercent ?? DEFAULT_GST_PERCENT);
     this.freezeToQuotationTotalsIfUnmodified(totals, rawItems, quotation);
 
     for (let attempt = 1; attempt <= MAX_SALES_ORDER_NUMBER_ATTEMPTS; attempt++) {
@@ -379,12 +379,9 @@ export class SalesOrdersService {
       if (!quotation) {
         throw new NotFoundException('The originating quotation for this sales order no longer exists');
       }
-      const existingItemDiscountSum = existing.items.reduce((sum, i) => sum + i.discount, 0);
-      const extraDiscount = dto.discount ?? Math.max(0, existing.discount - existingItemDiscountSum);
-
       if (dto.items) {
         const rawItems = this.resolveItemsAgainstQuotation(dto.items, quotation.items);
-        const totals = this.computeTotals(rawItems, dto.gstPercent ?? DEFAULT_GST_PERCENT, extraDiscount);
+        const totals = this.computeTotals(rawItems, dto.gstPercent ?? DEFAULT_GST_PERCENT);
         aggregate = totals;
         itemsToReplace = totals.items;
       } else {
@@ -398,21 +395,17 @@ export class SalesOrdersService {
           unitPrice: item.unitPrice,
           discount: item.discount,
         }));
-        const totals = this.computeTotals(rawItems, dto.gstPercent!, extraDiscount);
+        const totals = this.computeTotals(rawItems, dto.gstPercent!);
         aggregate = totals;
         itemsToUpdateInPlace = totals.items;
       }
-    } else if (dto.discount !== undefined) {
-      // Only the order-level extra discount changed — item-level tax/line
-      // totals (computed with whatever GST % was used previously) are left
-      // untouched; only the order aggregate is recalculated.
-      const subtotal = existing.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-      const itemDiscountSum = existing.items.reduce((sum, i) => sum + i.discount, 0);
-      const tax = existing.items.reduce((sum, i) => sum + i.tax, 0);
-      const totalDiscount = Math.round((itemDiscountSum + dto.discount) * 100) / 100;
-      const grandTotal = Math.round((subtotal - totalDiscount + tax) * 100) / 100;
-      aggregate = { subtotal: Math.round(subtotal * 100) / 100, discount: totalDiscount, tax, grandTotal };
     }
+    // Note: there used to be a third branch here for when only the
+    // order-level "Additional Discount" field changed (no items/GST edit).
+    // That field has been removed entirely (see create-sales-order.dto.ts)
+    // — discounting a Sales Order now only happens per line item, via
+    // dto.items above, or implicitly by way of Quotation.discount already
+    // baked into the frozen totals at creation.
 
     return this.prisma.$transaction(async (tx) => {
       if (itemsToReplace) {
@@ -728,7 +721,7 @@ export class SalesOrdersService {
     });
   }
 
-  private computeTotals(items: RawItem[], gstPercent: number, extraDiscount: number): ComputedTotals {
+  private computeTotals(items: RawItem[], gstPercent: number): ComputedTotals {
     const computedItems: ComputedItem[] = items.map((item) => {
       const lineSubtotal = item.quantity * item.unitPrice;
       const taxable = Math.max(0, lineSubtotal - item.discount);
@@ -738,9 +731,15 @@ export class SalesOrdersService {
     });
 
     const subtotal = Math.round(computedItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0) * 100) / 100;
-    const itemDiscountSum = computedItems.reduce((sum, i) => sum + i.discount, 0);
-    const discount = Math.round((itemDiscountSum + extraDiscount) * 100) / 100;
     const tax = Math.round(computedItems.reduce((sum, i) => sum + i.tax, 0) * 100) / 100;
+    // Each line's own discount is clamped above (taxable can't go below 0
+    // for that line), but the SUM of per-line discounts across the order
+    // could still exceed subtotal+tax if entered generously enough on
+    // several lines at once — clamp the aggregate too so grandTotal can
+    // never go negative (QA SC-004: "discount greater than subtotal ...
+    // total amount becomes negative").
+    const itemDiscountSum = computedItems.reduce((sum, i) => sum + i.discount, 0);
+    const discount = Math.round(Math.min(Math.max(0, itemDiscountSum), subtotal + tax) * 100) / 100;
     const grandTotal = Math.round((subtotal - discount + tax) * 100) / 100;
 
     return {
