@@ -35,6 +35,9 @@ export interface SalesOrderPayload {
   gstPercent?: number;
   billingAddress?: string;
   shippingAddress?: string;
+  // The customer's own Purchase Order number — required by the backend DTO
+  // for manual create/update. See CreateSalesOrderDto.customerPoNumber.
+  customerPoNumber?: string;
   specialInstructions?: string;
   remarks?: string;
 }
@@ -98,5 +101,35 @@ export interface SendSalesOrderResult extends SalesOrder {
 // SalesOrdersService.sendSalesOrder() for the backend side.
 export async function sendSalesOrder(id: string, payload: SendSalesOrderPayload) {
   const res = await api.post<SendSalesOrderResult>(`/api/v1/sales-orders/${id}/send`, payload);
+  return res.data;
+}
+
+// Customer's Purchase Order document — a scan/photo of the actual PO,
+// separate from customerPoNumber (the required text field above). Same
+// upload/blob-fetch/delete pattern as Lead Site Visit Photos
+// (uploadSiteVisitPhotos/getSiteVisitPhotoBlobUrl/deleteSiteVisitPhoto in
+// api/leads.ts), except this is a single file per Sales Order rather than a
+// gallery.
+export async function uploadSalesOrderPoDocument(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post<SalesOrder>(`/api/v1/sales-orders/${id}/po-document`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+// See getSiteVisitPhotoBlobUrl()'s comment in api/leads.ts — same reasoning
+// (the streaming endpoint needs the Authorization header a plain <a href>
+// can't send). Caller owns the returned URL and must revokeObjectURL() it.
+export async function getSalesOrderPoDocumentBlobUrl(id: string) {
+  const res = await api.get(`/api/v1/sales-orders/${id}/po-document/file`, {
+    responseType: "blob",
+  });
+  return URL.createObjectURL(res.data as Blob);
+}
+
+export async function deleteSalesOrderPoDocument(id: string) {
+  const res = await api.delete<SalesOrder>(`/api/v1/sales-orders/${id}/po-document`);
   return res.data;
 }

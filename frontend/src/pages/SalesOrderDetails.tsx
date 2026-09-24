@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Send,
   Trash2,
+  Upload,
   Wallet,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
@@ -21,6 +22,7 @@ import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/compone
 import SalesOrderStatusBadge from "@/components/sales-orders/SalesOrderStatusBadge";
 import ChangeSalesOrderStatusDialog from "@/components/sales-orders/ChangeSalesOrderStatusDialog";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/GenerateProformaInvoiceDialog";
 import RecordAdvancePaymentDialog from "@/components/proforma-invoices/RecordAdvancePaymentDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
@@ -34,9 +36,12 @@ import { useAuth } from "@/context/AuthContext";
 import { statusLabel } from "@/components/sales-orders/salesOrderOptions";
 import {
   deleteSalesOrder,
+  deleteSalesOrderPoDocument,
   getSalesOrder,
   getSalesOrderEmailHistory,
+  getSalesOrderPoDocumentBlobUrl,
   updateSalesOrderStatus,
+  uploadSalesOrderPoDocument,
 } from "@/api/sales-orders";
 import {
   createProformaInvoice,
@@ -73,6 +78,12 @@ function formatCurrency(value?: number | null) {
 function formatDate(value?: string | null) {
   if (!value) return null;
   return new Date(value).toLocaleDateString();
+}
+
+function formatFileSize(bytes?: number | null) {
+  if (bytes == null) return "";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function SalesOrderDetails() {
@@ -117,6 +128,43 @@ export default function SalesOrderDetails() {
   // stay usable at any non-cancelled status, only Edit itself locks down
   // this early). See SalesOrdersService.update()'s own guard.
   const isEditable = salesOrder?.status === "DRAFT";
+
+  // Customer's Purchase Order document — a scan/photo of the actual PO,
+  // separate from customerPoNumber. Allowed at any non-CANCELLED status
+  // (unlike Edit above, which is DRAFT-only) — see
+  // SalesOrdersService.uploadCustomerPoDocument()'s comment for why.
+  const poDocumentInputRef = useRef<HTMLInputElement>(null);
+  const [poDocumentUploading, setPoDocumentUploading] = useState(false);
+  const [poDocumentDeleteOpen, setPoDocumentDeleteOpen] = useState(false);
+
+  async function handlePoDocumentSelected(file: File | undefined) {
+    if (!file || !id) return;
+    setPoDocumentUploading(true);
+    try {
+      const updated = await uploadSalesOrderPoDocument(id, file);
+      setSalesOrder(updated);
+      toast.success("Purchase Order document uploaded.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not upload the Purchase Order document."));
+    } finally {
+      setPoDocumentUploading(false);
+      if (poDocumentInputRef.current) poDocumentInputRef.current.value = "";
+    }
+  }
+
+  async function handleViewPoDocument() {
+    if (!id) return;
+    try {
+      const url = await getSalesOrderPoDocumentBlobUrl(id);
+      window.open(url, "_blank");
+      // Revoke after a delay — same convention as openJeoPdf() in
+      // api/job-execution-orders.ts (the new tab needs time to load the
+      // blob URL before it's invalidated).
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not open the Purchase Order document."));
+    }
+  }
 
   const fetchSalesOrder = useCallback(async () => {
     if (!id) return;
@@ -536,10 +584,87 @@ export default function SalesOrderDetails() {
                   <CardTitle className="text-base">Addresses & Instructions</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Purchase Order Number" value={salesOrder.customerPoNumber} />
                   <Field label="Billing Address" value={salesOrder.billingAddress} />
                   <Field label="Shipping Address" value={salesOrder.shippingAddress} />
                   <Field label="Special Instructions" value={salesOrder.specialInstructions} />
                   <Field label="Remarks" value={salesOrder.remarks} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Purchase Order Document</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {salesOrder.customerPoDocumentOriginalName ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 p-3">
+                      <div className="flex items-center gap-2 text-sm">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {salesOrder.customerPoDocumentOriginalName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(salesOrder.customerPoDocumentSizeBytes)}
+                            {salesOrder.customerPoDocumentUploadedAt &&
+                              ` · Uploaded ${formatDate(salesOrder.customerPoDocumentUploadedAt)}`}
+                            {salesOrder.customerPoDocumentUploadedBy &&
+                              ` by ${salesOrder.customerPoDocumentUploadedBy}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={handleViewPoDocument}>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View
+                        </Button>
+                        {!isCancelled && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPoDocumentDeleteOpen(true)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No Purchase Order document has been uploaded for this Sales Order yet.
+                    </p>
+                  )}
+                  {!isCancelled && (
+                    <div>
+                      <input
+                        ref={poDocumentInputRef}
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        className="hidden"
+                        onChange={(e) => handlePoDocumentSelected(e.target.files?.[0])}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={poDocumentUploading}
+                        onClick={() => poDocumentInputRef.current?.click()}
+                      >
+                        {poDocumentUploading ? (
+                          <Spinner className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                        )}
+                        {salesOrder.customerPoDocumentOriginalName
+                          ? "Replace document"
+                          : "Upload document"}
+                      </Button>
+                      <p className="mt-1 text-xs text-muted-foreground">PDF, JPG or PNG, up to 10MB.</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -575,6 +700,21 @@ export default function SalesOrderDetails() {
         onOpenChange={setDeleteOpen}
         salesOrder={salesOrder}
         onConfirm={handleDeleteConfirm}
+      />
+      <ConfirmDialog
+        open={poDocumentDeleteOpen}
+        onOpenChange={setPoDocumentDeleteOpen}
+        title="Delete Purchase Order document?"
+        description="This removes the uploaded scan/photo of the customer's PO. The Purchase Order Number itself is unaffected — you can upload a replacement document any time."
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        errorMessage="Could not delete the Purchase Order document."
+        onConfirm={async () => {
+          if (!id) return;
+          const updated = await deleteSalesOrderPoDocument(id);
+          setSalesOrder(updated);
+          toast.success("Purchase Order document deleted.");
+        }}
       />
       <GenerateProformaInvoiceDialog
         open={generateInvoiceOpen}

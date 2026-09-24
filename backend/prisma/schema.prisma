@@ -1016,6 +1016,30 @@ model SalesOrder {
   shippingAddress     String?
   specialInstructions String?
   remarks             String?
+
+  // Purchase Order (the customer's own document confirming they're buying —
+  // distinct from this Sales Order, which is Smart Rotamach's internal
+  // record of the same commitment). Required going forward for every
+  // manually created/edited Sales Order at the DTO layer (see
+  // CreateSalesOrderDto.customerPoNumber's comment for why this stays
+  // TS-optional here), but left nullable in the DB — same reasoning as
+  // billingAddress/shippingAddress above — rather than forcing a backfill
+  // migration for Sales Orders created before this field existed.
+  customerPoNumber String?
+
+  // Optional scan/photo of the customer's actual PO document — stored on
+  // disk, only metadata here (same "reference, not the blob" convention as
+  // LeadSiteVisitPhoto — see LeadsService.SITE_VISIT_PHOTOS_DIR's comment).
+  // Single file per Sales Order (unlike the site-visit photo gallery), so
+  // kept as columns on this row rather than a separate table — replacing it
+  // just overwrites these columns and deletes the old on-disk file. See
+  // SalesOrdersService.uploadCustomerPoDocument().
+  customerPoDocumentFileName     String?
+  customerPoDocumentOriginalName String?
+  customerPoDocumentMimeType     String?
+  customerPoDocumentSizeBytes    Int?
+  customerPoDocumentUploadedAt   DateTime?
+  customerPoDocumentUploadedBy   String?
   // Plain scalar (the authenticated user's name from the JWT payload) — no
   // enforced User relation, consistent with how Lead.assignedTo avoids a
   // cross-module FK to the Users module.

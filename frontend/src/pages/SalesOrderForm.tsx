@@ -46,6 +46,11 @@ interface FormState {
   gstPercent: string;
   billingAddress: string;
   shippingAddress: string;
+  // The customer's own Purchase Order number — required, same as
+  // Billing/Shipping Address, per business owner (a Sales Order is the
+  // seller's record of the same commitment the customer's PO makes; see
+  // backend/prisma/schema.prisma's comment on SalesOrder.customerPoNumber).
+  customerPoNumber: string;
   specialInstructions: string;
   remarks: string;
 }
@@ -58,6 +63,7 @@ const emptyForm: FormState = {
   gstPercent: "18",
   billingAddress: "",
   shippingAddress: "",
+  customerPoNumber: "",
   specialInstructions: "",
   remarks: "",
 };
@@ -171,6 +177,7 @@ export default function SalesOrderForm() {
           gstPercent: "18",
           billingAddress: so.billingAddress ?? "",
           shippingAddress: so.shippingAddress ?? "",
+          customerPoNumber: so.customerPoNumber ?? "",
           specialInstructions: so.specialInstructions ?? "",
           remarks: so.remarks ?? "",
         });
@@ -260,6 +267,12 @@ export default function SalesOrderForm() {
       next.shippingAddress = "Shipping Address is required.";
     }
 
+    // Purchase Order Number is required per business owner — see
+    // CreateSalesOrderDto.customerPoNumber's comment.
+    if (!form.customerPoNumber.trim()) {
+      next.customerPoNumber = "Purchase Order Number is required.";
+    }
+
     // QA bug fix (SC-004): the order-level "Additional Discount" field was
     // removed (redundant with Quotation.discount, and unclamped — a
     // discount larger than the subtotal drove the grand total negative).
@@ -301,6 +314,7 @@ export default function SalesOrderForm() {
       gstPercent: form.gstPercent.trim() ? Number(form.gstPercent) : undefined,
       billingAddress: form.billingAddress.trim() || undefined,
       shippingAddress: form.shippingAddress.trim() || undefined,
+      customerPoNumber: form.customerPoNumber.trim() || undefined,
       specialInstructions: form.specialInstructions.trim() || undefined,
       remarks: form.remarks.trim() || undefined,
     };
@@ -503,6 +517,22 @@ export default function SalesOrderForm() {
                   <CardTitle className="text-base">Order Details</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label htmlFor="customerPoNumber">Purchase Order Number *</Label>
+                    <Input
+                      id="customerPoNumber"
+                      value={form.customerPoNumber}
+                      onChange={(e) => update("customerPoNumber", e.target.value)}
+                      placeholder="e.g. PO-2026-00456"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The customer's own Purchase Order reference confirming this order. You can attach a
+                      scan of the PO document after saving.
+                    </p>
+                    {errors.customerPoNumber && (
+                      <p className="text-xs text-destructive">{errors.customerPoNumber}</p>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="orderDate">Order Date</Label>
                     <Input

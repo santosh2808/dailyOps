@@ -913,6 +913,19 @@ export interface SalesOrder {
   transportationCharge: number;
   billingAddress?: string | null;
   shippingAddress?: string | null;
+  // Purchase Order — the customer's own document confirming they're buying
+  // (distinct from this Sales Order's own number). See
+  // backend/prisma/schema.prisma's comment on SalesOrder.customerPoNumber.
+  customerPoNumber?: string | null;
+  // Optional single-file scan/photo of the actual PO document. Only
+  // metadata here — the file itself is fetched as an authenticated blob via
+  // getSalesOrderPoDocumentUrl() in api/sales-orders.ts, same pattern as
+  // Lead Site Visit Photos.
+  customerPoDocumentOriginalName?: string | null;
+  customerPoDocumentMimeType?: string | null;
+  customerPoDocumentSizeBytes?: number | null;
+  customerPoDocumentUploadedAt?: string | null;
+  customerPoDocumentUploadedBy?: string | null;
   specialInstructions?: string | null;
   remarks?: string | null;
   createdBy?: string | null;

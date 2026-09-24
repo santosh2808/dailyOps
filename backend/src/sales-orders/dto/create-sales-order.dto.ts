@@ -104,6 +104,26 @@ export class CreateSalesOrderDto {
   @IsNotEmpty({ message: 'Shipping Address is required.' })
   shippingAddress?: string;
 
+  // Purchase Order Number — the customer's own reference confirming they've
+  // authorized this order (distinct from this Sales Order's own number,
+  // which is Smart Rotamach's internal document). Required per business
+  // owner, same TS-optional-but-@IsNotEmpty() pattern as Billing/Shipping
+  // Address above and for the same reason: the dead
+  // SalesOrdersService.createFromQuotation() (leftover from a cascade
+  // removed under TC-088, no longer called anywhere) bypasses the
+  // ValidationPipe entirely, so a required TS type would break its
+  // compile-time shape for no runtime benefit. Manual POST /sales-orders
+  // and PATCH /sales-orders/:id are the only real call paths and both go
+  // through the ValidationPipe, where @IsNotEmpty() is what actually
+  // enforces this.
+  @ApiProperty({
+    example: 'PO-2026-00456',
+    description: 'The customer’s own Purchase Order number. Required for manual create/update.',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Purchase Order Number is required.' })
+  customerPoNumber?: string;
+
   @ApiPropertyOptional({ example: 'Deliver during working hours only' })
   @IsOptional()
   @IsString()

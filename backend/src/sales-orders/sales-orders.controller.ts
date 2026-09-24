@@ -8,9 +8,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
@@ -87,5 +92,42 @@ export class SalesOrdersController {
   @RequirePermission('SalesOrder', 'Delete')
   remove(@Param('id') id: string, @Req() req: any) {
     return this.salesOrdersService.remove(id, req.user?.name);
+  }
+
+  // Customer's Purchase Order document — a separate action from
+  // create()/update() so uploading it doesn't force those JSON endpoints
+  // into multipart. See SalesOrdersService.uploadCustomerPoDocument()'s
+  // comment for why this is allowed at any non-CANCELLED status, unlike
+  // update() which is DRAFT-only.
+  @Post(':id/po-document')
+  @RequirePermission('SalesOrder', 'Edit')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadPoDocument(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: any,
+  ) {
+    return this.salesOrdersService.uploadCustomerPoDocument(id, file, req.user?.name);
+  }
+
+  // Streams the raw file bytes — an authenticated route, not a
+  // static-served directory, same convention as
+  // LeadsController.getSiteVisitPhotoFile().
+  @Get(':id/po-document/file')
+  @RequirePermission('SalesOrder', 'View')
+  async getPoDocumentFile(@Param('id') id: string, @Res() res: Response) {
+    const { buffer, mimeType, originalName } = await this.salesOrdersService.getCustomerPoDocumentFile(id);
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `inline; filename="${originalName.replace(/"/g, '')}"`,
+    });
+    res.send(buffer);
+  }
+
+  @Delete(':id/po-document')
+  @RequirePermission('SalesOrder', 'Edit')
+  deletePoDocument(@Param('id') id: string) {
+    return this.salesOrdersService.deleteCustomerPoDocument(id);
   }
 }

@@ -7,6 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, SalesOrderStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
@@ -38,6 +41,14 @@ const SALES_ORDER_NUMBER_PREFIX = 'SO-';
 const SALES_ORDER_NUMBER_PAD = 6;
 const MAX_SALES_ORDER_NUMBER_ATTEMPTS = 5;
 const DEFAULT_GST_PERCENT = 18;
+
+// Customer PO document upload — see uploadCustomerPoDocument()'s comment.
+// Same on-disk-file / DB-metadata-only convention as
+// LeadsService.SITE_VISIT_PHOTOS_DIR.
+const PO_DOCUMENT_DIR =
+  process.env.SALES_ORDER_PO_DOCUMENTS_DIR?.trim() || join(process.cwd(), 'uploads', 'sales-order-po-documents');
+const ALLOWED_PO_DOCUMENT_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const MAX_PO_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // Passed by the controller from the JWT payload (req.user) — never trusted
 // from the request body. `roles` drives the dispatch-override Administrator
@@ -253,6 +264,7 @@ export class SalesOrdersService {
             advancePercentage: dto.advancePercentage,
             billingAddress: dto.billingAddress,
             shippingAddress: dto.shippingAddress,
+            customerPoNumber: dto.customerPoNumber,
             specialInstructions: dto.specialInstructions,
             remarks: dto.remarks,
             createdBy,
@@ -450,6 +462,7 @@ export class SalesOrdersService {
           advancePercentage: dto.advancePercentage,
           billingAddress: dto.billingAddress,
           shippingAddress: dto.shippingAddress,
+          customerPoNumber: dto.customerPoNumber,
           specialInstructions: dto.specialInstructions,
           remarks: dto.remarks,
           ...(aggregate
@@ -658,6 +671,113 @@ export class SalesOrdersService {
       where: { salesOrderId: id },
       orderBy: { sentAt: 'desc' },
     });
+  }
+
+  // Optional scan/photo of the customer's actual Purchase Order — see
+  // schema.prisma's comment on SalesOrder.customerPoDocument* for why this
+  // is a separate action rather than part of create()/update(): those are
+  // plain JSON endpoints, and forcing the whole order-creation flow to
+  // multipart just for this one optional attachment isn't worth it.
+  // customerPoNumber (the required field) stays in the regular DTO; this is
+  // purely supporting evidence for it. Deliberately allowed at any status
+  // except CANCELLED (unlike update(), which is DRAFT-only) — attaching the
+  // customer's paperwork after production has already started is a normal,
+  // harmless thing to do (e.g. the signed copy only arrives later), and
+  // doesn't change any order economics the way editing items/addresses
+  // would.
+  async uploadCustomerPoDocument(id: string, file: Express.Multer.File | undefined, actorName?: string) {
+    const existing = await this.findOne(id);
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot have documents attached.');
+    }
+    if (!file) {
+      throw new BadRequestException('No file uploaded. Attach a PDF, JPG or PNG of the Purchase Order.');
+    }
+    if (!ALLOWED_PO_DOCUMENT_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Purchase Order document must be a PDF, JPG or PNG file.');
+    }
+    if (file.size > MAX_PO_DOCUMENT_SIZE_BYTES) {
+      throw new BadRequestException('Purchase Order document is larger than the 10MB limit.');
+    }
+
+    await fs.mkdir(PO_DOCUMENT_DIR, { recursive: true });
+
+    // Generated filename — never derived from the browser-supplied
+    // originalname, so nothing here is exposed to path traversal or
+    // filename-collision issues. Same convention as
+    // LeadsService.uploadSiteVisitPhotos().
+    const ext = extname(file.originalname).slice(0, 10);
+    const fileName = `${randomUUID()}${ext}`;
+    await fs.writeFile(join(PO_DOCUMENT_DIR, fileName), file.buffer);
+
+    // Replacing an existing document — remove the old on-disk file once the
+    // new one is safely written and the DB row is about to be repointed.
+    // Best-effort: a stray orphaned file left behind by a failed unlink is a
+    // disk-cleanliness issue, not a correctness one (same reasoning as
+    // LeadsService.deleteSiteVisitPhoto()).
+    const previousFileName = existing.customerPoDocumentFileName;
+
+    const updated = await this.prisma.salesOrder.update({
+      where: { id },
+      data: {
+        customerPoDocumentFileName: fileName,
+        customerPoDocumentOriginalName: file.originalname,
+        customerPoDocumentMimeType: file.mimetype,
+        customerPoDocumentSizeBytes: file.size,
+        customerPoDocumentUploadedAt: new Date(),
+        customerPoDocumentUploadedBy: actorName,
+      },
+      include: SALES_ORDER_DETAIL_INCLUDE,
+    });
+
+    if (previousFileName) {
+      try {
+        await fs.unlink(join(PO_DOCUMENT_DIR, previousFileName));
+      } catch {
+        // Ignore — see comment above.
+      }
+    }
+
+    return updated;
+  }
+
+  async getCustomerPoDocumentFile(id: string) {
+    const salesOrder = await this.findOne(id);
+    if (!salesOrder.customerPoDocumentFileName) {
+      throw new NotFoundException('No Purchase Order document has been uploaded for this Sales Order.');
+    }
+    const buffer = await fs.readFile(join(PO_DOCUMENT_DIR, salesOrder.customerPoDocumentFileName));
+    return {
+      buffer,
+      mimeType: salesOrder.customerPoDocumentMimeType ?? 'application/octet-stream',
+      originalName: salesOrder.customerPoDocumentOriginalName ?? 'purchase-order',
+    };
+  }
+
+  async deleteCustomerPoDocument(id: string) {
+    const salesOrder = await this.findOne(id);
+    if (!salesOrder.customerPoDocumentFileName) {
+      throw new NotFoundException('No Purchase Order document has been uploaded for this Sales Order.');
+    }
+    const fileName = salesOrder.customerPoDocumentFileName;
+    const updated = await this.prisma.salesOrder.update({
+      where: { id },
+      data: {
+        customerPoDocumentFileName: null,
+        customerPoDocumentOriginalName: null,
+        customerPoDocumentMimeType: null,
+        customerPoDocumentSizeBytes: null,
+        customerPoDocumentUploadedAt: null,
+        customerPoDocumentUploadedBy: null,
+      },
+      include: SALES_ORDER_DETAIL_INCLUDE,
+    });
+    try {
+      await fs.unlink(join(PO_DOCUMENT_DIR, fileName));
+    } catch {
+      // Ignore — see uploadCustomerPoDocument()'s comment.
+    }
+    return updated;
   }
 
   // Enforces "Quotation products must auto-populate": every submitted item
