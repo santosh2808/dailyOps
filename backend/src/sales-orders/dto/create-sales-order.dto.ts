@@ -10,7 +10,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   Min,
   ValidateIf,
   ValidateNested,
@@ -38,8 +37,14 @@ export class CreateSalesOrderDto {
   @IsDateString()
   orderDate?: string;
 
-  @ApiPropertyOptional({ example: '2026-09-15' })
-  @IsOptional()
+  // Required per business owner — production/dispatch planning needs a
+  // target date on every order, not just the ones staff happened to fill
+  // in. Kept TS-optional (`?`) for the same reason as
+  // billingAddress/shippingAddress/customerPoNumber above (the dead
+  // createFromQuotation() bypass); @IsNotEmpty() is what actually enforces
+  // it on the two real HTTP-facing paths.
+  @ApiProperty({ example: '2026-09-15', description: 'Required for manual create/update.' })
+  @IsNotEmpty({ message: 'Delivery Date is required.' })
   @IsDateString()
   deliveryDate?: string;
 
@@ -48,13 +53,13 @@ export class CreateSalesOrderDto {
   @IsString()
   paymentTerms?: string;
 
-  @ApiPropertyOptional({ example: 50, description: 'Percentage of the grand total expected as advance' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  advancePercentage?: number;
+  // Removed (per business owner): advancePercentage was a manually-typed
+  // field that, per SalesOrderDetails.tsx's own pre-existing comment
+  // (SC-002), was never read anywhere else in the app and never stayed in
+  // sync with the real advance actually received (that live figure comes
+  // from ProformaInvoice.advanceReceived / grandTotal — see
+  // SalesOrderDetails.tsx). Confirmed via full-codebase search before
+  // removal: no PDF, dashboard, or downstream service ever read it.
 
   @ApiPropertyOptional({ example: 18, default: 18, description: 'GST percentage applied to each line item' })
   @IsOptional()

@@ -261,7 +261,6 @@ export class SalesOrdersService {
             orderDate: dto.orderDate ? new Date(dto.orderDate) : undefined,
             deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
             paymentTerms: dto.paymentTerms,
-            advancePercentage: dto.advancePercentage,
             billingAddress: dto.billingAddress,
             shippingAddress: dto.shippingAddress,
             // When noPoAvailable is set, customerPoNumber is dropped even if
@@ -465,7 +464,6 @@ export class SalesOrdersService {
           deliveryDate:
             dto.deliveryDate !== undefined ? (dto.deliveryDate ? new Date(dto.deliveryDate) : null) : undefined,
           paymentTerms: dto.paymentTerms,
-          advancePercentage: dto.advancePercentage,
           billingAddress: dto.billingAddress,
           shippingAddress: dto.shippingAddress,
           // Same clear-if-no-PO logic as create(), but only applied when

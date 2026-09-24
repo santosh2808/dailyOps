@@ -895,7 +895,6 @@ export interface SalesOrder {
   orderDate: string;
   deliveryDate?: string | null;
   paymentTerms?: string | null;
-  advancePercentage?: number | null;
   status: SalesOrderStatus;
   subtotal: number;
   discount: number;

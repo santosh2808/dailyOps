@@ -31,7 +31,6 @@ export interface SalesOrderPayload {
   orderDate?: string;
   deliveryDate?: string;
   paymentTerms?: string;
-  advancePercentage?: number;
   gstPercent?: number;
   billingAddress?: string;
   shippingAddress?: string;

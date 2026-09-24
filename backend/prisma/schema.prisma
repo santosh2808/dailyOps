@@ -994,7 +994,6 @@ model SalesOrder {
   orderDate           DateTime         @default(now())
   deliveryDate        DateTime?
   paymentTerms        String?
-  advancePercentage   Float?
   status              SalesOrderStatus @default(DRAFT)
   subtotal            Float            @default(0)
   discount            Float            @default(0)

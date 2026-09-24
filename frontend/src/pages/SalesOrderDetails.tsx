@@ -482,11 +482,14 @@ export default function SalesOrderDetails() {
                     label="Advance %"
                     value={
                       // Live-computed from the actual recorded advance payment
-                      // (Advance Received ÷ Grand Total × 100), NOT the
-                      // manually-entered salesOrder.advancePercentage field
-                      // (that stores a separate "required advance per payment
-                      // terms" figure set once on the order form and never
-                      // updated when a payment is recorded — see QA SC-002).
+                      // (Advance Received ÷ Grand Total × 100). This used to
+                      // need a disclaimer distinguishing it from a separate
+                      // manually-typed SalesOrder.advancePercentage field
+                      // (set once on the order form, never updated when a
+                      // payment was recorded — QA SC-002); that field has
+                      // since been removed entirely per business owner, so
+                      // this live figure is now the only "Advance %" this
+                      // page shows.
                       activeInvoice && salesOrder.grandTotal
                         ? `${((activeInvoice.advanceReceived / salesOrder.grandTotal) * 100).toFixed(1)}%`
                         : null

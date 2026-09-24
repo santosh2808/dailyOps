@@ -42,7 +42,6 @@ interface FormState {
   orderDate: string;
   deliveryDate: string;
   paymentTerms: string;
-  advancePercentage: string;
   gstPercent: string;
   billingAddress: string;
   shippingAddress: string;
@@ -64,7 +63,6 @@ const emptyForm: FormState = {
   orderDate: "",
   deliveryDate: "",
   paymentTerms: "",
-  advancePercentage: "",
   gstPercent: "18",
   billingAddress: "",
   shippingAddress: "",
@@ -94,7 +92,15 @@ export default function SalesOrderForm() {
   const quotationIdParam = searchParams.get("quotationId");
   const navigate = useNavigate();
 
-  const [form, setForm] = useState<FormState>(emptyForm);
+  // Order Date defaults to today (matching the backend's own default when
+  // omitted — see CreateSalesOrderDto.orderDate) rather than a blank field
+  // staff had to fill in themselves every time. Set via a lazy initializer
+  // (not baked into the module-level emptyForm constant) so it's always
+  // today's date at the moment this form is actually opened, not whenever
+  // the module happened to load. loadForEdit() below overwrites this with
+  // the real saved orderDate for existing orders, so it only ever applies
+  // to new Sales Orders.
+  const [form, setForm] = useState<FormState>(() => ({ ...emptyForm, orderDate: todayDateInputValue() }));
   // "Same as Billing Address" — free, no-API convenience: while checked,
   // Shipping Address mirrors Billing Address on every change and its own
   // field is locked; unchecking leaves whatever was last copied there,
@@ -180,7 +186,6 @@ export default function SalesOrderForm() {
           orderDate: toDateInputValue(so.orderDate),
           deliveryDate: toDateInputValue(so.deliveryDate),
           paymentTerms: so.paymentTerms ?? "",
-          advancePercentage: so.advancePercentage != null ? String(so.advancePercentage) : "",
           gstPercent: "18",
           billingAddress: so.billingAddress ?? "",
           shippingAddress: so.shippingAddress ?? "",
@@ -241,18 +246,15 @@ export default function SalesOrderForm() {
   function validate(): boolean {
     const next: Partial<Record<keyof FormState, string>> & { items?: string } = {};
 
-    // You can't promise delivery on a date that's already passed. Order
-    // Date is left unrestricted — backdating the order itself (catching up
-    // on data entry) is legitimate.
-    if (isPastDateInputValue(form.deliveryDate)) {
+    // Required per business owner — production/dispatch planning needs a
+    // target date on every order. Order Date is left unrestricted/optional
+    // by contrast — backdating the order itself (catching up on data
+    // entry) is legitimate, and it already defaults to today (see the
+    // lazy useState initializer above).
+    if (!form.deliveryDate) {
+      next.deliveryDate = "Delivery Date is required.";
+    } else if (isPastDateInputValue(form.deliveryDate)) {
       next.deliveryDate = "Delivery Date cannot be before today.";
-    }
-
-    if (form.advancePercentage.trim()) {
-      const parsed = Number(form.advancePercentage);
-      if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
-        next.advancePercentage = "Advance % must be between 0 and 100";
-      }
     }
 
     if (form.gstPercent.trim()) {
@@ -325,7 +327,6 @@ export default function SalesOrderForm() {
       orderDate: form.orderDate || undefined,
       deliveryDate: form.deliveryDate || undefined,
       paymentTerms: form.paymentTerms.trim() || undefined,
-      advancePercentage: form.advancePercentage.trim() ? Number(form.advancePercentage) : undefined,
       gstPercent: form.gstPercent.trim() ? Number(form.gstPercent) : undefined,
       billingAddress: form.billingAddress.trim() || undefined,
       shippingAddress: form.shippingAddress.trim() || undefined,
@@ -583,7 +584,7 @@ export default function SalesOrderForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="deliveryDate">Delivery Date</Label>
+                    <Label htmlFor="deliveryDate">Delivery Date *</Label>
                     <Input
                       id="deliveryDate"
                       type="date"
@@ -593,18 +594,6 @@ export default function SalesOrderForm() {
                     />
                     {errors.deliveryDate && (
                       <p className="text-xs text-destructive">{errors.deliveryDate}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="advancePercentage">Advance %</Label>
-                    <Input
-                      id="advancePercentage"
-                      inputMode="decimal"
-                      value={form.advancePercentage}
-                      onChange={(e) => update("advancePercentage", e.target.value)}
-                    />
-                    {errors.advancePercentage && (
-                      <p className="text-xs text-destructive">{errors.advancePercentage}</p>
                     )}
                   </div>
                   <div className="space-y-2 sm:col-span-3">
