@@ -32,6 +32,7 @@ import { FormConfigurationModule } from './form-configuration/form-configuration
 import { PublicFormsModule } from './public-forms/public-forms.module';
 import { AiSettingsModule } from './ai-settings/ai-settings.module';
 import { TelephonyModule } from './telephony/telephony.module';
+import { PlacesModule } from './places/places.module';
 
 @Module({
   imports: [
@@ -79,6 +80,10 @@ import { TelephonyModule } from './telephony/telephony.module';
     // EXOTEL_ENABLED defaults to false; no automated/Lead-triggered calling
     // exists anywhere in this module. See telephony/telephony.module.ts.
     TelephonyModule,
+    // Google Places Autocomplete for Billing/Shipping Address (Sales
+    // Order). GOOGLE_PLACES_API_KEY unset by default — see
+    // places/places.service.ts's "Future Ready" convention.
+    PlacesModule,
   ],
 })
 export class AppModule {}
