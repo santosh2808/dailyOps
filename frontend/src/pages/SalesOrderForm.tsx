@@ -28,6 +28,16 @@ import {
 } from "@/api/sales-orders";
 import type { Quotation } from "@/types";
 
+// Same wording QuotationForm.tsx defaults Commercial Terms -> Payment to
+// (COMMERCIAL_TERMS_DEFAULTS.payment there) — carried forward here so a new
+// Sales Order's Payment Terms isn't left blank when the source quotation
+// already said this, and still lands on the same default even when there's
+// no quotation commercial-terms payment value to copy. Kept editable (not
+// locked/required) since a genuine no-advance-yet order — the case the
+// named-approver override on Record Advance Payment / Generate JEO exists
+// for — should be able to say something else here.
+const DEFAULT_PAYMENT_TERMS = "50% advance along with the Purchase order, balance before dispatch.";
+
 interface FormState {
   orderDate: string;
   deliveryDate: string;
@@ -103,7 +113,18 @@ export default function SalesOrderForm() {
         }
         setQuotation(q);
         setCustomerLabel(q.customer ? `${q.customer.companyName} — ${q.customer.contactPerson}` : "");
-        setForm((f) => ({ ...f, gstPercent: String(q.gstPercent) }));
+        setForm((f) => ({
+          ...f,
+          gstPercent: String(q.gstPercent),
+          // Pre-fill from the accepted quotation's own Payment Terms
+          // (carrying forward whatever it said, e.g. a negotiated
+          // variation) and fall back to the standard 50%-advance wording
+          // when the quotation didn't set one. Staff can still edit or
+          // clear this — it's descriptive text, not the actual advance
+          // gate (see MINIMUM_ADVANCE_PERCENT enforcement on Record
+          // Advance Payment / Generate JEO / Dispatch).
+          paymentTerms: q.commercialTerms?.payment?.trim() || DEFAULT_PAYMENT_TERMS,
+        }));
         setItems(
           (q.items ?? []).map((item) => ({
             productId: item.productId,
