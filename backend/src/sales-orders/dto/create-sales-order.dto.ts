@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -71,14 +72,36 @@ export class CreateSalesOrderDto {
   // grandTotal negative. Per-line item discounts (SalesOrderItemInputDto.discount)
   // are unaffected and remain the one discounting mechanism at this stage.
 
-  @ApiPropertyOptional({ example: 'Acme Corp, 123 Industrial Estate, Pune' })
-  @IsOptional()
+  // QA bug fix (SC-005): Billing/Shipping Address are required for every
+  // manually created/edited Sales Order — dispatch, installation and
+  // invoicing all depend on having a real address, and previously these
+  // fields could be left blank entirely. Kept TS-optional (`?`) rather than
+  // required, though: SalesOrdersService.createFromQuotation() auto-creates
+  // a Sales Order the instant a Quotation is Accepted, before staff have
+  // had a chance to enter any address, and that internal call bypasses the
+  // HTTP ValidationPipe entirely (it's a direct method call, not a
+  // @Body()-bound request) — so making the TS type itself required would
+  // break that call's compile-time shape for no runtime benefit. The
+  // @IsNotEmpty() below is what actually enforces "required" for the two
+  // HTTP-facing paths that do go through the ValidationPipe: manual
+  // POST /sales-orders and PATCH /sales-orders/:id (whenever the field is
+  // included in the request body at all — see UpdateSalesOrderDto's
+  // PartialType, which still leaves an explicitly-empty value rejected).
+  @ApiProperty({
+    example: 'Acme Corp, 123 Industrial Estate, Pune',
+    description: 'Required for manual create/update — see comment above for the one exception.',
+  })
   @IsString()
+  @IsNotEmpty({ message: 'Billing Address is required.' })
   billingAddress?: string;
 
-  @ApiPropertyOptional({ example: 'Acme Corp Warehouse, Plot 4, MIDC, Pune' })
-  @IsOptional()
+  @ApiProperty({
+    example: 'Acme Corp Warehouse, Plot 4, MIDC, Pune',
+    description:
+      'Required for manual create/update — same as Billing Address if delivery goes to the billing location.',
+  })
   @IsString()
+  @IsNotEmpty({ message: 'Shipping Address is required.' })
   shippingAddress?: string;
 
   @ApiPropertyOptional({ example: 'Deliver during working hours only' })

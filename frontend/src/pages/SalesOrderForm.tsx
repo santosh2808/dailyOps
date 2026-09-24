@@ -212,6 +212,20 @@ export default function SalesOrderForm() {
       }
     }
 
+    // QA bug fix (SC-005): both addresses are required to save a Sales
+    // Order — dispatch, installation, and invoicing all depend on a real
+    // address, and this form previously let both be left blank entirely.
+    // Shipping Address can still be satisfied via the "same as billing"
+    // checkbox (it copies Billing Address in automatically, see the
+    // sameAsBilling effect above), so this only fires when neither path
+    // filled it in.
+    if (!form.billingAddress.trim()) {
+      next.billingAddress = "Billing Address is required.";
+    }
+    if (!form.shippingAddress.trim()) {
+      next.shippingAddress = "Shipping Address is required.";
+    }
+
     // QA bug fix (SC-004): the order-level "Additional Discount" field was
     // removed (redundant with Quotation.discount, and unclamped — a
     // discount larger than the subtotal drove the grand total negative).
@@ -495,10 +509,13 @@ export default function SalesOrderForm() {
                   <div className="sm:col-span-3">
                     <AddressAutoFill
                       id="billingAddress"
-                      label="Billing Address"
+                      label="Billing Address *"
                       value={form.billingAddress}
                       onChange={(value) => update("billingAddress", value)}
                     />
+                    {errors.billingAddress && (
+                      <p className="text-xs text-destructive">{errors.billingAddress}</p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-3">
                     <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -510,11 +527,14 @@ export default function SalesOrderForm() {
                     </label>
                     <AddressAutoFill
                       id="shippingAddress"
-                      label="Shipping Address"
+                      label="Shipping Address *"
                       value={form.shippingAddress}
                       onChange={(value) => update("shippingAddress", value)}
                       disabled={sameAsBilling}
                     />
+                    {errors.shippingAddress && (
+                      <p className="text-xs text-destructive">{errors.shippingAddress}</p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-3">
                     <Label htmlFor="specialInstructions">Special Instructions</Label>
