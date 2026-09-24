@@ -19,8 +19,11 @@ import type { SalesOrder } from "@/types";
 // QA bug fix (SC-007): "Updated Sales Order not sent to customer after
 // editing" — Sales Orders only ever emailed the customer once, automatically,
 // at creation. This is the explicit action staff use to notify the customer
-// any time after that, including right after saving an edit — same
-// review-then-send pattern as SendProformaInvoiceDialog/SendTaxInvoiceDialog.
+// any time after that — same review-then-send pattern as
+// SendProformaInvoiceDialog/SendTaxInvoiceDialog. Note (SC-009): a Sales
+// Order is only editable while still a Draft, so in practice this is used
+// right after finishing edits and moving it to Confirmed (or later), or
+// simply to resend/redirect an already-confirmed order — not mid-edit.
 
 interface SendSalesOrderDialogProps {
   open: boolean;
@@ -82,8 +85,8 @@ export default function SendSalesOrderDialog({
           <DialogTitle>Send Sales Order to Customer</DialogTitle>
           <DialogDescription>
             Email <span className="font-medium text-slate-900">{salesOrder.salesOrderNumber}</span>{" "}
-            to the customer with its current details — use this after editing the order to make
-            sure they see the update.
+            to the customer with its current details — use this any time they need to see (or be
+            reminded of) the confirmed order.
           </DialogDescription>
         </DialogHeader>
 

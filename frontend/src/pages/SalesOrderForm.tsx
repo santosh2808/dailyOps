@@ -128,6 +128,19 @@ export default function SalesOrderForm() {
       try {
         const so = await getSalesOrder(salesOrderId);
         if (cancelled) return;
+        // QA bug fix (SC-009): a Sales Order is only editable while it's
+        // still a Draft — the Details page already hides/disables the Edit
+        // action once it's Confirmed or later, but this page is reachable
+        // directly by URL too, and the backend rejects the save either way
+        // (SalesOrdersService.update()). Catch it here, before the form
+        // even renders, rather than let someone fill out changes that will
+        // only fail once they hit Save.
+        if (so.status !== "DRAFT") {
+          setLoadError(
+            `This Sales Order is ${so.status === "CANCELLED" ? "cancelled" : "no longer in Draft status"} and can no longer be edited.`,
+          );
+          return;
+        }
         setCustomerLabel(so.customer ? `${so.customer.companyName} — ${so.customer.contactPerson}` : "");
         setForm({
           orderDate: toDateInputValue(so.orderDate),
@@ -341,9 +354,15 @@ export default function SalesOrderForm() {
             <div className="mx-auto max-w-2xl rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {loadError}
               <div className="mt-3">
-                <Button variant="outline" size="sm" onClick={() => navigate("/quotations")}>
-                  Go to Quotations
-                </Button>
+                {isEdit && id ? (
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/sales-orders/${id}`)}>
+                    Back to Sales Order
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => navigate("/quotations")}>
+                    Go to Quotations
+                  </Button>
+                )}
               </div>
             </div>
           ) : (

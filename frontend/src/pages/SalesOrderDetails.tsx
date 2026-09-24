@@ -109,6 +109,14 @@ export default function SalesOrderDetails() {
   // this is purely to stop staff walking into a rejection instead of
   // seeing a disabled button.
   const isCancelled = salesOrder?.status === "CANCELLED";
+  // QA bug fix (SC-009): a Sales Order's item list/totals/addresses may
+  // already be reflected in a generated Proforma Invoice, Tax Invoice, or
+  // JEO — or already shown to the customer — the moment it moves past
+  // Draft, so Edit is only meaningful while it's still a Draft. Stricter
+  // than isCancelled above (which still gates the OTHER actions — those
+  // stay usable at any non-cancelled status, only Edit itself locks down
+  // this early). See SalesOrdersService.update()'s own guard.
+  const isEditable = salesOrder?.status === "DRAFT";
 
   const fetchSalesOrder = useCallback(async () => {
     if (!id) return;
@@ -390,7 +398,7 @@ export default function SalesOrderDetails() {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       icon={Pencil}
-                      disabled={isCancelled}
+                      disabled={!isEditable}
                       onSelect={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}
                     >
                       Edit

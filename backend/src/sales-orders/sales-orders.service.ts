@@ -363,13 +363,23 @@ export class SalesOrdersService {
 
   async update(id: string, dto: UpdateSalesOrderDto) {
     const existing = await this.findOne(id);
-    // QA bug fix (SC-008): a cancelled Sales Order is a closed record — it
-    // had no guard against still being edited (items/totals recomputed and
-    // saved as if it were active). Status changes still go through
-    // updateStatus()/assertForwardOnlyTransition() below, unaffected by
-    // this — only the ordinary "edit details" path is blocked here.
-    if (existing.status === 'CANCELLED') {
-      throw new BadRequestException('A cancelled Sales Order cannot be edited.');
+    // QA bug fix (SC-008 then SC-009): a Sales Order is only ever meant to
+    // be edited while it's still a Draft — SC-008 first blocked just
+    // CANCELLED, but QA correctly pointed out (SC-009) that the same
+    // problem exists at every other status too: once confirmed, its items/
+    // totals/addresses may already be reflected in a generated Proforma
+    // Invoice, Tax Invoice, or JEO (or shown to the customer via "Send to
+    // Customer"), so silently changing them out from under those documents
+    // is exactly the bug this whole cluster of tickets is about. DRAFT is
+    // the one status with nothing downstream depending on it yet, so it's
+    // the only one still editable here. Status changes themselves still go
+    // through updateStatus()/assertForwardOnlyTransition() below,
+    // unaffected by this — only the ordinary "edit details" path is
+    // blocked.
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        `This Sales Order is ${existing.status === 'CANCELLED' ? 'cancelled' : 'no longer in Draft status'} and can no longer be edited.`,
+      );
     }
 
     let aggregate: { subtotal: number; discount: number; tax: number; grandTotal: number } | null = null;
