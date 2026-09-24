@@ -213,9 +213,17 @@ export default function SalesOrderDetails() {
     navigate(`/proforma-invoices/${created.id}`);
   }
 
-  async function handleRecordAdvanceConfirm(advanceReceived: number) {
+  async function handleRecordAdvanceConfirm(
+    advanceReceived: number,
+    advanceOverrideApprovedBy?: string,
+    advanceOverrideNote?: string,
+  ) {
     if (!activeInvoice) return;
-    await updateProformaInvoiceAdvance(activeInvoice.id, advanceReceived);
+    await updateProformaInvoiceAdvance(activeInvoice.id, {
+      advanceReceived,
+      advanceOverrideApprovedBy,
+      advanceOverrideNote,
+    });
     toast.success("Advance payment recorded.");
     await checkActiveInvoice();
   }
@@ -578,6 +586,8 @@ export default function SalesOrderDetails() {
         open={recordAdvanceOpen}
         onOpenChange={setRecordAdvanceOpen}
         invoice={activeInvoice}
+        salesOrderGrandTotal={salesOrder?.grandTotal ?? 0}
+        isAdmin={isAdmin}
         onConfirm={handleRecordAdvanceConfirm}
       />
       <GenerateJeoDialog

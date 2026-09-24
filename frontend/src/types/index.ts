@@ -960,6 +960,13 @@ export interface ProformaInvoice {
   // printed PDF is always grandTotal - advanceReceived, computed at render
   // time rather than stored.
   advanceReceived: number;
+  // QA feature (SC-011): set when advanceReceived was recorded below the
+  // MINIMUM_ADVANCE_PERCENT (50%) threshold via the named-approver override
+  // — mirrors SalesOrder's dispatchOverride* fields above.
+  advanceOverrideNote?: string | null;
+  advanceOverrideBy?: string | null;
+  advanceOverrideApprovedBy?: string | null;
+  advanceOverrideAt?: string | null;
   paymentTerms?: string | null;
   bankName?: string | null;
   accountNumber?: string | null;

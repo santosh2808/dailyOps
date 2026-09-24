@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
-import { ProformaInvoicesService } from './proforma-invoices.service';
+import { ProformaInvoicesService, type ProformaInvoiceActor } from './proforma-invoices.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
@@ -64,7 +64,8 @@ export class ProformaInvoicesController {
   @Patch(':id/advance')
   @RequirePermission('ProformaInvoice', 'Edit')
   updateAdvance(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceAdvanceDto, @Req() req: any) {
-    return this.proformaInvoicesService.updateAdvance(id, dto, req.user?.name);
+    const actor: ProformaInvoiceActor = { name: req.user?.name, roles: req.user?.roles ?? [] };
+    return this.proformaInvoicesService.updateAdvance(id, dto, actor);
   }
 
   @Get(':id/pdf')

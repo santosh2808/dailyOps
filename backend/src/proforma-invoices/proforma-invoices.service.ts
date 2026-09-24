@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +15,7 @@ import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
+import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
@@ -18,6 +26,16 @@ import { QueryProformaInvoiceDto } from './dto/query-proforma-invoice.dto';
 const INVOICE_NUMBER_PREFIX = 'PI-';
 const INVOICE_NUMBER_PAD = 6;
 const MAX_INVOICE_NUMBER_ATTEMPTS = 5;
+
+// Passed by the controller from the JWT payload (req.user) — never trusted
+// from the request body. `roles` drives the below-minimum-advance
+// Administrator check in updateAdvance() below; `name` is the existing
+// actor-display-name convention used everywhere else. Same shape/convention
+// as SalesOrdersService's SalesOrderActor.
+export interface ProformaInvoiceActor {
+  name?: string;
+  roles?: string[];
+}
 
 // Whitelisted so `sortBy` from the query string can never be used to sort by
 // an arbitrary/unindexed or sensitive column.
@@ -314,7 +332,22 @@ export class ProformaInvoicesService {
   // the one thing this schema had no way to update after creation (see
   // schema.prisma comment on advanceReceived). This is what the Sales Order
   // dispatch gate and Tax Invoice generation both check against.
-  async updateAdvance(id: string, dto: UpdateProformaInvoiceAdvanceDto, actorName?: string) {
+  //
+  // QA feature (SC-011): "Advance Payment Validation" — per the business
+  // owner, the Quotation already asks for 50% advance by default, so
+  // Record Advance Payment now enforces that same MINIMUM_ADVANCE_PERCENT
+  // of the Sales Order's grandTotal at the point of entry, not just later
+  // at the dispatch gate. Below that minimum (including a genuine "no
+  // advance yet" case), the same two named DISPATCH_OVERRIDE_APPROVERS who
+  // can already authorize a below-threshold dispatch may authorize this
+  // too — and only an Administrator can record that authorization. Using a
+  // percentage of grandTotal (rather than a flat rupee minimum) also means
+  // the minimum can never exceed the order's own total, so there's no
+  // separate "unless it's the last bit of the balance" carve-out needed —
+  // paying the full remaining balance always satisfies the percentage on
+  // its own.
+  async updateAdvance(id: string, dto: UpdateProformaInvoiceAdvanceDto, actor: ProformaInvoiceActor = {}) {
+    const actorName = actor.name;
     const existing = await this.findOne(id);
     // QA bug fix (SC-008): once the linked Sales Order is cancelled there's
     // nothing left to collect against — recording a new advance figure on
@@ -324,9 +357,51 @@ export class ProformaInvoicesService {
         'The linked Sales Order is cancelled — advance payment can no longer be recorded against it.',
       );
     }
+
+    const requiredAdvance =
+      existing.salesOrder.grandTotal > 0 ? (existing.salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
+
+    let advanceOverrideNote: string | null = null;
+    let advanceOverrideBy: string | null = null;
+    let advanceOverrideApprovedBy: string | null = null;
+    let advanceOverrideAt: Date | null = null;
+
+    if (dto.advanceReceived < requiredAdvance) {
+      const approvedBy = dto.advanceOverrideApprovedBy?.trim();
+      if (!approvedBy) {
+        throw new BadRequestException(
+          `Advance amount (₹${dto.advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be saved. Record at least this amount, or have Santosh Kumar Chegondi or Amarpal Gampa authorize an exception.`,
+        );
+      }
+      if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
+        throw new BadRequestException(
+          `"${approvedBy}" is not a recognized approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize an advance below the ${MINIMUM_ADVANCE_PERCENT}% minimum.`,
+        );
+      }
+      if (!(actor.roles ?? []).includes('Administrator')) {
+        throw new ForbiddenException(
+          'Only an Administrator can record an advance payment below the required minimum.',
+        );
+      }
+      advanceOverrideNote = dto.advanceOverrideNote?.trim() || null;
+      advanceOverrideApprovedBy = approvedBy;
+      advanceOverrideBy = actorName ?? null;
+      advanceOverrideAt = new Date();
+    }
+    // advanceReceived >= requiredAdvance: proceed normally, and clear out
+    // any earlier override fields — they no longer reflect the current
+    // situation (same convention as SalesOrdersService.updateStatus()'s
+    // dispatch-override fields).
+
     const updated = await this.prisma.proformaInvoice.update({
       where: { id },
-      data: { advanceReceived: dto.advanceReceived },
+      data: {
+        advanceReceived: dto.advanceReceived,
+        advanceOverrideNote,
+        advanceOverrideBy,
+        advanceOverrideApprovedBy,
+        advanceOverrideAt,
+      },
       include: PROFORMA_INVOICE_DETAIL_INCLUDE,
     });
     await this.auditLogService
@@ -336,7 +411,7 @@ export class ProformaInvoicesService {
         action: 'Advance Received Updated',
         actorName,
         oldValue: { advanceReceived: existing.advanceReceived },
-        newValue: { advanceReceived: updated.advanceReceived },
+        newValue: { advanceReceived: updated.advanceReceived, advanceOverrideApprovedBy },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
     return updated;

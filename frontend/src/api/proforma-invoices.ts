@@ -81,10 +81,20 @@ export async function sendProformaInvoice(id: string, payload: SendProformaInvoi
   return res.data;
 }
 
+// QA feature (SC-011): required only when advanceReceived is below
+// MINIMUM_ADVANCE_PERCENT (50%) of the Sales Order's grandTotal — the
+// backend rejects a below-minimum advance without a recognized approver,
+// and requires the acting user to be an Administrator.
+export interface UpdateProformaInvoiceAdvancePayload {
+  advanceReceived: number;
+  advanceOverrideApprovedBy?: string;
+  advanceOverrideNote?: string;
+}
+
 // Record/update the actual advance amount received — the dispatch gate on
 // the Sales Order and Tax Invoice generation both read this value.
-export async function updateProformaInvoiceAdvance(id: string, advanceReceived: number) {
-  const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/advance`, { advanceReceived });
+export async function updateProformaInvoiceAdvance(id: string, payload: UpdateProformaInvoiceAdvancePayload) {
+  const res = await api.patch<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/advance`, payload);
   return res.data;
 }
 

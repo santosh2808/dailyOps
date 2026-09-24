@@ -17,7 +17,7 @@ import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
 import { SendSalesOrderDto } from './dto/send-sales-order.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
-import { DISPATCH_OVERRIDE_APPROVERS } from './dispatch-override-approvers';
+import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from './dispatch-override-approvers';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
 
 // QA bug-fix pass (TC-080): the linear production sequence a Sales Order
@@ -529,7 +529,10 @@ export class SalesOrdersService {
   //       QuotationsService's approval-decision gate. A non-admin can never
   //       self-override, even if they happen to know one of the two names.
   private readonly DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ['READY_FOR_DISPATCH', 'DISPATCHED'];
-  private static readonly DISPATCH_ADVANCE_THRESHOLD_PERCENT = 50;
+  // QA feature (SC-011): this used to be its own private constant here —
+  // now shared with ProformaInvoicesService.updateAdvance()'s below-minimum
+  // advance-payment gate via MINIMUM_ADVANCE_PERCENT (dispatch-override-approvers.ts),
+  // so the two 50% thresholds can never drift apart from each other.
 
   async updateStatus(id: string, dto: UpdateSalesOrderStatusDto, actor: SalesOrderActor = {}) {
     const actorName = actor.name;
@@ -564,20 +567,18 @@ export class SalesOrdersService {
       // against — treat the threshold as already met rather than making it
       // impossible to ever satisfy.
       const requiredAdvance =
-        existing.grandTotal > 0
-          ? (existing.grandTotal * SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT) / 100
-          : 0;
+        existing.grandTotal > 0 ? (existing.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
 
       if (advanceReceived < requiredAdvance) {
         const approvedBy = dto.dispatchOverrideApprovedBy?.trim();
         if (!approvedBy) {
           throw new BadRequestException(
-            `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be marked Ready for Dispatch / Dispatched. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a dispatch override.`,
+            `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be marked Ready for Dispatch / Dispatched. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a dispatch override.`,
           );
         }
         if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
           throw new BadRequestException(
-            `"${approvedBy}" is not a recognized dispatch-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize dispatching below the ${SalesOrdersService.DISPATCH_ADVANCE_THRESHOLD_PERCENT}% advance threshold.`,
+            `"${approvedBy}" is not a recognized dispatch-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize dispatching below the ${MINIMUM_ADVANCE_PERCENT}% advance threshold.`,
           );
         }
         if (!(actor.roles ?? []).includes('Administrator')) {

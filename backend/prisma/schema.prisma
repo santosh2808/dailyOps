@@ -1132,7 +1132,20 @@ model ProformaInvoice {
   // grandTotal - advanceReceived at render/read time, same convention as
   // every other derived total in this schema.
   advanceReceived Float                 @default(0)
-  paymentTerms    String?
+  // QA feature (SC-011): Record Advance Payment now enforces a minimum —
+  // see ProformaInvoicesService.updateAdvance() and
+  // MINIMUM_ADVANCE_PERCENT (sales-orders/dispatch-override-approvers.ts).
+  // Below the minimum, one of the same two fixed named approvers who can
+  // authorize a below-threshold dispatch may authorize a below-minimum
+  // advance instead — mirrors SalesOrder.dispatchOverride* exactly, kept as
+  // its own set of columns since a Proforma Invoice's advance and a Sales
+  // Order's dispatch are two independent actions that can each need their
+  // own override on the same order.
+  advanceOverrideNote        String?
+  advanceOverrideBy          String?
+  advanceOverrideAt          DateTime?
+  advanceOverrideApprovedBy  String?
+  paymentTerms               String?
   bankName        String?
   accountNumber   String?
   ifscCode        String?
