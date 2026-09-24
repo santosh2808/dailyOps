@@ -18,6 +18,7 @@ import { SalesOrdersService, type SalesOrderActor } from './sales-orders.service
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
+import { SendSalesOrderDto } from './dto/send-sales-order.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 
 // actor is always captured from the authenticated user's JWT payload (see
@@ -71,6 +72,15 @@ export class SalesOrdersController {
   @RequirePermission('SalesOrder', 'View')
   getEmailHistory(@Param('id') id: string) {
     return this.salesOrdersService.getEmailHistory(id);
+  }
+
+  // QA bug fix (SC-007): explicit send/resend so staff can notify the
+  // customer after editing a Sales Order — see
+  // SalesOrdersService.sendSalesOrder()'s own comment for why this exists.
+  @Post(':id/send')
+  @RequirePermission('SalesOrder', 'Edit')
+  sendSalesOrder(@Param('id') id: string, @Body() dto: SendSalesOrderDto, @Req() req: any) {
+    return this.salesOrdersService.sendSalesOrder(id, dto, req.user?.name);
   }
 
   @Delete(':id')

@@ -424,6 +424,17 @@ async function main() {
       bodyHtml:
         '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed. Grand total: {{grandTotal}}.</p><p>Regards,<br/>Smart Rotamac Sales Team</p>',
     },
+    // QA bug fix (SC-007): distinct from ORDER_CONFIRMATION above (which
+    // fires once, at creation) — this is what SalesOrdersService.sendSalesOrder()
+    // sends when staff explicitly notify the customer after editing an
+    // already-created Sales Order.
+    {
+      key: 'SALES_ORDER_UPDATE',
+      name: 'Sales Order Updated Email',
+      subject: 'Updated Sales Order - {{salesOrderNumber}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated. Grand total: {{grandTotal}}.</p><p>Please reach out if you have any questions about this update.</p><p>Regards,<br/>Smart Rotamac Sales Team</p>',
+    },
     {
       key: 'PROFORMA_INVOICE',
       name: 'Proforma Invoice Email',

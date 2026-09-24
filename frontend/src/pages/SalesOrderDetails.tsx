@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
+  Send,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import GenerateProformaInvoiceDialog from "@/components/proforma-invoices/Genera
 import RecordAdvancePaymentDialog from "@/components/proforma-invoices/RecordAdvancePaymentDialog";
 import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDialog";
 import GenerateTaxInvoiceDialog from "@/components/tax-invoices/GenerateTaxInvoiceDialog";
+import SendSalesOrderDialog from "@/components/sales-orders/SendSalesOrderDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -93,6 +95,7 @@ export default function SalesOrderDetails() {
   const [activeJeoId, setActiveJeoId] = useState<string | null>(null);
   const [activeTaxInvoiceId, setActiveTaxInvoiceId] = useState<string | null>(null);
   const [generateTaxInvoiceOpen, setGenerateTaxInvoiceOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
@@ -170,7 +173,7 @@ export default function SalesOrderDetails() {
     checkActiveJeo();
   }, [checkActiveJeo]);
 
-  useEffect(() => {
+  const refetchEmailHistory = useCallback(() => {
     if (!id) return;
     setEmailHistoryLoading(true);
     getSalesOrderEmailHistory(id)
@@ -178,6 +181,10 @@ export default function SalesOrderDetails() {
       .catch(() => {})
       .finally(() => setEmailHistoryLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    refetchEmailHistory();
+  }, [refetchEmailHistory]);
 
   async function handleGenerateInvoiceConfirm(payload: Omit<ProformaInvoicePayload, "salesOrderId">) {
     if (!id) return;
@@ -346,6 +353,13 @@ export default function SalesOrderDetails() {
                         Record Advance Payment
                       </DropdownMenuItem>
                     )}
+                    {/* QA bug fix (SC-007): editing a Sales Order never
+                        notified the customer — this is the explicit action
+                        staff use afterward, any time, not just right after
+                        an edit. See SendSalesOrderDialog.tsx. */}
+                    <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
+                      Send to Customer
+                    </DropdownMenuItem>
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
                       Change Status
                     </DropdownMenuItem>
@@ -540,6 +554,15 @@ export default function SalesOrderDetails() {
         onOpenChange={setGenerateTaxInvoiceOpen}
         salesOrder={salesOrder}
         onConfirm={handleGenerateTaxInvoiceConfirm}
+      />
+      <SendSalesOrderDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        salesOrder={salesOrder}
+        onSent={() => {
+          fetchSalesOrder();
+          refetchEmailHistory();
+        }}
       />
     </div>
   );

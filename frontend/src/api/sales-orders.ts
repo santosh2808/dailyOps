@@ -82,3 +82,21 @@ export async function getSalesOrderEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/sales-orders/${id}/email-history`);
   return res.data;
 }
+
+export interface SendSalesOrderPayload {
+  recipientEmail?: string;
+  ccEmails?: string;
+}
+
+export interface SendSalesOrderResult extends SalesOrder {
+  emailStatus: "SENT" | "SIMULATED" | "FAILED";
+}
+
+// QA bug fix (SC-007): editing a Sales Order never notified the customer —
+// this is the explicit send/resend action staff use after saving changes.
+// Mirrors sendProformaInvoice()/sendTaxInvoice() — see
+// SalesOrdersService.sendSalesOrder() for the backend side.
+export async function sendSalesOrder(id: string, payload: SendSalesOrderPayload) {
+  const res = await api.post<SendSalesOrderResult>(`/api/v1/sales-orders/${id}/send`, payload);
+  return res.data;
+}

@@ -9,10 +9,12 @@ import {
 import { Prisma, SalesOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { mergeCc } from '../mailer/default-cc-emails';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
+import { SendSalesOrderDto } from './dto/send-sales-order.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
 import { DISPATCH_OVERRIDE_APPROVERS } from './dispatch-override-approvers';
@@ -445,6 +447,55 @@ export class SalesOrdersService {
         include: SALES_ORDER_DETAIL_INCLUDE,
       });
     });
+  }
+
+  // QA bug fix (SC-007): "Updated Sales Order not sent to customer after
+  // editing" — update() above recomputes items/totals and saves them, but
+  // never emails anyone; the only automatic Sales Order email is
+  // sendOrderConfirmationEmail(), fired once, at create() time. So editing
+  // an order (product/quantity/price/discount) was completely silent to
+  // the customer, with no in-app way to notify them even manually. This
+  // gives staff that explicit action — mirrors
+  // ProformaInvoicesService.sendInvoice(): lets the sender override the
+  // recipient/CC for this send only, and (unlike the create()-time
+  // best-effort auto-send, which swallows failures) propagates a failure
+  // instead of swallowing it, since this is an explicit user action that
+  // should surface a problem rather than hide it.
+  async sendSalesOrder(id: string, dto: SendSalesOrderDto, actorName?: string) {
+    const salesOrder = await this.findOne(id);
+    if (salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot be sent to the customer.');
+    }
+
+    const to = dto.recipientEmail?.trim() || salesOrder.customer.email || undefined;
+    const result = await this.mailerService.send({
+      templateKey: 'SALES_ORDER_UPDATE',
+      fallbackSubject: `Updated Sales Order - ${salesOrder.salesOrderNumber}`,
+      fallbackBodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated. Grand total: {{grandTotal}}.</p><p>Please reach out if you have any questions about this update.</p>',
+      vars: {
+        customerName: salesOrder.customer.contactPerson,
+        salesOrderNumber: salesOrder.salesOrderNumber,
+        quotationNumber: salesOrder.quotation.quotationNumber,
+        grandTotal: salesOrder.grandTotal.toFixed(2),
+      },
+      to,
+      cc: mergeCc(dto.ccEmails),
+      actorName,
+      link: { module: 'SalesOrder', salesOrderId: id },
+    });
+
+    await this.auditLogService
+      .record({
+        module: 'SalesOrder',
+        recordId: id,
+        action: 'Sent Email',
+        actorName,
+        newValue: { to, emailStatus: result.status },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    return { ...salesOrder, emailStatus: result.status };
   }
 
   // Dispatch gate (advance-payment check): a Sales Order cannot move to
