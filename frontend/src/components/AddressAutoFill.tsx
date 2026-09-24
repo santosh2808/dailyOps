@@ -29,12 +29,19 @@ interface AddressAutoFillProps {
 //    address. Debounced and capped to a handful of results per Nominatim's
 //    usage policy; attribution is shown right under the results.
 // 2. PIN code lookup via India Post's public Pincode API — type a 6-digit
-//    PIN and click Lookup to append the City/District/State line without
-//    retyping it. Purely additive to whatever's already in the textarea.
+//    PIN and click Lookup to fill the City/District/State line without
+//    retyping it.
+//
+// Both helpers REPLACE the textarea's contents rather than appending to it.
+// A Billing/Shipping Address represents exactly one physical location, so
+// looking up a second PIN code (or picking a second search result) means
+// "actually I meant this address", not "also deliver here" — appending
+// would silently stack multiple locations/PIN codes into one field,
+// producing an invalid combined address (see QA SC-003).
 //
 // The textarea itself remains the single source of truth / only thing that
-// actually gets submitted — both helpers just insert text into it, so
-// there's nothing to keep in sync and nothing new to store in the backend.
+// actually gets submitted — both helpers just set its value, so there's
+// nothing to keep in sync and nothing new to store in the backend.
 export default function AddressAutoFill({
   id,
   label,
@@ -112,9 +119,10 @@ export default function AddressAutoFill({
         return;
       }
       const line = `${[result.city, result.district].filter(Boolean).join(", ")}, ${result.state} - ${result.pincode}`;
-      if (!value.includes(line)) {
-        onChange(value.trim() ? `${value.trim()}\n${line}` : line);
-      }
+      // Replace, not append: a Billing/Shipping Address is exactly one
+      // location, so a fresh PIN lookup means "use this address", not
+      // "also include this one" (see QA SC-003).
+      onChange(line);
     } catch (err) {
       setPinError(getErrorMessage(err, "Could not look up that PIN code. Please try again."));
     } finally {
