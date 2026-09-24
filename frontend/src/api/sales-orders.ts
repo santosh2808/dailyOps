@@ -36,8 +36,11 @@ export interface SalesOrderPayload {
   billingAddress?: string;
   shippingAddress?: string;
   // The customer's own Purchase Order number — required by the backend DTO
-  // for manual create/update. See CreateSalesOrderDto.customerPoNumber.
+  // for manual create/update unless noPoAvailable is true. See
+  // CreateSalesOrderDto.customerPoNumber/noPoAvailable/noPoReason.
   customerPoNumber?: string;
+  noPoAvailable?: boolean;
+  noPoReason?: string;
   specialInstructions?: string;
   remarks?: string;
 }

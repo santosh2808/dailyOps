@@ -1027,6 +1027,18 @@ model SalesOrder {
   // migration for Sales Orders created before this field existed.
   customerPoNumber String?
 
+  // Some customers genuinely won't issue a formal PO (verbal confirmation,
+  // a trusted repeat customer, a government order pending paperwork, etc.)
+  // — per business owner, staff can tick this instead of being blocked, as
+  // long as they record why. No approval/named-approver gate here (unlike
+  // dispatchOverride*/advanceOverride*/productionOverride* elsewhere on
+  // this schema) — this is an honest record of an exception, not a
+  // financial risk needing sign-off. See
+  // CreateSalesOrderDto.customerPoNumber/noPoAvailable/noPoReason for the
+  // validation that ties these three fields together.
+  noPoAvailable Boolean @default(false)
+  noPoReason    String?
+
   // Optional scan/photo of the customer's actual PO document — stored on
   // disk, only metadata here (same "reference, not the blob" convention as
   // LeadSiteVisitPhoto — see LeadsService.SITE_VISIT_PHOTOS_DIR's comment).

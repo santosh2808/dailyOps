@@ -917,6 +917,11 @@ export interface SalesOrder {
   // (distinct from this Sales Order's own number). See
   // backend/prisma/schema.prisma's comment on SalesOrder.customerPoNumber.
   customerPoNumber?: string | null;
+  // Some customers won't issue a formal PO — staff can record that instead
+  // of being blocked, as long as they say why. See
+  // backend/prisma/schema.prisma's comment on SalesOrder.noPoAvailable.
+  noPoAvailable?: boolean;
+  noPoReason?: string | null;
   // Optional single-file scan/photo of the actual PO document. Only
   // metadata here — the file itself is fetched as an authenticated blob via
   // getSalesOrderPoDocumentUrl() in api/sales-orders.ts, same pattern as

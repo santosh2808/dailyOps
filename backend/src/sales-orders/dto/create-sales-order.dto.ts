@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsNotEmpty,
   IsNumber,
@@ -11,6 +12,7 @@ import {
   IsUUID,
   Max,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { SalesOrderItemInputDto } from './sales-order-item-input.dto';
@@ -107,22 +109,44 @@ export class CreateSalesOrderDto {
   // Purchase Order Number — the customer's own reference confirming they've
   // authorized this order (distinct from this Sales Order's own number,
   // which is Smart Rotamach's internal document). Required per business
-  // owner, same TS-optional-but-@IsNotEmpty() pattern as Billing/Shipping
+  // owner UNLESS noPoAvailable is set (some customers genuinely won't issue
+  // a formal PO — see noPoAvailable/noPoReason below), same
+  // TS-optional-but-conditionally-validated pattern as Billing/Shipping
   // Address above and for the same reason: the dead
   // SalesOrdersService.createFromQuotation() (leftover from a cascade
   // removed under TC-088, no longer called anywhere) bypasses the
   // ValidationPipe entirely, so a required TS type would break its
   // compile-time shape for no runtime benefit. Manual POST /sales-orders
   // and PATCH /sales-orders/:id are the only real call paths and both go
-  // through the ValidationPipe, where @IsNotEmpty() is what actually
-  // enforces this.
+  // through the ValidationPipe, where the decorators below actually enforce
+  // this. Mirrors CreateCustomerDto's isGstRegistered/gstNumber
+  // @ValidateIf pattern.
   @ApiProperty({
     example: 'PO-2026-00456',
-    description: 'The customer’s own Purchase Order number. Required for manual create/update.',
+    description:
+      'The customer’s own Purchase Order number. Required for manual create/update unless noPoAvailable is true.',
   })
-  @IsString()
+  @ValidateIf((o) => o.noPoAvailable !== true)
   @IsNotEmpty({ message: 'Purchase Order Number is required.' })
+  @IsString()
   customerPoNumber?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Set when the customer genuinely will not provide a PO number — see noPoReason.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  noPoAvailable?: boolean;
+
+  @ApiPropertyOptional({
+    example: 'Customer confirmed verbally over phone; will not issue a formal PO for this order.',
+    description: 'Required when noPoAvailable is true — an honest record of why there is no PO.',
+  })
+  @ValidateIf((o) => o.noPoAvailable === true)
+  @IsNotEmpty({ message: 'A reason is required when no Purchase Order is available.' })
+  @IsString()
+  noPoReason?: string;
 
   @ApiPropertyOptional({ example: 'Deliver during working hours only' })
   @IsOptional()

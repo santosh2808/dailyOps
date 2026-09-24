@@ -584,7 +584,14 @@ export default function SalesOrderDetails() {
                   <CardTitle className="text-base">Addresses & Instructions</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Field label="Purchase Order Number" value={salesOrder.customerPoNumber} />
+                  {salesOrder.noPoAvailable ? (
+                    <Field
+                      label="Purchase Order Number"
+                      value={`No PO available — ${salesOrder.noPoReason || "no reason recorded"}`}
+                    />
+                  ) : (
+                    <Field label="Purchase Order Number" value={salesOrder.customerPoNumber} />
+                  )}
                   <Field label="Billing Address" value={salesOrder.billingAddress} />
                   <Field label="Shipping Address" value={salesOrder.shippingAddress} />
                   <Field label="Special Instructions" value={salesOrder.specialInstructions} />

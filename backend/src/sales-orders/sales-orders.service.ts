@@ -264,7 +264,13 @@ export class SalesOrdersService {
             advancePercentage: dto.advancePercentage,
             billingAddress: dto.billingAddress,
             shippingAddress: dto.shippingAddress,
-            customerPoNumber: dto.customerPoNumber,
+            // When noPoAvailable is set, customerPoNumber is dropped even if
+            // present in the body (the frontend clears it, but a hand-built
+            // request shouldn't be able to show both a PO number and "no PO"
+            // at once) — see CreateSalesOrderDto's @ValidateIf pair.
+            customerPoNumber: dto.noPoAvailable ? null : dto.customerPoNumber,
+            noPoAvailable: dto.noPoAvailable ?? false,
+            noPoReason: dto.noPoAvailable ? dto.noPoReason : null,
             specialInstructions: dto.specialInstructions,
             remarks: dto.remarks,
             createdBy,
@@ -462,7 +468,21 @@ export class SalesOrdersService {
           advancePercentage: dto.advancePercentage,
           billingAddress: dto.billingAddress,
           shippingAddress: dto.shippingAddress,
-          customerPoNumber: dto.customerPoNumber,
+          // Same clear-if-no-PO logic as create(), but only applied when
+          // this PATCH actually touches noPoAvailable — if it's omitted
+          // entirely, all three fields pass through untouched (Prisma
+          // treats `undefined` as "don't update this column"), same
+          // undefined-skip convention CustomersService.update() uses for
+          // isGstRegistered/gstNumber.
+          customerPoNumber:
+            dto.noPoAvailable !== undefined
+              ? dto.noPoAvailable
+                ? null
+                : dto.customerPoNumber
+              : dto.customerPoNumber,
+          noPoAvailable: dto.noPoAvailable,
+          noPoReason:
+            dto.noPoAvailable !== undefined ? (dto.noPoAvailable ? dto.noPoReason : null) : dto.noPoReason,
           specialInstructions: dto.specialInstructions,
           remarks: dto.remarks,
           ...(aggregate

@@ -51,6 +51,11 @@ interface FormState {
   // seller's record of the same commitment the customer's PO makes; see
   // backend/prisma/schema.prisma's comment on SalesOrder.customerPoNumber).
   customerPoNumber: string;
+  // Some customers genuinely won't issue a formal PO — this checkbox +
+  // reason swaps in for customerPoNumber instead of blocking the form. See
+  // CreateSalesOrderDto.noPoAvailable's comment.
+  noPoAvailable: boolean;
+  noPoReason: string;
   specialInstructions: string;
   remarks: string;
 }
@@ -64,6 +69,8 @@ const emptyForm: FormState = {
   billingAddress: "",
   shippingAddress: "",
   customerPoNumber: "",
+  noPoAvailable: false,
+  noPoReason: "",
   specialInstructions: "",
   remarks: "",
 };
@@ -178,6 +185,8 @@ export default function SalesOrderForm() {
           billingAddress: so.billingAddress ?? "",
           shippingAddress: so.shippingAddress ?? "",
           customerPoNumber: so.customerPoNumber ?? "",
+          noPoAvailable: so.noPoAvailable ?? false,
+          noPoReason: so.noPoReason ?? "",
           specialInstructions: so.specialInstructions ?? "",
           remarks: so.remarks ?? "",
         });
@@ -267,9 +276,15 @@ export default function SalesOrderForm() {
       next.shippingAddress = "Shipping Address is required.";
     }
 
-    // Purchase Order Number is required per business owner — see
-    // CreateSalesOrderDto.customerPoNumber's comment.
-    if (!form.customerPoNumber.trim()) {
+    // Purchase Order Number is required per business owner, unless the
+    // customer genuinely won't issue one — then a reason is required
+    // instead. See CreateSalesOrderDto.customerPoNumber/noPoAvailable's
+    // comment.
+    if (form.noPoAvailable) {
+      if (!form.noPoReason.trim()) {
+        next.noPoReason = "Please note why no Purchase Order is available.";
+      }
+    } else if (!form.customerPoNumber.trim()) {
       next.customerPoNumber = "Purchase Order Number is required.";
     }
 
@@ -314,7 +329,9 @@ export default function SalesOrderForm() {
       gstPercent: form.gstPercent.trim() ? Number(form.gstPercent) : undefined,
       billingAddress: form.billingAddress.trim() || undefined,
       shippingAddress: form.shippingAddress.trim() || undefined,
-      customerPoNumber: form.customerPoNumber.trim() || undefined,
+      customerPoNumber: form.noPoAvailable ? undefined : form.customerPoNumber.trim() || undefined,
+      noPoAvailable: form.noPoAvailable,
+      noPoReason: form.noPoAvailable ? form.noPoReason.trim() || undefined : undefined,
       specialInstructions: form.specialInstructions.trim() || undefined,
       remarks: form.remarks.trim() || undefined,
     };
@@ -518,12 +535,13 @@ export default function SalesOrderForm() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div className="space-y-2 sm:col-span-3">
-                    <Label htmlFor="customerPoNumber">Purchase Order Number *</Label>
+                    <Label htmlFor="customerPoNumber">Purchase Order Number {!form.noPoAvailable && "*"}</Label>
                     <Input
                       id="customerPoNumber"
                       value={form.customerPoNumber}
                       onChange={(e) => update("customerPoNumber", e.target.value)}
                       placeholder="e.g. PO-2026-00456"
+                      disabled={form.noPoAvailable}
                     />
                     <p className="text-xs text-muted-foreground">
                       The customer's own Purchase Order reference confirming this order. You can attach a
@@ -531,6 +549,28 @@ export default function SalesOrderForm() {
                     </p>
                     {errors.customerPoNumber && (
                       <p className="text-xs text-destructive">{errors.customerPoNumber}</p>
+                    )}
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <Checkbox
+                        checked={form.noPoAvailable}
+                        onChange={(e) => update("noPoAvailable", e.target.checked)}
+                      />
+                      Customer will not provide a Purchase Order number
+                    </label>
+                    {form.noPoAvailable && (
+                      <div className="space-y-2">
+                        <Label htmlFor="noPoReason">Reason *</Label>
+                        <Textarea
+                          id="noPoReason"
+                          value={form.noPoReason}
+                          onChange={(e) => update("noPoReason", e.target.value)}
+                          placeholder="e.g. Customer confirmed verbally over phone; will not issue a formal PO."
+                          rows={2}
+                        />
+                        {errors.noPoReason && (
+                          <p className="text-xs text-destructive">{errors.noPoReason}</p>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div className="space-y-2">
