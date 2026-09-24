@@ -235,6 +235,16 @@ export default function SalesOrderForm() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    // Clear this field's validation error the moment the user edits it,
+    // rather than leaving a stale "X is required." message on screen until
+    // they resubmit the whole form (QA report: filling in the field should
+    // make the error go away immediately).
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   useEffect(() => {
