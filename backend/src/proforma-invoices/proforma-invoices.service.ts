@@ -144,6 +144,14 @@ export class ProformaInvoicesService {
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
     }
+    // QA bug fix (SC-008): a cancelled Sales Order has nothing left to
+    // invoice — generating a Proforma Invoice for it previously had no
+    // guard at all. createFromSalesOrder() below routes through this same
+    // check, but that path only ever runs on a freshly-accepted Quotation's
+    // brand new Sales Order, so it can never actually hit this branch.
+    if (salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot have a Proforma Invoice generated for it.');
+    }
 
     // Prevent duplicate Proforma Invoices for the same Sales Order unless
     // the existing one has been cancelled.
@@ -308,6 +316,14 @@ export class ProformaInvoicesService {
   // dispatch gate and Tax Invoice generation both check against.
   async updateAdvance(id: string, dto: UpdateProformaInvoiceAdvanceDto, actorName?: string) {
     const existing = await this.findOne(id);
+    // QA bug fix (SC-008): once the linked Sales Order is cancelled there's
+    // nothing left to collect against — recording a new advance figure on
+    // its Proforma Invoice previously had no guard against this at all.
+    if (existing.salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'The linked Sales Order is cancelled — advance payment can no longer be recorded against it.',
+      );
+    }
     const updated = await this.prisma.proformaInvoice.update({
       where: { id },
       data: { advanceReceived: dto.advanceReceived },

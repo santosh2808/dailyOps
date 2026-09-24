@@ -363,6 +363,14 @@ export class SalesOrdersService {
 
   async update(id: string, dto: UpdateSalesOrderDto) {
     const existing = await this.findOne(id);
+    // QA bug fix (SC-008): a cancelled Sales Order is a closed record — it
+    // had no guard against still being edited (items/totals recomputed and
+    // saved as if it were active). Status changes still go through
+    // updateStatus()/assertForwardOnlyTransition() below, unaffected by
+    // this — only the ordinary "edit details" path is blocked here.
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot be edited.');
+    }
 
     let aggregate: { subtotal: number; discount: number; tax: number; grandTotal: number } | null = null;
     // Only populated when the full item set is being replaced (dto.items

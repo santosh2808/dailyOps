@@ -155,6 +155,14 @@ export class TaxInvoicesService {
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
     }
+    // QA bug fix (SC-008): a cancelled Sales Order has nothing left to
+    // invoice — generating a Tax Invoice for it previously had no guard at
+    // all (the advance-received check below doesn't rule this out, since a
+    // Sales Order can still have a recorded advance at the moment it's
+    // cancelled).
+    if (salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot have a Tax Invoice generated for it.');
+    }
 
     const activeProformaInvoice = await this.prisma.proformaInvoice.findFirst({
       where: { salesOrderId: dto.salesOrderId, status: { not: 'CANCELLED' } },

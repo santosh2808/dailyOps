@@ -99,6 +99,17 @@ export default function SalesOrderDetails() {
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
 
+  // QA bug fix (SC-008): a cancelled Sales Order is a closed record — none
+  // of Generate Proforma Invoice / Generate Tax Invoice / Generate JEO /
+  // Record Advance Payment / Edit should still be actionable from here.
+  // Viewing an already-generated document (the "View X" buttons above) is
+  // unaffected — only the "start something new" / "keep editing" actions
+  // are gated. The backend enforces this independently in each service
+  // (see e.g. ProformaInvoicesService.create()'s own CANCELLED check) —
+  // this is purely to stop staff walking into a rejection instead of
+  // seeing a disabled button.
+  const isCancelled = salesOrder?.status === "CANCELLED";
+
   const fetchSalesOrder = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -306,7 +317,11 @@ export default function SalesOrderDetails() {
                       View Proforma Invoice
                     </Button>
                   ) : (
-                    <Button onClick={() => setGenerateInvoiceOpen(true)}>
+                    <Button
+                      onClick={() => setGenerateInvoiceOpen(true)}
+                      disabled={isCancelled}
+                      title={isCancelled ? "This Sales Order is cancelled" : undefined}
+                    >
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
                       Generate Proforma Invoice
                     </Button>
@@ -319,11 +334,13 @@ export default function SalesOrderDetails() {
                   ) : (
                     <Button
                       onClick={() => setGenerateTaxInvoiceOpen(true)}
-                      disabled={!activeInvoice || activeInvoice.advanceReceived <= 0}
+                      disabled={isCancelled || !activeInvoice || activeInvoice.advanceReceived <= 0}
                       title={
-                        !activeInvoice || activeInvoice.advanceReceived <= 0
-                          ? "Record an advance payment on the Proforma Invoice first"
-                          : undefined
+                        isCancelled
+                          ? "This Sales Order is cancelled"
+                          : !activeInvoice || activeInvoice.advanceReceived <= 0
+                            ? "Record an advance payment on the Proforma Invoice first"
+                            : undefined
                       }
                     >
                       <FileText className="mr-2 h-4 w-4" />
@@ -336,7 +353,11 @@ export default function SalesOrderDetails() {
                       View JEO
                     </Button>
                   ) : (
-                    <Button onClick={() => setGenerateJeoOpen(true)}>
+                    <Button
+                      onClick={() => setGenerateJeoOpen(true)}
+                      disabled={isCancelled}
+                      title={isCancelled ? "This Sales Order is cancelled" : undefined}
+                    >
                       <ClipboardList className="mr-2 h-4 w-4" />
                       Generate JEO
                     </Button>
@@ -349,7 +370,11 @@ export default function SalesOrderDetails() {
                     }
                   >
                     {activeInvoice && (
-                      <DropdownMenuItem icon={Wallet} onSelect={() => setRecordAdvanceOpen(true)}>
+                      <DropdownMenuItem
+                        icon={Wallet}
+                        disabled={isCancelled}
+                        onSelect={() => setRecordAdvanceOpen(true)}
+                      >
                         Record Advance Payment
                       </DropdownMenuItem>
                     )}
@@ -357,13 +382,17 @@ export default function SalesOrderDetails() {
                         notified the customer — this is the explicit action
                         staff use afterward, any time, not just right after
                         an edit. See SendSalesOrderDialog.tsx. */}
-                    <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
+                    <DropdownMenuItem icon={Send} disabled={isCancelled} onSelect={() => setSendOpen(true)}>
                       Send to Customer
                     </DropdownMenuItem>
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
                       Change Status
                     </DropdownMenuItem>
-                    <DropdownMenuItem icon={Pencil} onSelect={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}>
+                    <DropdownMenuItem
+                      icon={Pencil}
+                      disabled={isCancelled}
+                      onSelect={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}
+                    >
                       Edit
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

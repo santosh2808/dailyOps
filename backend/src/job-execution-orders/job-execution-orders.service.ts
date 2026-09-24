@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { JeoStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -243,6 +243,15 @@ export class JobExecutionOrdersService {
     });
     if (!salesOrder) {
       throw new NotFoundException('Sales order not found');
+    }
+    // QA bug fix (SC-008): a cancelled Sales Order has nothing left to
+    // produce — generating a JEO for it (manually, from the Sales Order
+    // Details page) makes no sense and previously had no guard against it
+    // at all. createFromSalesOrder() above routes through this same check,
+    // but that path only ever runs on a freshly-accepted Quotation's brand
+    // new Sales Order, so it can never actually hit this branch.
+    if (salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot have a Job Execution Order generated for it.');
     }
 
     // Only one active (not yet COMPLETED) JEO may exist per Sales Order at a
