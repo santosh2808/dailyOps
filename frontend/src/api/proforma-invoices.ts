@@ -88,6 +88,17 @@ export async function updateProformaInvoiceAdvance(id: string, advanceReceived: 
   return res.data;
 }
 
+// QA bug fix (SC-006): subtotal/discount/tax/grandTotal are only ever
+// copied onto the invoice once, when it's generated — editing the linked
+// Sales Order afterward never re-syncs them. This pulls the current Sales
+// Order amounts back in; advanceReceived is deliberately left untouched
+// (money already recorded as received stays recorded regardless of how
+// the total changes) — see ProformaInvoicesService.regenerateFromSalesOrder().
+export async function regenerateProformaInvoiceFromSalesOrder(id: string) {
+  const res = await api.post<ProformaInvoice>(`/api/v1/proforma-invoices/${id}/regenerate`);
+  return res.data;
+}
+
 export async function getProformaInvoiceEmailHistory(id: string) {
   const res = await api.get<EmailHistoryEntry[]>(`/api/v1/proforma-invoices/${id}/email-history`);
   return res.data;

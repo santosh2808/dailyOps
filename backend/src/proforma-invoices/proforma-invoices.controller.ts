@@ -75,6 +75,18 @@ export class ProformaInvoicesController {
     res.send(pdf);
   }
 
+  // QA bug fix (SC-006): pull the current Sales Order's subtotal/discount
+  // /tax/grandTotal back onto this invoice — see
+  // ProformaInvoicesService.regenerateFromSalesOrder()'s own comment for
+  // why this exists (amounts are a one-time snapshot, not a live value)
+  // and what it deliberately leaves untouched (advanceReceived, jeoId,
+  // manually-edited metadata).
+  @Post(':id/regenerate')
+  @RequirePermission('ProformaInvoice', 'Edit')
+  regenerateFromSalesOrder(@Param('id') id: string, @Req() req: any) {
+    return this.proformaInvoicesService.regenerateFromSalesOrder(id, req.user?.name);
+  }
+
   // Additive: WhatsApp Share via Interakt — sends the document directly to
   // the customer's WhatsApp (rather than returning a link for the browser
   // to open a wa.me chat with).

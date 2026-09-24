@@ -11,6 +11,7 @@ import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaI
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
 import EditProformaInvoiceDialog from "@/components/proforma-invoices/EditProformaInvoiceDialog";
 import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProformaInvoiceDialog";
+import ConfirmRegenerateProformaInvoiceDialog from "@/components/proforma-invoices/ConfirmRegenerateProformaInvoiceDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -57,6 +58,7 @@ export default function ProformaInvoiceDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(true);
@@ -221,6 +223,13 @@ export default function ProformaInvoiceDetails() {
                     >
                       View Sales Order
                     </DropdownMenuItem>
+                    {/* QA bug fix (SC-006): lets staff pull the Sales
+                        Order's current subtotal/discount/tax/grandTotal back
+                        onto this invoice after the Sales Order was edited —
+                        see ConfirmRegenerateProformaInvoiceDialog.tsx. */}
+                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setRegenerateOpen(true)}>
+                      Regenerate from Sales Order
+                    </DropdownMenuItem>
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
                       Change Status
                     </DropdownMenuItem>
@@ -371,6 +380,13 @@ export default function ProformaInvoiceDetails() {
           fetchInvoice();
           refetchEmailHistory();
         }}
+      />
+
+      <ConfirmRegenerateProformaInvoiceDialog
+        open={regenerateOpen}
+        onOpenChange={setRegenerateOpen}
+        invoice={invoice}
+        onSaved={setInvoice}
       />
     </div>
   );

@@ -326,6 +326,70 @@ export class ProformaInvoicesService {
     return updated;
   }
 
+  // QA bug fix (SC-006): subtotal/discount/tax/grandTotal are copied onto
+  // the invoice once, at create() time above — they're a snapshot, not a
+  // live reference. Editing the Sales Order afterward (product, quantity,
+  // price, discount) recomputes SalesOrder.grandTotal but nothing here
+  // ever re-syncs this invoice's own copy, so the two silently drift apart
+  // (made worse by items/addresses being read live off the Sales Order —
+  // see PROFORMA_INVOICE_DETAIL_INCLUDE's comment — so the invoice can end
+  // up showing new items next to an old total). This gives staff an
+  // explicit action to pull the current Sales Order amounts back in.
+  //
+  // Deliberately does NOT touch advanceReceived: money already recorded as
+  // received is a fact about what happened, not a derived total, so it
+  // must survive a regenerate untouched even if the new grandTotal makes
+  // the advance a different percentage than before. It also does not
+  // touch jeoId (frozen-at-create by design, see that field's own
+  // comment) or any of the manually-edited metadata fields update() above
+  // handles (paymentTerms/bank details/notes) — those are the user's own
+  // edits, not something a Sales Order change should silently overwrite.
+  async regenerateFromSalesOrder(id: string, actorName?: string) {
+    const existing = await this.findOne(id);
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Proforma Invoice cannot be regenerated.');
+    }
+
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: existing.salesOrderId },
+    });
+    if (!salesOrder) {
+      throw new NotFoundException('The linked Sales Order no longer exists.');
+    }
+
+    const updated = await this.prisma.proformaInvoice.update({
+      where: { id },
+      data: {
+        subtotal: salesOrder.subtotal,
+        discount: salesOrder.discount,
+        tax: salesOrder.tax,
+        grandTotal: salesOrder.grandTotal,
+      },
+      include: PROFORMA_INVOICE_DETAIL_INCLUDE,
+    });
+    await this.auditLogService
+      .record({
+        module: 'ProformaInvoice',
+        recordId: id,
+        action: 'Regenerated from Sales Order',
+        actorName,
+        oldValue: {
+          subtotal: existing.subtotal,
+          discount: existing.discount,
+          tax: existing.tax,
+          grandTotal: existing.grandTotal,
+        },
+        newValue: {
+          subtotal: updated.subtotal,
+          discount: updated.discount,
+          tax: updated.tax,
+          grandTotal: updated.grandTotal,
+        },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return updated;
+  }
+
   // Branded PDF (replicates "Proforma Invoice 001.doc") — used both for the
   // standalone GET :id/pdf download and internally by sendInvoiceEmail()'s
   // attachment, so the emailed copy and the on-demand download are always
