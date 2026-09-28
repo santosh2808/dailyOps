@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -13,6 +13,22 @@ const ROLE_INCLUDE = {
 // (kept as a separate small constant here rather than a cross-module import,
 // same convention as other tiny shared literals in this codebase).
 const ASSIGNABLE_ROLE_NAMES = ['Sales Executive', 'Sales Manager'];
+
+// QA fix (Administration-Roles): the Role model has no isSystem/isProtected
+// flag — it's a plain, fully staff-editable row (see schema.prisma's own
+// comment: "no special-cased 'admin' bypass anywhere in guard/service
+// code... Administrator simply gets every Permission via RolePermission at
+// seed time, like any other role"). But several other services already
+// depend on the literal name "Administrator" for authorization bypass
+// checks (e.g. QuotationsService's dispatch/advance override gates), and
+// seed.ts always creates the initial Administrator user with this exact
+// role — so in practice it's already load-bearing, just never protected
+// from deletion or renaming. Deleting it cascades (RolePermission/UserRole
+// onDelete: Cascade) and silently strips every Administrator user's access
+// with no recovery path. Same "hardcoded name, no schema flag" convention
+// as ASSIGNABLE_ROLE_NAMES above — a real isProtected column would be more
+// robust, but isn't needed for the one role this app actually depends on.
+const PROTECTED_ROLE_NAMES = ['Administrator'];
 
 @Injectable()
 export class RolesService {
@@ -60,7 +76,22 @@ export class RolesService {
   }
 
   async update(id: string, dto: UpdateRoleDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+
+    // QA fix: block renaming the Administrator role away from its
+    // protected name — without this, the delete guard below is trivially
+    // bypassed (rename, then delete "the new role"). Editing its
+    // description or permission list is unaffected.
+    if (
+      PROTECTED_ROLE_NAMES.includes(current.name) &&
+      dto.name &&
+      dto.name.trim() !== current.name
+    ) {
+      throw new BadRequestException(
+        `The "${current.name}" role is required for administrative access and cannot be renamed.`,
+      );
+    }
+
     if (dto.name) {
       const existing = await this.prisma.role.findUnique({ where: { name: dto.name.trim() } });
       if (existing && existing.id !== id) {
@@ -92,7 +123,16 @@ export class RolesService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const role = await this.findOne(id);
+    // QA fix (Administration-Roles): the Administrator role must not be
+    // deletable — deleting it cascades to every UserRole row referencing
+    // it, silently stripping every Administrator user's access with no
+    // way to recover short of restoring the database.
+    if (PROTECTED_ROLE_NAMES.includes(role.name)) {
+      throw new BadRequestException(
+        `The "${role.name}" role is required for administrative access and cannot be deleted.`,
+      );
+    }
     // Cascades to RolePermission and UserRole rows for this role (see the
     // onDelete: Cascade relations in schema.prisma) — any user who only had
     // this role loses it, same as removing any other join-table row.

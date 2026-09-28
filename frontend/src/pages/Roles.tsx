@@ -22,6 +22,13 @@ import { getErrorMessage } from "@/lib/errors";
 import { createRole, deleteRole, listRoles, updateRole, type RolePayload } from "@/api/roles";
 import type { Role } from "@/types";
 
+// QA fix (Administration-Roles): the Administrator role must not be
+// deletable — deleting it silently strips every Administrator user's
+// access, with no recovery path. Backend enforces this independently
+// (roles.service.ts remove()/update()) — this is just defense-in-depth so
+// the action doesn't even look available for this one protected role.
+const PROTECTED_ROLE_NAMES = ["Administrator"];
+
 export default function Roles() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,8 +102,12 @@ export default function Roles() {
     });
   }
 
+  const selectableRoles = roles.filter((r) => !PROTECTED_ROLE_NAMES.includes(r.name));
+
   function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.size === roles.length ? new Set() : new Set(roles.map((r) => r.id))));
+    setSelectedIds((prev) =>
+      prev.size === selectableRoles.length ? new Set() : new Set(selectableRoles.map((r) => r.id)),
+    );
   }
 
   async function handleBulkDeleteConfirm() {
@@ -156,9 +167,10 @@ export default function Roles() {
                 <TableHead className="w-10">
                   <Checkbox
                     ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < roles.length;
+                      if (el)
+                        el.indeterminate = selectedIds.size > 0 && selectedIds.size < selectableRoles.length;
                     }}
-                    checked={roles.length > 0 && selectedIds.size === roles.length}
+                    checked={selectableRoles.length > 0 && selectedIds.size === selectableRoles.length}
                     onChange={toggleSelectAll}
                     aria-label="Select all roles"
                   />
@@ -186,12 +198,15 @@ export default function Roles() {
                   </TableCell>
                 </TableRow>
               ) : (
-                roles.map((role) => (
+                roles.map((role) => {
+                  const isProtected = PROTECTED_ROLE_NAMES.includes(role.name);
+                  return (
                   <TableRow key={role.id}>
                     <TableCell>
                       <Checkbox
                         checked={selectedIds.has(role.id)}
                         onChange={() => toggleSelected(role.id)}
+                        disabled={isProtected}
                         aria-label={`Select role ${role.name}`}
                       />
                     </TableCell>
@@ -218,7 +233,12 @@ export default function Roles() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Delete role"
+                          title={
+                            isProtected
+                              ? "The Administrator role is required for administrative access and cannot be deleted"
+                              : "Delete role"
+                          }
+                          disabled={isProtected}
                           onClick={() => openDeleteDialog(role)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -226,7 +246,8 @@ export default function Roles() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
