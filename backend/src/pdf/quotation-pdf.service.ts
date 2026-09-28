@@ -312,9 +312,29 @@ export class QuotationPdfService {
           doc.moveDown(0.5);
         } else {
           this.drawTableHeaderRow(doc, ['Items', 'Quantity / Fan'], [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+          // QA fix: Hanging Structure and Pipe Length must appear as two
+          // separate rows in Standard Scope of Supply, not combined into
+          // one field. resolveScopeRowValue() above now returns just the
+          // structure label for the "Hanging Structure" row; draw a
+          // dedicated "Pipe Length" row directly under it. A few products
+          // (SPYRO-8/14/24) have no "Hanging Structure" catalog row at all
+          // — for those, anchor the injected row under "Hanging Pipe (Down
+          // Rod)" instead, so Pipe Length is still shown for every product.
+          const pipeLengthValue =
+            item.hangingStructureType === 'PIPE_TRUSS' ? item.pipeLength?.trim() : undefined;
+          const hasHangingStructureRow = scope.some(
+            (row) => row.item.trim().toLowerCase() === 'hanging structure',
+          );
           for (const row of scope) {
+            const rowLabel = row.item.trim().toLowerCase();
             const value = this.resolveScopeRowValue(row, item);
             this.drawTwoColDataRow(doc, row.item, value, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+            const isPipeLengthAnchorRow = hasHangingStructureRow
+              ? rowLabel === 'hanging structure'
+              : rowLabel === 'hanging pipe' || rowLabel === 'hanging pipe (down rod)';
+            if (pipeLengthValue && isPipeLengthAnchorRow) {
+              this.drawTwoColDataRow(doc, 'Pipe Length', pipeLengthValue, [contentWidth * 0.6, contentWidth * 0.4], contentLeft, ensureSpace);
+            }
           }
         }
       }
@@ -827,14 +847,15 @@ export class QuotationPdfService {
     // structure on the quotation item (QuotationItem.hangingStructureType —
     // set via the Hanging Structure field on the Quotation form), this row
     // must reflect that actual choice instead.
+    // QA fix: Hanging Structure and Pipe Length used to be combined into
+    // this one row's value ("Pipe Truss, Pipe Length: 5 ft"), which QA
+    // flagged as unclear for data entry/reading purposes. Pipe Length now
+    // gets its own dedicated row instead (see the draw loop in draw(),
+    // which injects a "Pipe Length" row right after this one) — this row
+    // shows only the structure label.
     const isHangingStructureRow = rowLabel === 'hanging structure';
     if (isHangingStructureRow && item.hangingStructureType) {
-      const structureLabel = HANGING_STRUCTURE_LABELS[item.hangingStructureType];
-      const pipeNote =
-        item.hangingStructureType === 'PIPE_TRUSS' && item.pipeLength?.trim()
-          ? `, Pipe Length: ${item.pipeLength.trim()}`
-          : '';
-      return `${structureLabel}${pipeNote}`;
+      return HANGING_STRUCTURE_LABELS[item.hangingStructureType];
     }
     // Bug fix: the seeded "Hanging Pipe" row (a separate scope-of-supply
     // line from "Hanging Structure" above — see seed-hvls-products.ts,
