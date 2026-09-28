@@ -15,16 +15,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { isAxiosError } from "axios";
+import { getErrorMessage } from "@/lib/errors";
 import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import type { JeoPayload } from "@/api/job-execution-orders";
 import { getQuotation } from "@/api/quotations";
-import { DISPATCH_OVERRIDE_APPROVERS, type HangingStructureType, type JeoPriority, type SalesOrder } from "@/types";
+import type { HangingStructureType, JeoPriority, SalesOrder } from "@/types";
 
 // Production-start gate: generating a JEO now requires at least
 // MINIMUM_ADVANCE_PERCENT (50%) advance received against the Sales Order's
-// active Proforma Invoice — same threshold and named-approver override as
-// the existing dispatch gate (ChangeSalesOrderStatusDialog.tsx) and Record
-// Advance Payment minimum (RecordAdvancePaymentDialog.tsx).
+// active Proforma Invoice — same threshold as the existing dispatch gate
+// (ChangeSalesOrderStatusDialog.tsx) and Record Advance Payment minimum
+// (RecordAdvancePaymentDialog.tsx). Override Approval workflow: below that
+// threshold there is no self-declare escape hatch anymore — the backend
+// raises a real OverrideApprovalRequest and emails Santosh Kumar Chegondi /
+// Amarpal Gampa a one-click approve/reject link; the JEO is generated
+// automatically once one of them approves it.
 const MINIMUM_ADVANCE_PERCENT = 50;
 
 function formatRupees(value: number) {
@@ -66,11 +71,6 @@ interface GenerateJeoDialogProps {
   // threshold can be checked proactively instead of only reacting to a
   // backend rejection.
   advanceReceived: number;
-  // Whether the acting user holds the Administrator role — only an Admin
-  // may record a production-start override (see
-  // JobExecutionOrdersService.create()). This only drives which UI is
-  // shown; the backend enforces it for real.
-  isAdmin: boolean;
   onConfirm: (payload: Omit<JeoPayload, "salesOrderId">) => Promise<void>;
 }
 
@@ -81,8 +81,6 @@ interface FormState {
   pipeLength: string;
   hangingStructureType: HangingStructureType | "";
   color: string;
-  productionOverrideApprovedBy: string;
-  productionOverrideNote: string;
 }
 
 const emptyForm: FormState = {
@@ -92,8 +90,6 @@ const emptyForm: FormState = {
   pipeLength: "",
   hangingStructureType: "",
   color: "Aluminium",
-  productionOverrideApprovedBy: "",
-  productionOverrideNote: "",
 };
 
 // Generates a JEO from an existing Sales Order. Customer, Quotation
@@ -107,18 +103,22 @@ export default function GenerateJeoDialog({
   onOpenChange,
   salesOrder,
   advanceReceived,
-  isAdmin,
   onConfirm,
 }: GenerateJeoDialogProps) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  // True when the backend's 409 response means "an approval request has
+  // been emailed" rather than an ordinary failure — styled as an
+  // informational notice instead of a red error.
+  const [approvalRequested, setApprovalRequested] = useState(false);
 
   useEffect(() => {
     if (!open || !salesOrder) return;
     setForm(emptyForm);
     setError("");
+    setApprovalRequested(false);
     // Pre-fill Scope of Work from the source quotation — best-effort only;
     // if this fails (or the quotation has no items to suggest from), the
     // dialog just falls back to emptyForm's defaults, same as before this
@@ -149,11 +149,11 @@ export default function GenerateJeoDialog({
   const grandTotal = salesOrder?.grandTotal ?? 0;
   const requiredAdvance = grandTotal > 0 ? (grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
   const belowThreshold = advanceReceived < requiredAdvance;
-  const canSubmit = !belowThreshold || (isAdmin && !!form.productionOverrideApprovedBy);
 
   async function handleConfirm() {
     setSubmitting(true);
     setError("");
+    setApprovalRequested(false);
     try {
       await onConfirm({
         priority: form.priority,
@@ -162,8 +162,6 @@ export default function GenerateJeoDialog({
         pipeLength: form.pipeLength.trim() || undefined,
         hangingStructureType: form.hangingStructureType || undefined,
         color: form.color.trim() || undefined,
-        productionOverrideApprovedBy: belowThreshold ? form.productionOverrideApprovedBy || undefined : undefined,
-        productionOverrideNote: belowThreshold ? form.productionOverrideNote.trim() || undefined : undefined,
       });
       onOpenChange(false);
     } catch (err) {
@@ -171,12 +169,19 @@ export default function GenerateJeoDialog({
       // Order already exists for this Sales Order.") instead of a generic
       // message — this dialog previously discarded it entirely, which made
       // real causes (conflicts, permission errors, validation) impossible
-      // to diagnose from the UI.
-      const backendMessage = isAxiosError(err) ? err.response?.data?.message : undefined;
-      const message = Array.isArray(backendMessage) ? backendMessage.join(" ") : backendMessage;
-      const finalMessage = message || "Could not generate the job execution order. Please try again.";
+      // to diagnose from the UI. A 409 here specifically means the
+      // production-start gate blocked generation and raised (or reused) a
+      // real approval request — not a plain failure, so it gets its own
+      // amber notice instead of toast.error's red styling.
+      const finalMessage = getErrorMessage(err, "Could not generate the job execution order. Please try again.");
+      const isApprovalConflict = isAxiosError(err) && err.response?.status === 409;
       setError(finalMessage);
-      toast.error(finalMessage);
+      setApprovalRequested(isApprovalConflict);
+      if (isApprovalConflict) {
+        toast.info(finalMessage, "Approval requested");
+      } else {
+        toast.error(finalMessage);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -272,53 +277,24 @@ export default function GenerateJeoDialog({
           </div>
         </div>
 
-        {belowThreshold && !isAdmin && (
-          <div className="mt-3 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-            <p className="text-sm font-medium text-destructive">
-              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
-              {MINIMUM_ADVANCE_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Only an Administrator can start production below the threshold, and only with
-              authorization from Santosh Kumar Chegondi or Amarpal Gampa.
-            </p>
-          </div>
-        )}
-
-        {belowThreshold && isAdmin && (
-          <div className="mt-3 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+        {belowThreshold && !approvalRequested && (
+          <div className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3">
             <p className="text-sm font-medium text-amber-900">
               Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
               {MINIMUM_ADVANCE_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
             </p>
-            <div className="space-y-2">
-              <Label htmlFor="production-override-approved-by">Approved By (required)</Label>
-              <Select
-                id="production-override-approved-by"
-                value={form.productionOverrideApprovedBy}
-                onChange={(e) => update("productionOverrideApprovedBy", e.target.value)}
-              >
-                <option value="">Select...</option>
-                {DISPATCH_OVERRIDE_APPROVERS.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="production-override-note">Note (optional)</Label>
-              <Textarea
-                id="production-override-note"
-                placeholder="e.g. Customer confirmed payment on delivery — production approved per Sales Manager."
-                value={form.productionOverrideNote}
-                onChange={(e) => update("productionOverrideNote", e.target.value)}
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Continuing will email Santosh Kumar Chegondi and Amarpal Gampa an approval link — the
+              JEO is generated automatically once one of them approves it.
+            </p>
           </div>
         )}
 
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        {approvalRequested ? (
+          <p className="mt-2 text-sm text-amber-900">{error}</p>
+        ) : (
+          error && <p className="mt-2 text-sm text-destructive">{error}</p>
+        )}
 
         <DialogFooter>
           <Button
@@ -327,12 +303,14 @@ export default function GenerateJeoDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            Cancel
+            {approvalRequested ? "Close" : "Cancel"}
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting || !canSubmit}>
-            {submitting && <Spinner className="mr-2 h-4 w-4" />}
-            {submitting ? "Generating..." : "Generate JEO"}
-          </Button>
+          {!approvalRequested && (
+            <Button type="button" onClick={handleConfirm} disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
+              {submitting ? "Generating..." : "Generate JEO"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

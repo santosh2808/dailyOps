@@ -24,6 +24,11 @@ export interface JeoListParams {
   sortOrder?: "asc" | "desc";
 }
 
+// Override Approval workflow: the self-declare productionOverrideApprovedBy
+// / productionOverrideNote fields are gone — a below-MINIMUM_ADVANCE_PERCENT
+// (50%) advance now blocks JEO generation server-side (409) and emails
+// Santosh/Amarpal a real approval link instead of accepting a self-declared
+// approver. See GenerateJeoDialog.tsx.
 export interface JeoPayload {
   salesOrderId: string;
   priority?: JeoPriority;
@@ -32,13 +37,6 @@ export interface JeoPayload {
   pipeLength?: string;
   hangingStructureType?: HangingStructureType;
   color?: string;
-  // Production-start gate: required only when the linked Sales Order's
-  // advance received is below MINIMUM_ADVANCE_PERCENT (50%) of its
-  // grandTotal — the backend rejects a below-minimum JEO generation
-  // without a recognized approver, and requires the acting user to be an
-  // Administrator. Create-only — not part of UpdateJeoPayload below.
-  productionOverrideApprovedBy?: string;
-  productionOverrideNote?: string;
 }
 
 export interface ProductionChecklistPayload {

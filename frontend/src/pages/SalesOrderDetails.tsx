@@ -32,7 +32,6 @@ import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { useAuth } from "@/context/AuthContext";
 import { statusLabel } from "@/components/sales-orders/salesOrderOptions";
 import {
   deleteSalesOrder,
@@ -89,8 +88,6 @@ function formatFileSize(bytes?: number | null) {
 export default function SalesOrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isAdmin = !!user?.roles?.includes("Administrator");
 
   const [salesOrder, setSalesOrder] = useState<SalesOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -261,17 +258,9 @@ export default function SalesOrderDetails() {
     navigate(`/proforma-invoices/${created.id}`);
   }
 
-  async function handleRecordAdvanceConfirm(
-    advanceReceived: number,
-    advanceOverrideApprovedBy?: string,
-    advanceOverrideNote?: string,
-  ) {
+  async function handleRecordAdvanceConfirm(advanceReceived: number) {
     if (!activeInvoice) return;
-    await updateProformaInvoiceAdvance(activeInvoice.id, {
-      advanceReceived,
-      advanceOverrideApprovedBy,
-      advanceOverrideNote,
-    });
+    await updateProformaInvoiceAdvance(activeInvoice.id, { advanceReceived });
     toast.success("Advance payment recorded.");
     await checkActiveInvoice();
   }
@@ -292,13 +281,9 @@ export default function SalesOrderDetails() {
     navigate(`/tax-invoices/${created.id}`);
   }
 
-  async function handleStatusConfirm(
-    status: SalesOrderStatus,
-    dispatchOverrideNote?: string,
-    dispatchOverrideApprovedBy?: string,
-  ) {
+  async function handleStatusConfirm(status: SalesOrderStatus) {
     if (!id) return;
-    await updateSalesOrderStatus(id, status, dispatchOverrideNote, dispatchOverrideApprovedBy);
+    await updateSalesOrderStatus(id, status);
     toast.success(`Sales Order status updated to ${statusLabel(status)}.`);
     await fetchSalesOrder();
   }
@@ -702,7 +687,6 @@ export default function SalesOrderDetails() {
         onOpenChange={setStatusOpen}
         salesOrder={salesOrder}
         advanceReceived={activeInvoice?.advanceReceived ?? 0}
-        isAdmin={isAdmin}
         onConfirm={handleStatusConfirm}
       />
       <DeleteSalesOrderConfirmDialog
@@ -737,7 +721,6 @@ export default function SalesOrderDetails() {
         onOpenChange={setRecordAdvanceOpen}
         invoice={activeInvoice}
         salesOrderGrandTotal={salesOrder?.grandTotal ?? 0}
-        isAdmin={isAdmin}
         onConfirm={handleRecordAdvanceConfirm}
       />
       <GenerateJeoDialog
@@ -745,7 +728,6 @@ export default function SalesOrderDetails() {
         onOpenChange={setGenerateJeoOpen}
         salesOrder={salesOrder}
         advanceReceived={activeInvoice?.advanceReceived ?? 0}
-        isAdmin={isAdmin}
         onConfirm={handleGenerateJeoConfirm}
       />
       <GenerateTaxInvoiceDialog

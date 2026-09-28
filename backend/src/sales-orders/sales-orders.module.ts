@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MailerModule } from '../mailer/mailer.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { ApprovalRequestsModule } from '../approval-requests/approval-requests.module';
 import { SalesOrdersController } from './sales-orders.controller';
 import { SalesOrdersService } from './sales-orders.service';
 
 @Module({
-  imports: [MailerModule, AuditLogModule],
+  imports: [MailerModule, AuditLogModule, ApprovalRequestsModule],
   controllers: [SalesOrdersController],
   providers: [SalesOrdersService],
   // Exported so QuotationsModule can inject SalesOrdersService directly and

@@ -31,7 +31,7 @@ import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 // dispatch-override Administrator check in SalesOrdersService.updateStatus().
 // Same convention as QuotationsController's actorFrom().
 function actorFrom(req: any): SalesOrderActor {
-  return { name: req.user?.name, roles: req.user?.roles ?? [] };
+  return { name: req.user?.name, roles: req.user?.roles ?? [], email: req.user?.email };
 }
 
 @ApiTags('sales-orders')

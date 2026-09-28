@@ -12,7 +12,6 @@ import GenerateJeoDialog from "@/components/job-execution-orders/GenerateJeoDial
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { useAuth } from "@/context/AuthContext";
 import { getCustomer } from "@/api/customers";
 import { listQuotations, updateQuotationStatus, type QuotationApprovalErrorBody } from "@/api/quotations";
 import { listSalesOrders } from "@/api/sales-orders";
@@ -47,11 +46,6 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  // Production-start gate (GenerateJeoDialog): whether the acting user may
-  // authorize generating a JEO below the advance-payment minimum — same
-  // convention as SalesOrderDetails.tsx.
-  const isAdmin = !!user?.roles?.includes("Administrator");
   // Same "smart back" pattern as Quotation Details: when this page was
   // reached from a Lead (either the post-conversion redirect or the "View
   // Customer" button on Lead Details), Back returns to that lead instead of
@@ -428,7 +422,6 @@ export default function CustomerDetails() {
         onOpenChange={setGenerateJeoOpen}
         salesOrder={salesOrder ?? null}
         advanceReceived={activeAdvanceReceived}
-        isAdmin={isAdmin}
         onConfirm={handleGenerateJeoConfirm}
       />
     </div>

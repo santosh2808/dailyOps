@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isAxiosError } from "axios";
 import {
   Dialog,
   DialogContent,
@@ -10,12 +11,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { DISPATCH_OVERRIDE_APPROVERS, type ProformaInvoice } from "@/types";
+import type { ProformaInvoice } from "@/types";
 
 interface RecordAdvancePaymentDialogProps {
   open: boolean;
@@ -25,20 +24,16 @@ interface RecordAdvancePaymentDialogProps {
   // MINIMUM_ADVANCE_PERCENT% of this. Passed in from SalesOrderDetails.tsx,
   // which already has it in scope.
   salesOrderGrandTotal: number;
-  // Whether the acting user holds the Administrator role — only an Admin
-  // may record a below-minimum advance override (see
-  // ProformaInvoicesService.updateAdvance()). This only drives which UI is
-  // shown; the backend enforces it for real.
-  isAdmin: boolean;
-  onConfirm: (advanceReceived: number, overrideApprovedBy?: string, overrideNote?: string) => Promise<void>;
+  onConfirm: (advanceReceived: number) => Promise<void>;
 }
 
-// QA feature (SC-011): Record Advance Payment now enforces a minimum — 50%
-// of the linked Sales Order's grandTotal (MINIMUM_ADVANCE_PERCENT, same
-// threshold as the dispatch gate). Below that, only an Administrator can
-// save anyway, and only by recording that one of the two fixed named
-// approvers (Santosh Kumar Chegondi / Amarpal Gampa) authorized it — mirrors
-// ChangeSalesOrderStatusDialog.tsx's dispatch override UI exactly.
+// QA feature (SC-011): Record Advance Payment enforces a minimum — 50% of
+// the linked Sales Order's grandTotal (MINIMUM_ADVANCE_PERCENT, same
+// threshold as the dispatch gate). Override Approval workflow: below that
+// threshold there is no self-declare escape hatch anymore — the backend
+// raises a real OverrideApprovalRequest and emails Santosh Kumar Chegondi /
+// Amarpal Gampa a one-click approve/reject link (mirrors
+// ChangeSalesOrderStatusDialog.tsx exactly).
 const MINIMUM_ADVANCE_PERCENT = 50;
 
 function formatRupees(value: number) {
@@ -55,21 +50,21 @@ export default function RecordAdvancePaymentDialog({
   onOpenChange,
   invoice,
   salesOrderGrandTotal,
-  isAdmin,
   onConfirm,
 }: RecordAdvancePaymentDialogProps) {
   const [amount, setAmount] = useState("");
-  const [overrideApprovedBy, setOverrideApprovedBy] = useState("");
-  const [overrideNote, setOverrideNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // True when the backend's 409 response means "an approval request has
+  // been emailed" rather than an ordinary failure — styled as an
+  // informational notice instead of a red error.
+  const [approvalRequested, setApprovalRequested] = useState(false);
 
   useEffect(() => {
     if (open && invoice) {
       setAmount(String(invoice.advanceReceived ?? 0));
-      setOverrideApprovedBy("");
-      setOverrideNote("");
       setError("");
+      setApprovalRequested(false);
     }
   }, [open, invoice]);
 
@@ -77,26 +72,28 @@ export default function RecordAdvancePaymentDialog({
   const parsedAmount = Number(amount);
   const validAmount = amount.trim() !== "" && !Number.isNaN(parsedAmount) && parsedAmount >= 0;
   const belowThreshold = validAmount && parsedAmount < requiredAdvance;
-  const canSubmit = validAmount && (!belowThreshold || (isAdmin && !!overrideApprovedBy));
 
   async function handleConfirm() {
     setError("");
+    setApprovalRequested(false);
     if (!validAmount) {
       setError("Enter a valid, non-negative amount.");
       return;
     }
     setSubmitting(true);
     try {
-      await onConfirm(
-        parsedAmount,
-        belowThreshold ? overrideApprovedBy || undefined : undefined,
-        belowThreshold ? overrideNote.trim() || undefined : undefined,
-      );
+      await onConfirm(parsedAmount);
       onOpenChange(false);
     } catch (err) {
       const message = getErrorMessage(err, "Could not record the advance payment. Please try again.");
+      const isApprovalConflict = isAxiosError(err) && err.response?.status === 409;
       setError(message);
-      toast.error(message);
+      setApprovalRequested(isApprovalConflict);
+      if (isApprovalConflict) {
+        toast.info(message, "Approval requested");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -124,57 +121,32 @@ export default function RecordAdvancePaymentDialog({
             min="0"
             step="0.01"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setError("");
+              setApprovalRequested(false);
+            }}
           />
         </div>
 
-        {belowThreshold && !isAdmin && (
-          <div className="mt-3 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-            <p className="text-sm font-medium text-destructive">
-              This amount ({formatRupees(parsedAmount)}) is below the required {MINIMUM_ADVANCE_PERCENT}% of
-              the order total ({formatRupees(requiredAdvance)}).
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Only an Administrator can save a below-minimum advance, and only with authorization from
-              Santosh Kumar Chegondi or Amarpal Gampa.
-            </p>
-          </div>
-        )}
-
-        {belowThreshold && isAdmin && (
-          <div className="mt-3 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+        {belowThreshold && !approvalRequested && (
+          <div className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3">
             <p className="text-sm font-medium text-amber-900">
               This amount ({formatRupees(parsedAmount)}) is below the required {MINIMUM_ADVANCE_PERCENT}% of
               the order total ({formatRupees(requiredAdvance)}).
             </p>
-            <div className="space-y-2">
-              <Label htmlFor="advance-override-approved-by">Approved By (required)</Label>
-              <Select
-                id="advance-override-approved-by"
-                value={overrideApprovedBy}
-                onChange={(e) => setOverrideApprovedBy(e.target.value)}
-              >
-                <option value="">Select...</option>
-                {DISPATCH_OVERRIDE_APPROVERS.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="advance-override-note">Note (optional)</Label>
-              <Textarea
-                id="advance-override-note"
-                placeholder="e.g. Customer will pay the balance on delivery — accepted per Sales Manager approval."
-                value={overrideNote}
-                onChange={(e) => setOverrideNote(e.target.value)}
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Continuing will email Santosh Kumar Chegondi and Amarpal Gampa an approval link — the
+              advance is recorded automatically once one of them approves it.
+            </p>
           </div>
         )}
 
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        {approvalRequested ? (
+          <p className="mt-2 text-sm text-amber-900">{error}</p>
+        ) : (
+          error && <p className="mt-2 text-sm text-destructive">{error}</p>
+        )}
 
         <DialogFooter>
           <Button
@@ -183,12 +155,14 @@ export default function RecordAdvancePaymentDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            Cancel
+            {approvalRequested ? "Close" : "Cancel"}
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting || !canSubmit}>
-            {submitting && <Spinner className="mr-2 h-4 w-4" />}
-            {submitting ? "Saving..." : "Save"}
-          </Button>
+          {!approvalRequested && (
+            <Button type="button" onClick={handleConfirm} disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -81,14 +81,13 @@ export async function sendProformaInvoice(id: string, payload: SendProformaInvoi
   return res.data;
 }
 
-// QA feature (SC-011): required only when advanceReceived is below
-// MINIMUM_ADVANCE_PERCENT (50%) of the Sales Order's grandTotal — the
-// backend rejects a below-minimum advance without a recognized approver,
-// and requires the acting user to be an Administrator.
+// Override Approval workflow: the self-declare advanceOverrideApprovedBy /
+// advanceOverrideNote fields are gone — a below-MINIMUM_ADVANCE_PERCENT
+// (50%) advance is now blocked server-side (409) and emails
+// Santosh/Amarpal a real approval link instead of accepting a self-declared
+// approver. See RecordAdvancePaymentDialog.tsx.
 export interface UpdateProformaInvoiceAdvancePayload {
   advanceReceived: number;
-  advanceOverrideApprovedBy?: string;
-  advanceOverrideNote?: string;
 }
 
 // Record/update the actual advance amount received — the dispatch gate on

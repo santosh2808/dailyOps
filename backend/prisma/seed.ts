@@ -582,6 +582,50 @@ async function main() {
         '<p>{{reminderNote}}</p>' +
         '<p>If this date does not work for you, please contact us to reschedule.</p>',
     },
+    // Override Approval workflow — replaces the old self-declare "Approved
+    // By" dropdown on the Sales Order dispatch / Proforma Invoice advance /
+    // JEO production-start below-threshold gates. Sent by
+    // ApprovalRequestsService.notifyApprovers() to Santosh and/or Amarpal
+    // (whichever has an email configured via APPROVER_SANTOSH_EMAIL /
+    // APPROVER_AMAR_EMAIL) the moment a below-threshold action is blocked;
+    // {{link}} is the one-click public approval page, valid for
+    // APPROVAL_LINK_EXPIRY_DAYS days.
+    {
+      key: 'OVERRIDE_APPROVAL_REQUESTED',
+      name: 'Override Approval Requested',
+      subject: 'Approval needed: {{actionSummary}}',
+      bodyHtml:
+        '<p>Hi {{approverName}},</p>' +
+        '<p>The following action is below the normal threshold and needs your approval:</p>' +
+        '<p><b>{{actionSummary}}</b></p>' +
+        '<p><a href="{{approvalLink}}">Review and decide</a></p>' +
+        '<p>This link expires in {{expiryDays}} days. The action will not happen unless you approve it here.</p>',
+    },
+    // The three decision outcomes below are sent by
+    // ApprovalDecisionsService.notifyRequester() back to whoever originally
+    // triggered the blocked action (best-effort — only if we have their
+    // email), so they know the outcome without having to check back
+    // manually.
+    {
+      key: 'OVERRIDE_APPROVAL_APPROVED',
+      name: 'Override Approval — Approved',
+      subject: 'Approved: {{actionSummary}}',
+      bodyHtml: '<p>{{approverName}} approved your request:</p><p><b>{{actionSummary}}</b></p><p>It has been applied.</p>',
+    },
+    {
+      key: 'OVERRIDE_APPROVAL_REJECTED',
+      name: 'Override Approval — Rejected',
+      subject: 'Rejected: {{actionSummary}}',
+      bodyHtml: '<p>{{approverName}} rejected your request:</p><p><b>{{actionSummary}}</b></p><p>{{decisionNote}}</p>',
+    },
+    {
+      key: 'OVERRIDE_APPROVAL_FAILED',
+      name: 'Override Approval — Approved but Failed to Apply',
+      subject: 'Approved but failed: {{actionSummary}}',
+      bodyHtml:
+        '<p>{{approverName}} approved your request:</p><p><b>{{actionSummary}}</b></p>' +
+        '<p>However, applying it failed: {{resultError}}. Please contact IT/Santosh directly.</p>',
+    },
   ];
   for (const template of emailTemplateSeed) {
     await prisma.emailTemplate.upsert({

@@ -1085,6 +1085,11 @@ model SalesOrder {
   proformaInvoices   ProformaInvoice[]
   jobExecutionOrders JobExecutionOrder[]
 
+  // Additive: Override Approval workflow (see OverrideApprovalRequest) —
+  // every below-threshold dispatch/production-start request against this
+  // Sales Order, regardless of outcome.
+  overrideApprovalRequests OverrideApprovalRequest[]
+
   // Additive: automated GST Tax Invoice (see TaxInvoice below).
   taxInvoices TaxInvoice[]
 
@@ -1217,6 +1222,10 @@ model ProformaInvoice {
   // Additive: Sales Automation Email History (requirement #12 — Proforma
   // Invoice is emailed to the customer, CC Finance, on generation).
   emailHistory EmailHistory[]
+
+  // Additive: Override Approval workflow (see OverrideApprovalRequest) —
+  // every below-minimum advance request against this Proforma Invoice.
+  overrideApprovalRequests OverrideApprovalRequest[]
 
   @@index([status])
   @@index([salesOrderId])
@@ -1921,6 +1930,86 @@ model JobExecutionOrder {
   @@index([quotationId])
 }
 
+// Real, blocking email approval for the three below-threshold overrides
+// (SalesOrder.dispatchOverride*, ProformaInvoice.advanceOverride*,
+// JobExecutionOrder.productionOverride*) — replaces the old "pick a name
+// from a dropdown and submit" self-declaration (anyone with Administrator
+// access could previously claim Santosh Kumar Chegondi or Amarpal Gampa
+// approved something without either of them ever knowing). Now: the
+// blocked action is NOT performed; instead one row is created here, an
+// email goes to both named approvers with a secure link
+// (/approvals/{publicToken}), and only when one of them actually clicks
+// Approve does OverrideDecisionsService replay the original action — see
+// OverrideDecisionsService.approve(). Same publicToken/no-login pattern as
+// Quotation's customer-facing accept/reject link, since neither approver
+// has a DailyOps User account (see dispatch-override-approvers.ts).
+enum OverrideApprovalType {
+  SALES_ORDER_DISPATCH
+  PROFORMA_INVOICE_ADVANCE
+  JEO_PRODUCTION_START
+}
+
+enum OverrideApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  // Link/request is too old to act on (see tokenExpiresAt) — distinct from
+  // REJECTED, which is a deliberate approver decision.
+  EXPIRED
+  // Approved by Santosh/Amar, but replaying the original action then
+  // failed (e.g. the Sales Order was cancelled in the meantime) — see
+  // `resultError`. Distinct from REJECTED so "the approver said no" and
+  // "the approver said yes but it broke" are never conflated in reporting.
+  FAILED
+}
+
+model OverrideApprovalRequest {
+  id           String               @id @default(uuid())
+  type         OverrideApprovalType
+  salesOrderId String
+  salesOrder   SalesOrder           @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  // Only populated for PROFORMA_INVOICE_ADVANCE — the specific invoice the
+  // advance is being recorded against (a Sales Order's "active" Proforma
+  // Invoice at decision time could in principle differ from the one at
+  // request time, so this is captured explicitly rather than re-derived).
+  proformaInvoiceId String?
+  proformaInvoice   ProformaInvoice? @relation(fields: [proformaInvoiceId], references: [id], onDelete: Cascade)
+  // Whatever the blocked action needs to replay itself exactly once
+  // approved — e.g. `{ "status": "READY_FOR_DISPATCH" }` for a dispatch
+  // request, `{ "advanceReceived": 50000 }` for an advance request, or the
+  // JEO creation fields (priority/assignedTo/remarks/pipeLength/
+  // hangingStructureType/color) for a production-start request. Never
+  // contains approver identity — that only exists once actually decided,
+  // below.
+  actionPayload   Json
+  advanceReceived Float
+  requiredAdvance Float
+  requestedByName  String?
+  requestedByEmail String?
+  requestedAt      DateTime               @default(now())
+  status           OverrideApprovalStatus @default(PENDING)
+  publicToken      String                 @unique
+  tokenExpiresAt   DateTime
+  // Which of the two fixed named approvers actually clicked — re-validated
+  // against DISPATCH_OVERRIDE_APPROVERS at decision time regardless of who
+  // the email was addressed to, same defense-in-depth as everywhere else
+  // this allow-list is checked.
+  decidedApprover String?
+  decidedAt       DateTime?
+  // Rejection reason (when status=REJECTED) or an optional approval note
+  // (when status=APPROVED) — one free-text field covers both, mirroring
+  // how *OverrideNote already covers both cases on the target record.
+  decisionNote String?
+  // Set only when status=FAILED — the error the replayed action threw.
+  resultError String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([salesOrderId])
+  @@index([proformaInvoiceId])
+  @@index([status])
+}
+
 // Always created together with its JobExecutionOrder (one row each, all
 // flags false) — never created standalone. Each boolean is an independently
 // toggleable production step; `completedAt` is set once the JEO's status is
@@ -2145,6 +2234,11 @@ model EmailHistory {
   lead                Lead?              @relation(fields: [leadId], references: [id], onDelete: Cascade)
   complaintId         String?
   complaint           Complaint?         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  // Additive: Override Approval workflow — the "Approval Requested" email
+  // to Santosh/Amar and the "Approved"/"Rejected" email back to the
+  // requester (see OverrideDecisionsService / OverrideApprovalsService).
+  approvalRequestId  String?
+  approvalRequest    OverrideApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
   templateKey         String?
   subject             String
   recipientEmail      String

@@ -15,6 +15,12 @@ export interface MailerLink {
   // PublicFormsService, threaded through to EmailHistory.leadId/complaintId.
   leadId?: string;
   complaintId?: string;
+  // Additive: Override Approval workflow (real blocking email approval for
+  // the SalesOrder dispatch / ProformaInvoice advance / JEO production-start
+  // override gates) — threads the "Approval Requested"/"Approved"/"Rejected"
+  // emails through to EmailHistory.approvalRequestId, same as every other
+  // module's own id field above.
+  approvalRequestId?: string;
 }
 
 export interface MailerSendOptions {
@@ -144,6 +150,7 @@ export class MailerService {
         taxInvoiceId: options.link.taxInvoiceId,
         leadId: options.link.leadId,
         complaintId: options.link.complaintId,
+        approvalRequestId: options.link.approvalRequestId,
         templateKey: options.templateKey,
         subject,
         recipientEmail: to || '(none)',

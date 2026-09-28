@@ -64,17 +64,12 @@ export async function updateSalesOrder(id: string, payload: Partial<Omit<SalesOr
   return res.data;
 }
 
-export async function updateSalesOrderStatus(
-  id: string,
-  status: SalesOrderStatus,
-  dispatchOverrideNote?: string,
-  dispatchOverrideApprovedBy?: string,
-) {
-  const res = await api.patch<SalesOrder>(`/api/v1/sales-orders/${id}/status`, {
-    status,
-    dispatchOverrideNote,
-    dispatchOverrideApprovedBy,
-  });
+// Override Approval workflow: the self-declare dispatchOverrideNote /
+// dispatchOverrideApprovedBy fields are gone — a below-threshold status
+// change is now blocked server-side (409) and emails Santosh/Amarpal a real
+// approval link instead. See ChangeSalesOrderStatusDialog.tsx.
+export async function updateSalesOrderStatus(id: string, status: SalesOrderStatus) {
+  const res = await api.patch<SalesOrder>(`/api/v1/sales-orders/${id}/status`, { status });
   return res.data;
 }
 

@@ -64,7 +64,7 @@ export class ProformaInvoicesController {
   @Patch(':id/advance')
   @RequirePermission('ProformaInvoice', 'Edit')
   updateAdvance(@Param('id') id: string, @Body() dto: UpdateProformaInvoiceAdvanceDto, @Req() req: any) {
-    const actor: ProformaInvoiceActor = { name: req.user?.name, roles: req.user?.roles ?? [] };
+    const actor: ProformaInvoiceActor = { name: req.user?.name, roles: req.user?.roles ?? [], email: req.user?.email };
     return this.proformaInvoicesService.updateAdvance(id, dto, actor);
   }
 

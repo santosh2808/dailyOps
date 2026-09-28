@@ -27,3 +27,29 @@ export type DispatchOverrideApprover = (typeof DISPATCH_OVERRIDE_APPROVERS)[numb
 // no advance yet. One shared constant so the two gates can never drift
 // apart from each other.
 export const MINIMUM_ADVANCE_PERCENT = 50;
+
+// Override Approval workflow (replaces the old self-declare dropdown —
+// see OverrideApprovalRequest's schema comment): the email address to send
+// an approval-request link to for each named approver above. Env-driven
+// (not hardcoded) since an email address is contact info, not a fixed
+// business constant like the name itself. Deliberately does NOT throw if
+// unset — OverrideApprovalsService.notifyApprovers() skips (and logs) any
+// approver with no email on file rather than failing the whole request,
+// same "never let a missing config value break a business action"
+// convention as MailerService itself.
+const APPROVER_EMAILS: Record<DispatchOverrideApprover, string | undefined> = {
+  'Santosh Kumar Chegondi': process.env.APPROVER_SANTOSH_EMAIL?.trim() || undefined,
+  'Amarpal Gampa': process.env.APPROVER_AMAR_EMAIL?.trim() || undefined,
+};
+
+export function approverEmail(name: DispatchOverrideApprover): string | undefined {
+  return APPROVER_EMAILS[name];
+}
+
+// Every approver with an email on file — used to send the same "Approval
+// Requested" email to both named approvers at once (either may decide it).
+export function allApproverEmails(): { name: DispatchOverrideApprover; email: string }[] {
+  return DISPATCH_OVERRIDE_APPROVERS.map((name) => ({ name, email: approverEmail(name) })).filter(
+    (entry): entry is { name: DispatchOverrideApprover; email: string } => Boolean(entry.email),
+  );
+}

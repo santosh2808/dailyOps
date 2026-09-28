@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,7 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
-import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
+import { MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
+import { ApprovalRequestsService } from '../approval-requests/approval-requests.service';
 
 // Passed by the controller from the JWT payload (req.user) — never trusted
 // from the request body. `roles` drives the below-minimum-advance
@@ -23,6 +23,9 @@ import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from '../sales-o
 export interface JeoActor {
   name?: string;
   roles?: string[];
+  // Additive: Override Approval workflow — see SalesOrderActor.email's
+  // comment. Same purpose here.
+  email?: string;
 }
 
 // QA bug-fix pass (TC-080): the linear production sequence a JEO moves
@@ -174,6 +177,7 @@ export class JobExecutionOrdersService {
     private auditLogService: AuditLogService,
     private salesOrdersService: SalesOrdersService,
     private whatsAppService: WhatsAppService,
+    private approvalRequestsService: ApprovalRequestsService,
   ) {}
 
   // Sales Orders that haven't reached the dispatch stage yet — the only
@@ -303,34 +307,65 @@ export class JobExecutionOrdersService {
     // impossible to ever satisfy.
     const requiredAdvance = salesOrder.grandTotal > 0 ? (salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
 
-    let productionOverrideNote: string | null = null;
-    let productionOverrideBy: string | null = null;
-    let productionOverrideApprovedBy: string | null = null;
-    let productionOverrideAt: Date | null = null;
-
     if (advanceReceived < requiredAdvance) {
-      const approvedBy = dto.productionOverrideApprovedBy?.trim();
-      if (!approvedBy) {
-        throw new BadRequestException(
-          `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — production cannot be started. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a production override.`,
-        );
-      }
-      if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
-        throw new BadRequestException(
-          `"${approvedBy}" is not a recognized production-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize starting production below the ${MINIMUM_ADVANCE_PERCENT}% advance threshold.`,
-        );
-      }
-      if (!(actor.roles ?? []).includes('Administrator')) {
-        throw new ForbiddenException(
-          'Only an Administrator can start production with advance payment below the required threshold.',
-        );
-      }
-      productionOverrideNote = dto.productionOverrideNote?.trim() || null;
-      productionOverrideApprovedBy = approvedBy;
-      productionOverrideBy = actorName ?? null;
-      productionOverrideAt = new Date();
+      // Override Approval workflow: below the 50% threshold, starting
+      // production no longer proceeds on a self-declared "Approved By"
+      // name — it raises (or reuses) a real OverrideApprovalRequest and
+      // emails Santosh Kumar Chegondi / Amarpal Gampa a one-click
+      // approve/reject link. Generation stays blocked (this throws) until
+      // one of them actually approves it, at which point
+      // ApprovalDecisionsService calls applyApprovedProduction() to
+      // generate the JEO exactly as it would have been generated here.
+      await this.approvalRequestsService.createRequest({
+        type: 'JEO_PRODUCTION_START',
+        salesOrderId: salesOrder.id,
+        actionPayload: {
+          priority: dto.priority,
+          assignedTo: dto.assignedTo,
+          remarks: dto.remarks,
+          pipeLength: dto.pipeLength,
+          hangingStructureType: dto.hangingStructureType,
+          color: dto.color,
+        },
+        advanceReceived,
+        requiredAdvance,
+        requestedByName: actorName,
+        requestedByEmail: actor.email,
+        actionSummary: `Start production (generate JEO) for Sales Order ${salesOrder.salesOrderNumber}`,
+      });
+      throw new ConflictException(
+        `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}). An approval request has been emailed to Santosh Kumar Chegondi and Amarpal Gampa — production will start automatically once one of them approves it, or record more advance payment on the Proforma Invoice.`,
+      );
     }
 
+    return this.performJeoCreate(salesOrder, dto, actorName, null);
+  }
+
+  // Shared write path for actually generating the JEO row — used both by
+  // create() above (gate already satisfied) and by
+  // applyApprovedProduction() below (a real Santosh/Amarpal approval has
+  // now been recorded for a below-threshold start). Mirrors
+  // SalesOrdersService.performStatusChange()'s split for the same reason.
+  private async performJeoCreate(
+    salesOrder: {
+      id: string;
+      customerId: string;
+      quotationId: string;
+      deliveryDate: Date | null;
+      customer: { state: string | null };
+      salesOrderNumber: string;
+    },
+    dto: {
+      priority?: CreateJeoDto['priority'];
+      assignedTo?: string;
+      remarks?: string;
+      pipeLength?: string;
+      hangingStructureType?: CreateJeoDto['hangingStructureType'];
+      color?: string;
+    },
+    actorName: string | undefined,
+    override: { approvedBy: string; by: string | null; note: string | null; at: Date } | null,
+  ) {
     // Customer, Quotation reference, Sales Order reference, and Delivery
     // Date are all copied straight from the Sales Order — never re-entered
     // by hand. Products are not duplicated either; they're read live via
@@ -358,10 +393,10 @@ export class JobExecutionOrdersService {
             pipeLength: dto.pipeLength?.trim() || undefined,
             hangingStructureType: dto.hangingStructureType,
             color: dto.color?.trim() || undefined,
-            productionOverrideNote,
-            productionOverrideBy,
-            productionOverrideApprovedBy,
-            productionOverrideAt,
+            productionOverrideNote: override?.note ?? null,
+            productionOverrideBy: override?.by ?? null,
+            productionOverrideApprovedBy: override?.approvedBy ?? null,
+            productionOverrideAt: override?.at ?? null,
             // Created together with its JEO, all steps unchecked — never
             // created standalone (see schema.prisma comment).
             checklist: { create: {} },
@@ -389,6 +424,63 @@ export class JobExecutionOrdersService {
 
     // Unreachable, but keeps TypeScript satisfied about the return type.
     throw new Error('Failed to generate a unique JEO number');
+  }
+
+  // Called by ApprovalDecisionsService once a JEO_PRODUCTION_START
+  // OverrideApprovalRequest has actually been approved by Santosh or
+  // Amarpal via the emailed public link — generates the JEO exactly as
+  // create() would have, using the fields frozen on the request at the
+  // time it was raised.
+  async applyApprovedProduction(request: {
+    salesOrderId: string;
+    actionPayload: unknown;
+    decidedApprover: string | null;
+    requestedByName: string | null;
+    decisionNote: string | null;
+    decidedAt: Date | null;
+  }) {
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: request.salesOrderId },
+      include: { customer: true },
+    });
+    if (!salesOrder) {
+      throw new NotFoundException('Sales order not found');
+    }
+    if (salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled Sales Order cannot have a Job Execution Order generated for it.');
+    }
+    const existingActive = await this.prisma.jobExecutionOrder.findFirst({
+      where: { salesOrderId: request.salesOrderId, status: { not: 'COMPLETED' } },
+    });
+    if (existingActive) {
+      throw new ConflictException('An active Job Execution Order already exists for this Sales Order.');
+    }
+    const payload = (request.actionPayload ?? {}) as {
+      priority?: CreateJeoDto['priority'];
+      assignedTo?: string;
+      remarks?: string;
+      pipeLength?: string;
+      hangingStructureType?: CreateJeoDto['hangingStructureType'];
+      color?: string;
+    };
+    return this.performJeoCreate(
+      salesOrder,
+      {
+        priority: payload.priority ?? 'MEDIUM',
+        assignedTo: payload.assignedTo,
+        remarks: payload.remarks,
+        pipeLength: payload.pipeLength,
+        hangingStructureType: payload.hangingStructureType,
+        color: payload.color,
+      },
+      request.requestedByName ?? undefined,
+      {
+        approvedBy: request.decidedApprover ?? '',
+        by: request.requestedByName ?? null,
+        note: request.decisionNote,
+        at: request.decidedAt ?? new Date(),
+      },
+    );
   }
 
   // Automatic-cascade entry point (Sales Order -> automatically generate

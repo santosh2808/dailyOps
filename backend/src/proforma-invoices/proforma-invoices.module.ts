@@ -3,12 +3,13 @@ import { MailerModule } from '../mailer/mailer.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { ApprovalRequestsModule } from '../approval-requests/approval-requests.module';
 import { ProformaInvoicesController } from './proforma-invoices.controller';
 import { PublicProformaInvoicesController } from './public-proforma-invoices.controller';
 import { ProformaInvoicesService } from './proforma-invoices.service';
 
 @Module({
-  imports: [MailerModule, PdfModule, AuditLogModule, WhatsAppModule],
+  imports: [MailerModule, PdfModule, AuditLogModule, WhatsAppModule, ApprovalRequestsModule],
   // PublicProformaInvoicesController: WhatsApp Share's unauthenticated
   // /api/v1/public/proforma-invoices/:token/pdf route. Shares this module's
   // ProformaInvoicesService instance — same pattern as

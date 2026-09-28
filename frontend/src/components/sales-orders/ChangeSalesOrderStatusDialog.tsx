@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isAxiosError } from "axios";
 import {
   Dialog,
   DialogContent,
@@ -10,37 +11,31 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/errors";
 import { STATUS_OPTIONS } from "./salesOrderOptions";
-import { DISPATCH_OVERRIDE_APPROVERS, type SalesOrder, type SalesOrderStatus } from "@/types";
+import type { SalesOrder, SalesOrderStatus } from "@/types";
 
 interface ChangeSalesOrderStatusDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   salesOrder: SalesOrder | null;
   // Current advance received on the active Proforma Invoice (0 if none) —
-  // passed in from SalesOrderDetails.tsx so the 50% threshold can be
-  // checked proactively instead of only reacting to a backend rejection.
+  // passed in from SalesOrderDetails.tsx so the 50% threshold can be shown
+  // proactively instead of only reacting to a backend rejection.
   advanceReceived: number;
-  // Whether the acting user holds the Administrator role — only an Admin
-  // may record a dispatch override (see SalesOrdersService.updateStatus()).
-  // This only drives which UI is shown; the backend enforces it for real.
-  isAdmin: boolean;
-  onConfirm: (
-    status: SalesOrderStatus,
-    dispatchOverrideNote?: string,
-    dispatchOverrideApprovedBy?: string,
-  ) => Promise<void>;
+  onConfirm: (status: SalesOrderStatus) => Promise<void>;
 }
 
 // Dispatch gate: moving to READY_FOR_DISPATCH or DISPATCHED is blocked
 // server-side unless at least 50% of the order total has been received as
-// advance against the linked Proforma Invoice (see
-// SalesOrdersService.updateStatus()). Below that, only an Administrator can
-// dispatch anyway, and only by recording that one of the two fixed named
-// approvers (Santosh Kumar Chegondi / Amarpal Gampa) authorized it.
+// advance against the linked Proforma Invoice
+// (SalesOrdersService.updateStatus()). Override Approval workflow: below
+// that threshold there is no self-declare escape hatch anymore — the
+// backend raises a real OverrideApprovalRequest and emails Santosh Kumar
+// Chegondi / Amarpal Gampa a one-click approve/reject link; the status
+// change applies automatically once one of them approves it.
 const DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ["READY_FOR_DISPATCH", "DISPATCHED"];
 const DISPATCH_ADVANCE_THRESHOLD_PERCENT = 50;
 
@@ -53,23 +48,21 @@ export default function ChangeSalesOrderStatusDialog({
   onOpenChange,
   salesOrder,
   advanceReceived,
-  isAdmin,
   onConfirm,
 }: ChangeSalesOrderStatusDialogProps) {
   const [status, setStatus] = useState<SalesOrderStatus>("DRAFT");
-  const [overrideNote, setOverrideNote] = useState("");
-  const [overrideApprovedBy, setOverrideApprovedBy] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [blocked, setBlocked] = useState(false);
+  // True when the backend's 409 response means "an approval request has
+  // been emailed" rather than an ordinary failure — styled as an
+  // informational notice instead of a red error.
+  const [approvalRequested, setApprovalRequested] = useState(false);
 
   useEffect(() => {
     if (open && salesOrder) {
       setStatus(salesOrder.status);
-      setOverrideNote("");
-      setOverrideApprovedBy("");
       setError("");
-      setBlocked(false);
+      setApprovalRequested(false);
     }
   }, [open, salesOrder]);
 
@@ -77,26 +70,27 @@ export default function ChangeSalesOrderStatusDialog({
   const grandTotal = salesOrder?.grandTotal ?? 0;
   const requiredAdvance = grandTotal > 0 ? (grandTotal * DISPATCH_ADVANCE_THRESHOLD_PERCENT) / 100 : 0;
   const belowThreshold = showDispatchGate && advanceReceived < requiredAdvance;
-  const canSubmit = !belowThreshold || (isAdmin && !!overrideApprovedBy);
 
   async function handleConfirm() {
     setSubmitting(true);
     setError("");
+    setApprovalRequested(false);
     try {
-      await onConfirm(
-        status,
-        overrideNote.trim() || undefined,
-        belowThreshold ? overrideApprovedBy || undefined : undefined,
-      );
+      await onConfirm(status);
       onOpenChange(false);
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.message || "Could not update the sales order status. Please try again.";
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not update the sales order status. Please try again.");
+      // A 409 here means the gate blocked the change and raised (or reused)
+      // a real approval request — not a plain failure, so it gets its own
+      // amber notice instead of toast.error's red styling.
+      const isApprovalConflict = isAxiosError(err) && err.response?.status === 409;
       setError(message);
-      // The advance-payment block is the one error worth reacting to in the
-      // UI (highlight the override fields); anything else is just shown.
-      setBlocked(showDispatchGate);
-      toast.error(message);
+      setApprovalRequested(isApprovalConflict);
+      if (isApprovalConflict) {
+        toast.info(message, "Approval requested");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -122,8 +116,8 @@ export default function ChangeSalesOrderStatusDialog({
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as SalesOrderStatus);
-              setBlocked(false);
               setError("");
+              setApprovalRequested(false);
             }}
           >
             {STATUS_OPTIONS.map((s) => (
@@ -134,60 +128,24 @@ export default function ChangeSalesOrderStatusDialog({
           </Select>
         </div>
 
-        {belowThreshold && !isAdmin && (
-          <div className="mt-3 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-            <p className="text-sm font-medium text-destructive">
-              Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
-              {DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Only an Administrator can dispatch this order below the threshold, and only with
-              authorization from Santosh Kumar Chegondi or Amarpal Gampa.
-            </p>
-          </div>
-        )}
-
-        {belowThreshold && isAdmin && (
-          <div className="mt-3 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+        {belowThreshold && !approvalRequested && (
+          <div className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3">
             <p className="text-sm font-medium text-amber-900">
               Advance received ({formatRupees(advanceReceived)}) is below the required{" "}
               {DISPATCH_ADVANCE_THRESHOLD_PERCENT}% of the order total ({formatRupees(requiredAdvance)}).
             </p>
-            <div className="space-y-2">
-              <Label htmlFor="dispatch-override-approved-by">Approved By (required)</Label>
-              <Select
-                id="dispatch-override-approved-by"
-                value={overrideApprovedBy}
-                onChange={(e) => setOverrideApprovedBy(e.target.value)}
-              >
-                <option value="">Select...</option>
-                {DISPATCH_OVERRIDE_APPROVERS.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dispatch-override-note">Note (optional)</Label>
-              <Textarea
-                id="dispatch-override-note"
-                placeholder="e.g. Customer confirmed payment on delivery — dispatching per approval."
-                value={overrideNote}
-                onChange={(e) => setOverrideNote(e.target.value)}
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Continuing will email Santosh Kumar Chegondi and Amarpal Gampa an approval link — the
+              status change applies automatically once one of them approves it.
+            </p>
           </div>
         )}
 
-        {blocked && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Leave the note blank if the advance has already been recorded — it's only needed alongside
-            an approver when overriding the block.
-          </p>
+        {approvalRequested ? (
+          <p className="mt-2 text-sm text-amber-900">{error}</p>
+        ) : (
+          error && <p className="mt-2 text-sm text-destructive">{error}</p>
         )}
-
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button
@@ -196,12 +154,14 @@ export default function ChangeSalesOrderStatusDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            Cancel
+            {approvalRequested ? "Close" : "Cancel"}
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting || !canSubmit}>
-            {submitting && <Spinner className="mr-2 h-4 w-4" />}
-            {submitting ? "Updating..." : "Update Status"}
-          </Button>
+          {!approvalRequested && (
+            <Button type="button" onClick={handleConfirm} disabled={submitting}>
+              {submitting && <Spinner className="mr-2 h-4 w-4" />}
+              {submitting ? "Updating..." : "Update Status"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,7 +14,8 @@ import { ProformaInvoicePdfService } from '../pdf/proforma-invoice-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
-import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
+import { MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
+import { ApprovalRequestsService } from '../approval-requests/approval-requests.service';
 import { CreateProformaInvoiceDto } from './dto/create-proforma-invoice.dto';
 import { UpdateProformaInvoiceDto } from './dto/update-proforma-invoice.dto';
 import { UpdateProformaInvoiceStatusDto } from './dto/update-proforma-invoice-status.dto';
@@ -35,6 +35,9 @@ const MAX_INVOICE_NUMBER_ATTEMPTS = 5;
 export interface ProformaInvoiceActor {
   name?: string;
   roles?: string[];
+  // Additive: Override Approval workflow — see SalesOrderActor.email's
+  // comment. Same purpose here.
+  email?: string;
 }
 
 // Whitelisted so `sortBy` from the query string can never be used to sort by
@@ -78,6 +81,7 @@ export class ProformaInvoicesService {
     private proformaInvoicePdfService: ProformaInvoicePdfService,
     private auditLogService: AuditLogService,
     private whatsAppService: WhatsAppService,
+    private approvalRequestsService: ApprovalRequestsService,
   ) {}
 
   async findAll(query: QueryProformaInvoiceDto) {
@@ -361,46 +365,54 @@ export class ProformaInvoicesService {
     const requiredAdvance =
       existing.salesOrder.grandTotal > 0 ? (existing.salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
 
-    let advanceOverrideNote: string | null = null;
-    let advanceOverrideBy: string | null = null;
-    let advanceOverrideApprovedBy: string | null = null;
-    let advanceOverrideAt: Date | null = null;
-
     if (dto.advanceReceived < requiredAdvance) {
-      const approvedBy = dto.advanceOverrideApprovedBy?.trim();
-      if (!approvedBy) {
-        throw new BadRequestException(
-          `Advance amount (₹${dto.advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be saved. Record at least this amount, or have Santosh Kumar Chegondi or Amarpal Gampa authorize an exception.`,
-        );
-      }
-      if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
-        throw new BadRequestException(
-          `"${approvedBy}" is not a recognized approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize an advance below the ${MINIMUM_ADVANCE_PERCENT}% minimum.`,
-        );
-      }
-      if (!(actor.roles ?? []).includes('Administrator')) {
-        throw new ForbiddenException(
-          'Only an Administrator can record an advance payment below the required minimum.',
-        );
-      }
-      advanceOverrideNote = dto.advanceOverrideNote?.trim() || null;
-      advanceOverrideApprovedBy = approvedBy;
-      advanceOverrideBy = actorName ?? null;
-      advanceOverrideAt = new Date();
+      // Override Approval workflow: below the 50% minimum, recording the
+      // advance no longer proceeds on a self-declared "Approved By" name —
+      // it raises (or reuses) a real OverrideApprovalRequest and emails
+      // Santosh Kumar Chegondi / Amarpal Gampa a one-click approve/reject
+      // link. The figure stays unsaved — this throws immediately below —
+      // until one of them actually approves it, at which point
+      // ApprovalDecisionsService calls applyApprovedAdvance() to write it.
+      await this.approvalRequestsService.createRequest({
+        type: 'PROFORMA_INVOICE_ADVANCE',
+        salesOrderId: existing.salesOrderId,
+        proformaInvoiceId: id,
+        actionPayload: { advanceReceived: dto.advanceReceived },
+        advanceReceived: dto.advanceReceived,
+        requiredAdvance,
+        requestedByName: actorName,
+        requestedByEmail: actor.email,
+        actionSummary: `Record ₹${dto.advanceReceived.toLocaleString('en-IN')} advance on Proforma Invoice ${existing.invoiceNumber}`,
+      });
+      throw new ConflictException(
+        `Advance amount (₹${dto.advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}). An approval request has been emailed to Santosh Kumar Chegondi and Amarpal Gampa — this amount will be recorded automatically once one of them approves it, or record at least the required amount instead.`,
+      );
     }
-    // advanceReceived >= requiredAdvance: proceed normally, and clear out
-    // any earlier override fields — they no longer reflect the current
-    // situation (same convention as SalesOrdersService.updateStatus()'s
-    // dispatch-override fields).
+    // advanceReceived >= requiredAdvance: proceed normally.
 
+    return this.performAdvanceUpdate(id, existing, dto.advanceReceived, actorName, null);
+  }
+
+  // Shared write path for the advance figure itself — used both by
+  // updateAdvance() above (gate already satisfied) and by
+  // applyApprovedAdvance() below (a real Santosh/Amarpal approval has now
+  // been recorded for a below-minimum figure). Mirrors
+  // SalesOrdersService.performStatusChange()'s split for the same reason.
+  private async performAdvanceUpdate(
+    id: string,
+    existing: { advanceReceived: number },
+    advanceReceived: number,
+    actorName: string | undefined,
+    override: { approvedBy: string; by: string | null; note: string | null; at: Date } | null,
+  ) {
     const updated = await this.prisma.proformaInvoice.update({
       where: { id },
       data: {
-        advanceReceived: dto.advanceReceived,
-        advanceOverrideNote,
-        advanceOverrideBy,
-        advanceOverrideApprovedBy,
-        advanceOverrideAt,
+        advanceReceived,
+        advanceOverrideNote: override?.note ?? null,
+        advanceOverrideBy: override?.by ?? null,
+        advanceOverrideApprovedBy: override?.approvedBy ?? null,
+        advanceOverrideAt: override?.at ?? null,
       },
       include: PROFORMA_INVOICE_DETAIL_INCLUDE,
     });
@@ -411,10 +423,42 @@ export class ProformaInvoicesService {
         action: 'Advance Received Updated',
         actorName,
         oldValue: { advanceReceived: existing.advanceReceived },
-        newValue: { advanceReceived: updated.advanceReceived, advanceOverrideApprovedBy },
+        newValue: { advanceReceived: updated.advanceReceived, advanceOverrideApprovedBy: override?.approvedBy ?? null },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
     return updated;
+  }
+
+  // Called by ApprovalDecisionsService once a PROFORMA_INVOICE_ADVANCE
+  // OverrideApprovalRequest has actually been approved by Santosh or
+  // Amarpal via the emailed public link.
+  async applyApprovedAdvance(request: {
+    proformaInvoiceId: string | null;
+    actionPayload: unknown;
+    decidedApprover: string | null;
+    requestedByName: string | null;
+    decisionNote: string | null;
+    decidedAt: Date | null;
+  }) {
+    if (!request.proformaInvoiceId) {
+      throw new BadRequestException('Approval request is missing its Proforma Invoice.');
+    }
+    const advanceReceived = (request.actionPayload as { advanceReceived?: number } | null)?.advanceReceived;
+    if (typeof advanceReceived !== 'number') {
+      throw new BadRequestException('Approval request is missing its advance amount.');
+    }
+    const existing = await this.findOne(request.proformaInvoiceId);
+    if (existing.salesOrder.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'The linked Sales Order is cancelled — advance payment can no longer be recorded against it.',
+      );
+    }
+    return this.performAdvanceUpdate(request.proformaInvoiceId, existing, advanceReceived, request.requestedByName ?? undefined, {
+      approvedBy: request.decidedApprover ?? '',
+      by: request.requestedByName ?? null,
+      note: request.decisionNote,
+      at: request.decidedAt ?? new Date(),
+    });
   }
 
   // QA bug fix (SC-006): subtotal/discount/tax/grandTotal are copied onto

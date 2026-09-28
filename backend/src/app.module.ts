@@ -33,6 +33,8 @@ import { PublicFormsModule } from './public-forms/public-forms.module';
 import { AiSettingsModule } from './ai-settings/ai-settings.module';
 import { TelephonyModule } from './telephony/telephony.module';
 import { PlacesModule } from './places/places.module';
+import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
+import { ApprovalDecisionsModule } from './approval-requests/approval-decisions.module';
 
 @Module({
   imports: [
@@ -84,6 +86,12 @@ import { PlacesModule } from './places/places.module';
     // Order). GOOGLE_PLACES_API_KEY unset by default — see
     // places/places.service.ts's "Future Ready" convention.
     PlacesModule,
+    // Override Approval workflow — real, blocking email approval for the
+    // SalesOrder dispatch / ProformaInvoice advance / JEO production-start
+    // below-threshold overrides, replacing the old self-declare "Approved
+    // By" dropdown. See approval-requests/approval-requests.service.ts.
+    ApprovalRequestsModule,
+    ApprovalDecisionsModule,
   ],
 })
 export class AppModule {}

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,8 +19,9 @@ import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
 import { SendSalesOrderDto } from './dto/send-sales-order.dto';
 import { QuerySalesOrderDto } from './dto/query-sales-order.dto';
 import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
-import { DISPATCH_OVERRIDE_APPROVERS, MINIMUM_ADVANCE_PERCENT } from './dispatch-override-approvers';
+import { MINIMUM_ADVANCE_PERCENT } from './dispatch-override-approvers';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
+import { ApprovalRequestsService } from '../approval-requests/approval-requests.service';
 
 // QA bug-fix pass (TC-080): the linear production sequence a Sales Order
 // moves through. CANCELLED is a side-terminal reachable from any of these
@@ -58,6 +58,12 @@ const MAX_PO_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 export interface SalesOrderActor {
   name?: string;
   roles?: string[];
+  // Additive: Override Approval workflow — captured from the JWT payload
+  // (req.user.email) purely to record who requested a below-threshold
+  // dispatch override (OverrideApprovalRequest.requestedByEmail), so a
+  // future "who asked for this" audit doesn't have to guess from the
+  // display name alone. Not used for anything else.
+  email?: string;
 }
 
 // See dispatch-override-approvers.ts for DISPATCH_OVERRIDE_APPROVERS
@@ -140,6 +146,7 @@ export class SalesOrdersService {
     private prisma: PrismaService,
     private mailerService: MailerService,
     private auditLogService: AuditLogService,
+    private approvalRequestsService: ApprovalRequestsService,
   ) {}
 
   async findAll(query: QuerySalesOrderDto) {
@@ -550,15 +557,12 @@ export class SalesOrdersService {
   // Dispatch gate (advance-payment check): a Sales Order cannot move to
   // READY_FOR_DISPATCH or DISPATCHED unless at least 50% of the order's
   // grandTotal has been received as advance (via its Proforma Invoice's
-  // advanceReceived — see ProformaInvoicesService.updateAdvance()).
-  // Below that threshold, dispatch can still proceed, but only if BOTH:
-  //   (a) the caller selects one of the two fixed DISPATCH_OVERRIDE_APPROVERS
-  //       (Santosh Kumar Chegondi / Amarpal Gampa — either one is enough),
-  //       recorded in dispatchOverrideApprovedBy; and
-  //   (b) the acting user holds the Administrator role — the same
-  //       `actor.roles.includes('Administrator')` idiom used by
-  //       QuotationsService's approval-decision gate. A non-admin can never
-  //       self-override, even if they happen to know one of the two names.
+  // advanceReceived — see ProformaInvoicesService.updateAdvance()). Below
+  // that threshold, dispatch no longer proceeds on a self-declared
+  // "Approved By" name — it raises a real OverrideApprovalRequest and stays
+  // blocked (this throws) until Santosh Kumar Chegondi or Amarpal Gampa
+  // actually approves it via the emailed public link (see
+  // applyApprovedDispatch() below and ApprovalDecisionsService.decide()).
   private readonly DISPATCH_GATE_STATUSES: SalesOrderStatus[] = ['READY_FOR_DISPATCH', 'DISPATCHED'];
   // QA feature (SC-011): this used to be its own private constant here —
   // now shared with ProformaInvoicesService.updateAdvance()'s below-minimum
@@ -582,57 +586,62 @@ export class SalesOrdersService {
       entityLabel: 'Sales Order',
     });
 
-    let dispatchOverrideNote: string | null = null;
-    let dispatchOverrideBy: string | null = null;
-    let dispatchOverrideApprovedBy: string | null = null;
-    let dispatchOverrideAt: Date | null = null;
-
     if (this.DISPATCH_GATE_STATUSES.includes(dto.status)) {
-      const activeInvoice = await this.prisma.proformaInvoice.findFirst({
-        where: { salesOrderId: id, status: { not: 'CANCELLED' } },
-        orderBy: { createdAt: 'desc' },
-        select: { advanceReceived: true },
-      });
-      const advanceReceived = activeInvoice?.advanceReceived ?? 0;
-      // grandTotal <= 0 is a degenerate order with nothing to collect
-      // against — treat the threshold as already met rather than making it
-      // impossible to ever satisfy.
-      const requiredAdvance =
-        existing.grandTotal > 0 ? (existing.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
+      const { advanceReceived, requiredAdvance } = await this.computeAdvanceGate(id, existing.grandTotal);
 
       if (advanceReceived < requiredAdvance) {
-        const approvedBy = dto.dispatchOverrideApprovedBy?.trim();
-        if (!approvedBy) {
-          throw new BadRequestException(
-            `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}) — it cannot be marked Ready for Dispatch / Dispatched. Record more advance payment on the Proforma Invoice, or have Santosh Kumar Chegondi or Amarpal Gampa authorize a dispatch override.`,
-          );
-        }
-        if (!(DISPATCH_OVERRIDE_APPROVERS as readonly string[]).includes(approvedBy)) {
-          throw new BadRequestException(
-            `"${approvedBy}" is not a recognized dispatch-override approver. Only Santosh Kumar Chegondi or Amarpal Gampa can authorize dispatching below the ${MINIMUM_ADVANCE_PERCENT}% advance threshold.`,
-          );
-        }
-        if (!(actor.roles ?? []).includes('Administrator')) {
-          throw new ForbiddenException(
-            'Only an Administrator can record a dispatch override for advance payment below the required threshold.',
-          );
-        }
-        dispatchOverrideNote = dto.dispatchOverrideNote?.trim() || null;
-        dispatchOverrideApprovedBy = approvedBy;
-        dispatchOverrideBy = actorName ?? null;
-        dispatchOverrideAt = new Date();
+        // Override Approval workflow: below the 50% threshold, dispatching
+        // no longer proceeds on a self-declared "Approved By" name — it
+        // creates (or reuses) a real OverrideApprovalRequest and emails
+        // Santosh Kumar Chegondi / Amarpal Gampa a one-click approve/reject
+        // link (see ApprovalRequestsService.createRequest()). The action
+        // stays blocked — this throws immediately below — until one of them
+        // actually decides it via ApprovalDecisionsService.decide(), which
+        // calls applyApprovedDispatch() to replay this exact status change.
+        await this.approvalRequestsService.createRequest({
+          type: 'SALES_ORDER_DISPATCH',
+          salesOrderId: id,
+          actionPayload: { targetStatus: dto.status },
+          advanceReceived,
+          requiredAdvance,
+          requestedByName: actorName,
+          requestedByEmail: actor.email,
+          actionSummary: `Mark Sales Order ${existing.salesOrderNumber} as ${dto.status.replace(/_/g, ' ')}`,
+        });
+        throw new ConflictException(
+          `Advance payment received (₹${advanceReceived.toLocaleString('en-IN')}) is below the required ${MINIMUM_ADVANCE_PERCENT}% of the order total (₹${requiredAdvance.toLocaleString('en-IN')}). An approval request has been emailed to Santosh Kumar Chegondi and Amarpal Gampa — this order will move to ${dto.status.replace(/_/g, ' ')} automatically once one of them approves it, or record more advance payment on the Proforma Invoice.`,
+        );
       }
-      // advanceReceived >= requiredAdvance: proceed normally, and clear out
-      // any earlier override fields — they no longer reflect the current
-      // situation.
+      // advanceReceived >= requiredAdvance: proceed normally.
     }
 
+    return this.performStatusChange(id, existing, dto.status, actorName, null);
+  }
+
+  // Shared write path for the dispatch/status change itself — used both by
+  // updateStatus() above (gate already satisfied, no override involved) and
+  // by applyApprovedDispatch() below (gate was below threshold, but a real
+  // Santosh/Amarpal approval has now been recorded). Pulled out so the two
+  // callers can never drift apart on what "change status" actually does
+  // (audit log entry, dispatch-override fields, Dispatch email).
+  private async performStatusChange(
+    id: string,
+    existing: { status: SalesOrderStatus; salesOrderNumber: string },
+    targetStatus: SalesOrderStatus,
+    actorName: string | undefined,
+    override: { approvedBy: string; by: string | null; note: string | null; at: Date } | null,
+  ) {
     const updated = await this.prisma.salesOrder.update({
       where: { id },
       data: {
-        status: dto.status,
-        ...(this.DISPATCH_GATE_STATUSES.includes(dto.status)
-          ? { dispatchOverrideNote, dispatchOverrideBy, dispatchOverrideApprovedBy, dispatchOverrideAt }
+        status: targetStatus,
+        ...(this.DISPATCH_GATE_STATUSES.includes(targetStatus)
+          ? {
+              dispatchOverrideNote: override?.note ?? null,
+              dispatchOverrideBy: override?.by ?? null,
+              dispatchOverrideApprovedBy: override?.approvedBy ?? null,
+              dispatchOverrideAt: override?.at ?? null,
+            }
           : {}),
       },
       include: SALES_ORDER_DETAIL_INCLUDE,
@@ -645,7 +654,7 @@ export class SalesOrdersService {
         action: 'Status Changed',
         actorName,
         oldValue: { status: existing.status },
-        newValue: { status: dto.status },
+        newValue: { status: targetStatus },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
@@ -653,7 +662,7 @@ export class SalesOrdersService {
     // trigger point for it in the current workflow, since dispatching is
     // exactly this status transition and nothing else in scope calls for a
     // separate "Send Dispatch Email" button.
-    if (dto.status === 'DISPATCHED' && existing.status !== 'DISPATCHED') {
+    if (targetStatus === 'DISPATCHED' && existing.status !== 'DISPATCHED') {
       try {
         await this.mailerService.send({
           templateKey: 'DISPATCH',
@@ -670,6 +679,63 @@ export class SalesOrdersService {
     }
 
     return updated;
+  }
+
+  // Shared advance-vs-required lookup — used by both updateStatus()'s gate
+  // check above and JobExecutionOrdersService/ProformaInvoicesService's own
+  // equivalent inline lookups stay separate (each reads its own service's
+  // Prisma models), but this one is reused by applyApprovedDispatch() below
+  // so a stale request approved long after the numbers changed still gets a
+  // fresh read rather than trusting the figures frozen on the original
+  // OverrideApprovalRequest row.
+  private async computeAdvanceGate(salesOrderId: string, grandTotal: number) {
+    const activeInvoice = await this.prisma.proformaInvoice.findFirst({
+      where: { salesOrderId, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      select: { advanceReceived: true },
+    });
+    const advanceReceived = activeInvoice?.advanceReceived ?? 0;
+    // grandTotal <= 0 is a degenerate order with nothing to collect against
+    // — treat the threshold as already met rather than making it impossible
+    // to ever satisfy.
+    const requiredAdvance = grandTotal > 0 ? (grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
+    return { advanceReceived, requiredAdvance };
+  }
+
+  // Called by ApprovalDecisionsService once a SALES_ORDER_DISPATCH
+  // OverrideApprovalRequest has actually been approved by Santosh or
+  // Amarpal via the emailed public link — replays the exact status change
+  // updateStatus() had blocked, this time with a real recorded approval
+  // instead of a self-declared one. Re-validates the transition is still
+  // legal (defensive: the Sales Order's status could in principle have
+  // moved on by other means between the request being raised and decided).
+  async applyApprovedDispatch(request: {
+    salesOrderId: string;
+    actionPayload: unknown;
+    decidedApprover: string | null;
+    requestedByName: string | null;
+    decisionNote: string | null;
+    decidedAt: Date | null;
+  }) {
+    const targetStatus = (request.actionPayload as { targetStatus?: SalesOrderStatus } | null)?.targetStatus;
+    if (!targetStatus) {
+      throw new BadRequestException('Approval request is missing its target status.');
+    }
+    const existing = await this.findOne(request.salesOrderId);
+    assertForwardOnlyTransition({
+      current: existing.status,
+      target: targetStatus,
+      order: SALES_ORDER_SEQUENCE,
+      terminal: ['COMPLETED'],
+      sideTerminal: ['CANCELLED'],
+      entityLabel: 'Sales Order',
+    });
+    return this.performStatusChange(request.salesOrderId, existing, targetStatus, request.requestedByName ?? undefined, {
+      approvedBy: request.decidedApprover ?? '',
+      by: request.requestedByName ?? null,
+      note: request.decisionNote,
+      at: request.decidedAt ?? new Date(),
+    });
   }
 
   async remove(id: string, actorName?: string) {

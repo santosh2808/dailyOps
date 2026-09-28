@@ -55,7 +55,7 @@ export class JobExecutionOrdersController {
   @Post()
   @RequirePermission('JEO', 'Create')
   create(@Body() dto: CreateJeoDto, @Req() req: any) {
-    const actor: JeoActor = { name: req.user?.name, roles: req.user?.roles ?? [] };
+    const actor: JeoActor = { name: req.user?.name, roles: req.user?.roles ?? [], email: req.user?.email };
     return this.jobExecutionOrdersService.create(dto, actor);
   }
 

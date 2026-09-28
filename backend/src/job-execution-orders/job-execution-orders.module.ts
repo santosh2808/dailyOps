@@ -5,6 +5,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { StateSeriesCodesModule } from '../state-series-codes/state-series-codes.module';
 import { SalesOrdersModule } from '../sales-orders/sales-orders.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { ApprovalRequestsModule } from '../approval-requests/approval-requests.module';
 import { JobExecutionOrdersController } from './job-execution-orders.controller';
 import { PublicJobExecutionOrdersController } from './public-job-execution-orders.controller';
 import { JobExecutionOrdersService } from './job-execution-orders.service';
@@ -13,7 +14,7 @@ import { JobExecutionOrdersService } from './job-execution-orders.service';
   // SalesOrdersModule: so a JEO reaching READY_FOR_DISPATCH/COMPLETED can
   // auto-advance its linked Sales Order (see updateStatus() below) — no
   // circular dependency, SalesOrdersModule doesn't import this module.
-  imports: [MailerModule, PdfModule, AuditLogModule, StateSeriesCodesModule, SalesOrdersModule, WhatsAppModule],
+  imports: [MailerModule, PdfModule, AuditLogModule, StateSeriesCodesModule, SalesOrdersModule, WhatsAppModule, ApprovalRequestsModule],
   // PublicJobExecutionOrdersController: WhatsApp Share's unauthenticated
   // /api/v1/public/job-execution-orders/:token/pdf route. Shares this
   // module's JobExecutionOrdersService instance.

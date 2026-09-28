@@ -45,6 +45,7 @@ import StateSeriesCodes from "@/pages/StateSeriesCodes";
 import AiSettings from "@/pages/AiSettings";
 import TelephonyTest from "@/pages/TelephonyTest";
 import PublicQuotation from "@/pages/PublicQuotation";
+import PublicApproval from "@/pages/PublicApproval";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
 
 export default function App() {
@@ -64,6 +65,12 @@ export default function App() {
               /login (no ProtectedRoute wrapper): a customer never has a
               DailyOps session at all. */}
           <Route path="/quote/:token" element={<PublicQuotation />} />
+          {/* Override Approval workflow — public, unauthenticated page
+              reached from the "Approval Requested" email sent to Santosh
+              Kumar Chegondi / Amarpal Gampa. Sibling to /quote/:token:
+              neither of them has a DailyOps account, so no ProtectedRoute
+              wrapper here either. */}
+          <Route path="/approvals/:token" element={<PublicApproval />} />
           <Route
             path="/change-password"
             element={
