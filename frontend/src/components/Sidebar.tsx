@@ -273,7 +273,18 @@ export default function Sidebar() {
           // meta, otherwise env(safe-area-inset-*) is always 0.
           "fixed inset-y-0 left-0 z-50 flex h-dvh w-64 flex-shrink-0 flex-col border-r border-slate-200 bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out",
           "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
-          "lg:static lg:z-auto lg:translate-x-0",
+          // Bug fix: below lg this stays a fixed overlay drawer, unchanged.
+          // At lg+ it used to be lg:static, a normal flex item — that only
+          // ever looked right because the page shell itself was pinned to
+          // exactly h-dvh with overflow-hidden, so nothing could ever be
+          // taller than the viewport. Now that pages are allowed to grow
+          // past the viewport and the browser scrolls the page itself (see
+          // each page's own shell comment), a lg:static sidebar would
+          // scroll away with the rest of the row instead of staying put.
+          // lg:sticky lg:top-0 keeps it pinned to the viewport while still
+          // being an in-flow flex item (unlike lg:fixed, which would pull
+          // it out of the row and collapse the row's width).
+          "lg:sticky lg:top-0 lg:z-auto lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >

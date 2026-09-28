@@ -50,10 +50,11 @@ export default function Topbar({ title = "Dashboard", showBackButton = false }: 
   }
 
   return (
-    <header className="flex h-16 flex-shrink-0 items-center justify-between gap-3 border-b bg-white px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 flex-shrink-0 items-center justify-between gap-3 border-b bg-white px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        {/* Only meaningful below lg — the sidebar is static/always-visible
-            at lg and up, so there's nothing to open there. */}
+        {/* Only meaningful below lg — the sidebar is always-visible (fixed
+            below lg, sticky at lg and up) there, so there's nothing to
+            open there. */}
         <button
           type="button"
           onClick={toggle}

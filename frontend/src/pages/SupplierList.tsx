@@ -171,11 +171,11 @@ export default function SupplierList() {
   }
 
   return (
-    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col">
         <Topbar title="Suppliers" />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <SupplierFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">

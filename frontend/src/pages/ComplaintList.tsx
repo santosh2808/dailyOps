@@ -224,9 +224,9 @@ export default function ComplaintList() {
   }
 
   return (
-    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col">
         {/* Bug fix (TC-087): this is a top-level Sidebar destination, not
             reached from anywhere with a predictable "back" target — Topbar's
             showBackButton calls navigate(-1), which is confusing here (same
@@ -234,7 +234,7 @@ export default function ComplaintList() {
             top-level list pages (Suppliers, Customers, etc.) already have no
             back button; this one and the others below were the outliers. */}
         <Topbar title="Complaints" />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <ComplaintFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2">

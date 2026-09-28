@@ -193,9 +193,9 @@ export default function ComplaintDetails() {
   const recipientEmail = complaint?.reporterEmail || customer?.email || null;
 
   return (
-    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col">
         {/* Bug fix (TC-085): SalesOrderDetails/JobExecutionOrderDetails/
             ProformaInvoiceDetails/TaxInvoiceDetails were all moved, in this
             same session's responsive-header rollout, to a plain Topbar (no
@@ -208,7 +208,7 @@ export default function ComplaintDetails() {
             and still used the old showBackButton — now matches the other
             four Details pages exactly. */}
         <Topbar title="Complaint Details" />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/complaints")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Complaints

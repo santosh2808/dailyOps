@@ -45,11 +45,11 @@ export default function Permissions() {
   }, {});
 
   return (
-    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col">
         <Topbar title="Permissions" />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <p className="mb-4 text-sm text-muted-foreground">
             Permissions are seeded by the system and assigned to roles from the Roles
             screen. This list is read-only.

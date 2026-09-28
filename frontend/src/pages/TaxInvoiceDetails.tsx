@@ -112,11 +112,11 @@ export default function TaxInvoiceDetails() {
   }
 
   return (
-    <div className="flex h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col">
         <Topbar title="Tax Invoice Details" />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/tax-invoices")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Tax Invoices
