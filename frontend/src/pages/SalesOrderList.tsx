@@ -395,10 +395,26 @@ export default function SalesOrderList() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {/* Bug fix (SC-012): this row action had no status
+                            gate at all — SalesOrderDetails.tsx's own Edit
+                            menu item is already disabled once a Sales Order
+                            leaves DRAFT (see its isEditable), and
+                            SalesOrderForm.tsx's load guard blocks the edit
+                            route server-side-status-wise too, but this list
+                            page's pencil button was left clickable for every
+                            status including CANCELLED — QA correctly flagged
+                            that as "Edit option available" on a cancelled
+                            order. Disabled (not hidden) here to match the
+                            Details page's own convention. */}
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Edit sales order"
+                          title={
+                            salesOrder.status === "DRAFT"
+                              ? "Edit sales order"
+                              : `This Sales Order is ${salesOrder.status === "CANCELLED" ? "cancelled" : "no longer in Draft status"} and can no longer be edited.`
+                          }
+                          disabled={salesOrder.status !== "DRAFT"}
                           onClick={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}
                         >
                           <Pencil className="h-4 w-4" />
