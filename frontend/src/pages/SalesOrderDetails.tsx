@@ -476,7 +476,27 @@ export default function SalesOrderDetails() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <Field label="Status" value={<SalesOrderStatusBadge status={salesOrder.status} />} />
-                  <Field label="Customer" value={salesOrder.customer?.companyName} />
+                  {/* QA feature (SC-015): "Customer name displayed in the
+                      Sales Order should be clickable and linked to the
+                      corresponding customer record in the Customers
+                      module." Same underline-button-as-link convention as
+                      the quotation/JEO links in the header above. Falls
+                      back to plain text (Field's own "—" fallback) if this
+                      Sales Order somehow has no linked customer. */}
+                  <Field
+                    label="Customer"
+                    value={
+                      salesOrder.customer ? (
+                        <button
+                          type="button"
+                          className="underline underline-offset-2"
+                          onClick={() => navigate(`/customers/${salesOrder.customer!.id}`)}
+                        >
+                          {salesOrder.customer.companyName}
+                        </button>
+                      ) : undefined
+                    }
+                  />
                   <Field label="Contact Person" value={salesOrder.customer?.contactPerson} />
                   <Field label="Order Date" value={formatDate(salesOrder.orderDate)} />
                   <Field label="Delivery Date" value={formatDate(salesOrder.deliveryDate)} />
