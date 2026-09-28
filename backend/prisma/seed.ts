@@ -455,6 +455,46 @@ async function main() {
       subject: 'Your order {{salesOrderNumber}} has been dispatched',
       bodyHtml: '<p>Dear {{customerName}},</p><p>Sales Order {{salesOrderNumber}} has been dispatched.</p>',
     },
+    // QA feature (SC-013): "customer is not automatically notified about the
+    // progress" — one template per customer-relevant Sales Order status
+    // transition (DISPATCHED reuses the pre-existing DISPATCH key above
+    // rather than duplicating it). See
+    // SalesOrdersService.notifyCustomerStatusChange().
+    {
+      key: 'SALES_ORDER_STATUS_CONFIRMED',
+      name: 'Sales Order Status — Confirmed',
+      subject: 'Your order {{salesOrderNumber}} is now {{status}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+    },
+    {
+      key: 'SALES_ORDER_STATUS_PRODUCTION_STARTED',
+      name: 'Sales Order Status — Production Started',
+      subject: 'Your order {{salesOrderNumber}} is now {{status}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+    },
+    {
+      key: 'SALES_ORDER_STATUS_READY_FOR_DISPATCH',
+      name: 'Sales Order Status — Ready for Dispatch',
+      subject: 'Your order {{salesOrderNumber}} is now {{status}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+    },
+    {
+      key: 'SALES_ORDER_STATUS_COMPLETED',
+      name: 'Sales Order Status — Completed',
+      subject: 'Your order {{salesOrderNumber}} is now {{status}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+    },
+    {
+      key: 'SALES_ORDER_STATUS_CANCELLED',
+      name: 'Sales Order Status — Cancelled',
+      subject: 'Your order {{salesOrderNumber}} is now {{status}}',
+      bodyHtml:
+        '<p>Dear {{customerName}},</p><p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+    },
     {
       key: 'TAX_INVOICE',
       name: 'Tax Invoice Email',

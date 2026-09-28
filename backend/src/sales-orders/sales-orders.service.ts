@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
@@ -36,6 +37,54 @@ const SALES_ORDER_SEQUENCE: SalesOrderStatus[] = [
   'DISPATCHED',
   'COMPLETED',
 ];
+
+// QA feature (SC-013): "customer-relevant" statuses — every status a
+// customer should hear about, i.e. everything except DRAFT (purely
+// internal: a Sales Order sitting in Draft has nothing worth telling the
+// customer yet, they were already emailed the "Order Confirmation" at
+// create() time regardless of status — see sendOrderConfirmationEmail()).
+// Used by notifyCustomerStatusChange() below to gate which transitions
+// actually notify.
+const CUSTOMER_NOTIFY_STATUSES: SalesOrderStatus[] = [
+  'CONFIRMED',
+  'PRODUCTION_STARTED',
+  'READY_FOR_DISPATCH',
+  'DISPATCHED',
+  'COMPLETED',
+  'CANCELLED',
+];
+
+// Customer-facing wording — must exactly match
+// frontend/salesOrderOptions.ts's STATUS_OPTIONS labels so a customer never
+// sees "READY_FOR_DISPATCH" in an email/WhatsApp message while staff see
+// "Ready for Dispatch" in the app. No shared frontend/backend module exists
+// for this (frontend is a separate build), so this is kept in sync by hand
+// — if a new SalesOrderStatus value is ever added, both this map and that
+// one need the same new entry.
+const SALES_ORDER_STATUS_LABELS: Record<SalesOrderStatus, string> = {
+  DRAFT: 'Draft',
+  CONFIRMED: 'Confirmed',
+  PRODUCTION_STARTED: 'Production Started',
+  READY_FOR_DISPATCH: 'Ready for Dispatch',
+  DISPATCHED: 'Dispatched',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+
+// One EmailTemplate key per customer-relevant status, so each can be
+// customized independently from the Email Templates admin screen — same
+// "one key per distinct notification" convention as
+// OVERRIDE_APPROVAL_REQUESTED/APPROVED/REJECTED/FAILED. DISPATCHED reuses
+// the pre-existing 'DISPATCH' key (already seeded, already customizable)
+// rather than introducing a parallel duplicate.
+const SALES_ORDER_STATUS_EMAIL_TEMPLATE_KEYS: Partial<Record<SalesOrderStatus, string>> = {
+  CONFIRMED: 'SALES_ORDER_STATUS_CONFIRMED',
+  PRODUCTION_STARTED: 'SALES_ORDER_STATUS_PRODUCTION_STARTED',
+  READY_FOR_DISPATCH: 'SALES_ORDER_STATUS_READY_FOR_DISPATCH',
+  DISPATCHED: 'DISPATCH',
+  COMPLETED: 'SALES_ORDER_STATUS_COMPLETED',
+  CANCELLED: 'SALES_ORDER_STATUS_CANCELLED',
+};
 
 const SALES_ORDER_NUMBER_PREFIX = 'SO-';
 const SALES_ORDER_NUMBER_PAD = 6;
@@ -147,6 +196,7 @@ export class SalesOrdersService {
     private mailerService: MailerService,
     private auditLogService: AuditLogService,
     private approvalRequestsService: ApprovalRequestsService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   async findAll(query: QuerySalesOrderDto) {
@@ -658,27 +708,76 @@ export class SalesOrdersService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
-    // "Dispatch" email template (requirement #7's template list) — the one
-    // trigger point for it in the current workflow, since dispatching is
-    // exactly this status transition and nothing else in scope calls for a
-    // separate "Send Dispatch Email" button.
-    if (targetStatus === 'DISPATCHED' && existing.status !== 'DISPATCHED') {
+    // QA feature (SC-013): "customer is not automatically notified about
+    // the progress" — email + WhatsApp to the customer for every
+    // customer-relevant status transition, not just DISPATCHED (which used
+    // to be the only one, via the old inline "Dispatch" email block this
+    // replaces). See notifyCustomerStatusChange() below.
+    await this.notifyCustomerStatusChange(updated, targetStatus, existing.status, actorName);
+
+    return updated;
+  }
+
+  // QA feature (SC-013): fires once per genuine customer-relevant status
+  // transition (targetStatus !== existing status, and targetStatus is one
+  // of CUSTOMER_NOTIFY_STATUSES — DRAFT is deliberately excluded, see that
+  // constant's comment). Same "two independent best-effort sends" shape as
+  // LeadsService.notifySiteVisitScheduled(): a missing customer email never
+  // blocks the WhatsApp send and vice versa, and neither ever throws back
+  // into performStatusChange() — a notification failure must never fail
+  // the status change itself, matching the existing DISPATCH email's own
+  // try/catch-with-logger.error convention it replaces.
+  private async notifyCustomerStatusChange(
+    updated: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>,
+    targetStatus: SalesOrderStatus,
+    previousStatus: SalesOrderStatus,
+    actorName: string | undefined,
+  ) {
+    if (targetStatus === previousStatus || !CUSTOMER_NOTIFY_STATUSES.includes(targetStatus)) {
+      return;
+    }
+    const statusLabel = SALES_ORDER_STATUS_LABELS[targetStatus];
+    const templateKey = SALES_ORDER_STATUS_EMAIL_TEMPLATE_KEYS[targetStatus];
+
+    if (updated.customer.email) {
       try {
         await this.mailerService.send({
-          templateKey: 'DISPATCH',
-          fallbackSubject: `Your order ${updated.salesOrderNumber} has been dispatched`,
-          fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Sales Order {{salesOrderNumber}} has been dispatched.</p>`,
-          vars: { customerName: updated.customer.contactPerson, salesOrderNumber: updated.salesOrderNumber },
+          templateKey,
+          fallbackSubject: `Your order ${updated.salesOrderNumber} is now ${statusLabel}`,
+          fallbackBodyHtml:
+            '<p>Dear {{customerName}},</p>' +
+            '<p>Your Sales Order <b>{{salesOrderNumber}}</b> status has been updated to <b>{{status}}</b>.</p>',
+          vars: {
+            customerName: updated.customer.contactPerson,
+            salesOrderNumber: updated.salesOrderNumber,
+            status: statusLabel,
+          },
           to: updated.customer.email,
           actorName,
-          link: { module: 'SalesOrder', salesOrderId: id },
+          link: { module: 'SalesOrder', salesOrderId: updated.id },
         });
       } catch (error) {
-        this.logger.error(`Dispatch email failed for Sales Order ${id}`, error);
+        this.logger.error(`Status-change email failed for Sales Order ${updated.id} (${targetStatus})`, error);
       }
     }
 
-    return updated;
+    if (updated.customer.phone) {
+      try {
+        // Same "one shared WhatsApp template, status passed as a body
+        // value" approach as every other feature in this codebase (a
+        // separate Meta-approved template per status would mean 6 separate
+        // approval submissions for one feature) — matches
+        // INTERAKT_SITE_VISIT_SCHEDULED_TEMPLATE_NAME's pattern.
+        const templateName = process.env.INTERAKT_SALES_ORDER_STATUS_TEMPLATE_NAME?.trim() || 'sales_order_status_update';
+        await this.whatsAppService.sendTemplateMessage({
+          phone: updated.customer.phone,
+          templateName,
+          bodyValues: [updated.customer.contactPerson, updated.salesOrderNumber, statusLabel],
+        });
+      } catch (error) {
+        this.logger.error(`Status-change WhatsApp failed for Sales Order ${updated.id} (${targetStatus})`, error);
+      }
+    }
   }
 
   // Shared advance-vs-required lookup — used by both updateStatus()'s gate
