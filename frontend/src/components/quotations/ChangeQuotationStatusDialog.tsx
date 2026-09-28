@@ -130,7 +130,17 @@ export default function ChangeQuotationStatusDialog({
   // VIEWED is still a customer-triggered transition only (set automatically
   // when the customer opens the public /quote/:token link) — never offered
   // as a manual choice here.
-  const statusOptions = STATUS_OPTIONS.filter((s) => s.value !== "VIEWED");
+  //
+  // QA fix (QC-002): DRAFT is also hidden while the quotation is REJECTED —
+  // reverting a rejected quotation straight to Draft here would silently
+  // erase the recorded rejection reason (see QuotationsService.updateStatus()'s
+  // matching backend guard). Revising and sending an updated offer already
+  // has its own dedicated "Resend Quotation" action on this page, which goes
+  // straight to Sent with a fresh snapshot/link — staff should use that
+  // instead of routing back through Draft.
+  const statusOptions = STATUS_OPTIONS.filter(
+    (s) => s.value !== "VIEWED" && !(quotation.status === "REJECTED" && s.value === "DRAFT"),
+  );
 
   // Mirrors QuotationsService.updateStatus()'s own rule: moving to
   // DRAFT/READY/EXPIRED, or away from an already-decided ACCEPTED/REJECTED
@@ -176,6 +186,15 @@ export default function ChangeQuotationStatusDialog({
                 {quotation.status === "ACCEPTED" || quotation.status === "REJECTED"
                   ? "This quotation was already decided by the customer — changing its status will clear that decision and disable its public link. Use Send Quotation afterward to issue a fresh one."
                   : "This will disable the quotation's existing public link. Use Send Quotation afterward to issue a fresh one."}
+              </p>
+            )}
+
+            {quotation.status === "REJECTED" && (
+              <p className="mt-2 text-xs text-slate-600">
+                Want to revise the price, product, or terms and get a new decision? Use the{" "}
+                <span className="font-medium">Resend Quotation</span> action on this page instead
+                — it keeps the rejection on record and sends an updated offer straight to the
+                customer.
               </p>
             )}
 

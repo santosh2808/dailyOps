@@ -581,6 +581,22 @@ export class QuotationsService {
       );
     }
 
+    // QA fix (QC-002): a Rejected quotation must not be silently reverted
+    // to Draft via Change Status — that would clear rejectedAt/
+    // rejectionReason/rejectionComment (see the leavingADecision block
+    // below) and leave no retrievable record of the original decision.
+    // Revising the offer and sending it again for a new decision already
+    // has a dedicated path — sendQuotation()'s "Resend Quotation" flow
+    // (REJECTED -> SENT directly, with a fresh snapshot/token) — so staff
+    // are pointed there instead of being allowed to route around it via a
+    // manual Draft revert.
+    if (existing.status === 'REJECTED' && dto.status === 'DRAFT') {
+      throw new BadRequestException(
+        'This quotation was rejected by the customer and cannot be changed back to Draft — that would erase the recorded rejection reason. ' +
+          'Use "Resend Quotation" instead to revise and send an updated offer for a new decision.',
+      );
+    }
+
     // existing.status is guaranteed not to be 'ACCEPTED' here — the guard
     // above already returned for that case — so reaching ACCEPTED below is
     // always a genuine DRAFT/READY/SENT/VIEWED/REJECTED/EXPIRED -> ACCEPTED
