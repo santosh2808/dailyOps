@@ -299,7 +299,14 @@ export class JeoPdfService {
     y += 20;
 
     const billingBlock = billingLines.length > 0 ? billingLines : [jeo.customer.companyName];
-    const siteBlock = siteIsSameAsBilling ? ['Same as Billing Address'] : shippingLines;
+    // QA fix: this used to print the literal placeholder text "Same as
+    // Billing Address" here instead of an actual address, which would
+    // leave factory/dispatch staff with no usable site address on the
+    // printed JEO. When shippingAddress is empty or identical to
+    // billingAddress, print the real (billing) address lines instead —
+    // same convention Tax Invoice's PDF uses (always prints the literal
+    // Ship To text, never a cross-reference label).
+    const siteBlock = siteIsSameAsBilling ? billingBlock : shippingLines;
     const blockHeight =
       Math.max(
         doc.heightOfString(billingBlock.join('\n'), { width: addrCol - 12 }),
