@@ -501,23 +501,16 @@ export default function SalesOrderDetails() {
                   <Field label="Order Date" value={formatDate(salesOrder.orderDate)} />
                   <Field label="Delivery Date" value={formatDate(salesOrder.deliveryDate)} />
                   <Field label="Payment Terms" value={salesOrder.paymentTerms} />
-                  <Field
-                    label="Advance %"
-                    value={
-                      // Live-computed from the actual recorded advance payment
-                      // (Advance Received ÷ Grand Total × 100). This used to
-                      // need a disclaimer distinguishing it from a separate
-                      // manually-typed SalesOrder.advancePercentage field
-                      // (set once on the order form, never updated when a
-                      // payment was recorded — QA SC-002); that field has
-                      // since been removed entirely per business owner, so
-                      // this live figure is now the only "Advance %" this
-                      // page shows.
-                      activeInvoice && salesOrder.grandTotal
-                        ? `${((activeInvoice.advanceReceived / salesOrder.grandTotal) * 100).toFixed(1)}%`
-                        : null
-                    }
-                  />
+                  {/* QA bug fix (SC-016): this used to also show a live-computed
+                      "Advance %" field (Advance Received ÷ Grand Total × 100)
+                      here. QA flagged it for the same reason the old manually-
+                      typed SalesOrder.advancePercentage field was removed
+                      entirely (see create-sales-order.dto.ts) — advance
+                      payment information belongs solely to the Record Advance
+                      Payment functionality (and the Proforma Invoice it's
+                      recorded against), not duplicated here. "Advance
+                      Received" alone (a plain fact, not a derived percentage)
+                      stays. */}
                   <Field
                     label="Advance Received"
                     value={activeInvoice ? formatCurrency(activeInvoice.advanceReceived) : null}
