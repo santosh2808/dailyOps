@@ -163,6 +163,19 @@ export class TaxInvoicesService {
     if (salesOrder.status === 'CANCELLED') {
       throw new BadRequestException('A cancelled Sales Order cannot have a Tax Invoice generated for it.');
     }
+    // QA feature (SC-014): same rationale as ProformaInvoicesService.create()
+    // — a Draft Sales Order is still freely editable and not finalized, so
+    // nothing should be invoiced against it yet. Checked again here
+    // independently (Tax Invoice generation isn't actually reachable from a
+    // Draft order in practice, since it requires an active Proforma Invoice
+    // with a recorded advance below — and Proforma Invoice creation itself
+    // now blocks DRAFT — but this guard stands on its own rather than
+    // relying on that other check never changing).
+    if (salesOrder.status === 'DRAFT') {
+      throw new BadRequestException(
+        'This Sales Order is still in Draft status and cannot have a Tax Invoice generated for it yet.',
+      );
+    }
 
     const activeProformaInvoice = await this.prisma.proformaInvoice.findFirst({
       where: { salesOrderId: dto.salesOrderId, status: { not: 'CANCELLED' } },

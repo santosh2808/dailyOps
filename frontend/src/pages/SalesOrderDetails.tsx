@@ -125,6 +125,16 @@ export default function SalesOrderDetails() {
   // stay usable at any non-cancelled status, only Edit itself locks down
   // this early). See SalesOrdersService.update()'s own guard.
   const isEditable = salesOrder?.status === "DRAFT";
+  // QA feature (SC-014): a Draft Sales Order is still freely editable and
+  // not finalized — Generate Proforma Invoice / Generate Tax Invoice
+  // shouldn't be actionable until it's actually confirmed. Same value as
+  // isEditable above but named/commented separately since it gates a
+  // different pair of actions (kept distinct rather than reusing isEditable
+  // directly at each call site, matching isCancelled/isEditable already
+  // being separate purpose-named booleans above). The backend enforces this
+  // independently too — see ProformaInvoicesService.create()'s own DRAFT
+  // check.
+  const isDraft = salesOrder?.status === "DRAFT";
 
   // Customer's Purchase Order document — a scan/photo of the actual PO,
   // separate from customerPoNumber. Allowed at any non-CANCELLED status
@@ -368,8 +378,14 @@ export default function SalesOrderDetails() {
                   ) : (
                     <Button
                       onClick={() => setGenerateInvoiceOpen(true)}
-                      disabled={isCancelled}
-                      title={isCancelled ? "This Sales Order is cancelled" : undefined}
+                      disabled={isCancelled || isDraft}
+                      title={
+                        isCancelled
+                          ? "This Sales Order is cancelled"
+                          : isDraft
+                            ? "This Sales Order is still in Draft status — change its status first"
+                            : undefined
+                      }
                     >
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
                       Generate Proforma Invoice
@@ -383,13 +399,15 @@ export default function SalesOrderDetails() {
                   ) : (
                     <Button
                       onClick={() => setGenerateTaxInvoiceOpen(true)}
-                      disabled={isCancelled || !activeInvoice || activeInvoice.advanceReceived <= 0}
+                      disabled={isCancelled || isDraft || !activeInvoice || activeInvoice.advanceReceived <= 0}
                       title={
                         isCancelled
                           ? "This Sales Order is cancelled"
-                          : !activeInvoice || activeInvoice.advanceReceived <= 0
-                            ? "Record an advance payment on the Proforma Invoice first"
-                            : undefined
+                          : isDraft
+                            ? "This Sales Order is still in Draft status — change its status first"
+                            : !activeInvoice || activeInvoice.advanceReceived <= 0
+                              ? "Record an advance payment on the Proforma Invoice first"
+                              : undefined
                       }
                     >
                       <FileText className="mr-2 h-4 w-4" />

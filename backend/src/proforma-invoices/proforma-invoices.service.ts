@@ -169,10 +169,20 @@ export class ProformaInvoicesService {
     // QA bug fix (SC-008): a cancelled Sales Order has nothing left to
     // invoice — generating a Proforma Invoice for it previously had no
     // guard at all. createFromSalesOrder() below routes through this same
-    // check, but that path only ever runs on a freshly-accepted Quotation's
-    // brand new Sales Order, so it can never actually hit this branch.
+    // check.
     if (salesOrder.status === 'CANCELLED') {
       throw new BadRequestException('A cancelled Sales Order cannot have a Proforma Invoice generated for it.');
+    }
+    // QA feature (SC-014): a Draft Sales Order is still freely editable
+    // (SalesOrdersService.update() only allows edits at DRAFT — see its own
+    // comment) and has nothing finalized to invoice against yet. Generating
+    // a Proforma Invoice here previously had no guard at all, so an invoice
+    // could be created against items/totals/addresses that might still
+    // change before the order is actually confirmed.
+    if (salesOrder.status === 'DRAFT') {
+      throw new BadRequestException(
+        'This Sales Order is still in Draft status and cannot have a Proforma Invoice generated for it yet.',
+      );
     }
 
     // Prevent duplicate Proforma Invoices for the same Sales Order unless
