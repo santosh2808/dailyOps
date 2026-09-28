@@ -243,8 +243,21 @@ export class UsersService {
     return candidate;
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto, actingUserId?: string) {
     await this.findOne(id);
+
+    // QA fix (AD-003): an Administrator (or anyone) must not be able to
+    // disable their own account via the general Edit endpoint — this is
+    // the endpoint Enable already goes through (isActive: true), and it
+    // can equally be sent isActive: false, so this needs the same guard as
+    // remove() below rather than just the Disable button's own DELETE
+    // route. Only self-disable is blocked; editing your own name/email/
+    // phone/etc., or re-enabling yourself, is unaffected.
+    if (dto.isActive === false && actingUserId && actingUserId === id) {
+      throw new BadRequestException(
+        'You cannot disable your own account. Ask another Administrator to do this, or use a different account.',
+      );
+    }
 
     if (dto.email) {
       const existing = await this.findByEmail(dto.email.trim().toLowerCase());
@@ -321,8 +334,18 @@ export class UsersService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, actingUserId?: string) {
     await this.findOne(id);
+    // QA fix (AD-003): the Users list's Disable action calls this route
+    // (DELETE, soft-delete) — block an Administrator from disabling their
+    // own account here too. Without this, an admin could disable
+    // themselves, get logged out, and have no active Administrator left
+    // to log back in and re-enable the account.
+    if (actingUserId && actingUserId === id) {
+      throw new BadRequestException(
+        'You cannot disable your own account. Ask another Administrator to do this, or use a different account.',
+      );
+    }
     // Soft delete (disable), same isActive convention as
     // Customer/Product/Material — never a hard delete, so audit/history
     // (createdBy, UserRole assignment history) is preserved.

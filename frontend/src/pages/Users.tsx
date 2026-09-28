@@ -20,6 +20,7 @@ import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
+import { useAuth } from "@/context/AuthContext";
 import {
   createUser,
   deleteUser,
@@ -33,6 +34,7 @@ import type { RbacUser } from "@/types";
 const PAGE_SIZE = 20;
 
 export default function Users() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<RbacUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -236,11 +238,22 @@ export default function Users() {
                         >
                           <KeyRound className="h-4 w-4" />
                         </Button>
+                        {/* QA fix (AD-003): an Administrator disabling their own
+                            account would log them out with no other active
+                            Administrator able to log back in and re-enable it.
+                            Backend enforces this independently (users.service.ts
+                            update()/remove()) — this is just defense-in-depth so
+                            the button doesn't even look clickable on your own row. */}
                         {user.isActive ? (
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Disable user"
+                            title={
+                              user.id === currentUser?.id
+                                ? "You can't disable your own account"
+                                : "Disable user"
+                            }
+                            disabled={user.id === currentUser?.id}
                             onClick={() => openDisableDialog(user)}
                           >
                             <Ban className="h-4 w-4 text-destructive" />
