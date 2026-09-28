@@ -2005,6 +2005,11 @@ model OverrideApprovalRequest {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Opposite side of EmailHistory.approvalRequest — the "Approval Requested"
+  // email(s) to Santosh/Amar plus the decision email back to the requester,
+  // same convention as every other emailHistory back-relation in this file.
+  emailHistory EmailHistory[]
+
   @@index([salesOrderId])
   @@index([proformaInvoiceId])
   @@index([status])
@@ -2257,6 +2262,7 @@ model EmailHistory {
   @@index([taxInvoiceId])
   @@index([leadId])
   @@index([complaintId])
+  @@index([approvalRequestId])
 }
 
 // Configurable Approval Matrix engine (requirement #9) — "No hardcoding."

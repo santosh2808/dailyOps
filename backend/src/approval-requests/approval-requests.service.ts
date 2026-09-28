@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
@@ -29,6 +30,22 @@ import { allApproverEmails } from '../sales-orders/dispatch-override-approvers';
 // don't depend on that regeneration having happened yet.
 export type OverrideApprovalType = 'SALES_ORDER_DISPATCH' | 'PROFORMA_INVOICE_ADVANCE' | 'JEO_PRODUCTION_START';
 export type OverrideApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'FAILED';
+
+// Shared include shape for a request together with the records its
+// actionSummary/decision emails need to describe — same
+// "OVERRIDE_APPROVAL_DETAIL_INCLUDE + explicit GetPayload return type"
+// convention QuotationsService uses for its own autoExpireIfNeeded(), so the
+// "not expired" branch and the "just-expired, re-fetched with include"
+// branch return the exact same (wide) shape instead of TypeScript inferring
+// a narrower union from whichever type the parameter itself was declared as.
+export const OVERRIDE_APPROVAL_DETAIL_INCLUDE = {
+  salesOrder: { include: { customer: true } },
+  proformaInvoice: true,
+} satisfies Prisma.OverrideApprovalRequestInclude;
+
+export type OverrideApprovalRequestWithDetail = Prisma.OverrideApprovalRequestGetPayload<{
+  include: typeof OVERRIDE_APPROVAL_DETAIL_INCLUDE;
+}>;
 
 export interface CreateOverrideApprovalRequestParams {
   type: OverrideApprovalType;
@@ -108,7 +125,7 @@ export class ApprovalRequestsService {
         type: params.type,
         salesOrderId: params.salesOrderId,
         proformaInvoiceId: params.proformaInvoiceId,
-        actionPayload: params.actionPayload,
+        actionPayload: params.actionPayload as Prisma.InputJsonValue,
         advanceReceived: params.advanceReceived,
         requiredAdvance: params.requiredAdvance,
         requestedByName: params.requestedByName,
@@ -169,13 +186,10 @@ export class ApprovalRequestsService {
   // Public-endpoint lookup — same anti-enumeration convention as
   // QuotationsService.findByPublicToken(): an unknown/malformed token gets
   // exactly the same NotFoundException as any other invalid one.
-  async findByPublicToken(token: string) {
+  async findByPublicToken(token: string): Promise<OverrideApprovalRequestWithDetail> {
     const request = await this.prisma.overrideApprovalRequest.findUnique({
       where: { publicToken: token },
-      include: {
-        salesOrder: { include: { customer: true } },
-        proformaInvoice: true,
-      },
+      include: OVERRIDE_APPROVAL_DETAIL_INCLUDE,
     });
     if (!request) {
       throw new NotFoundException('This approval link is invalid.');
@@ -187,12 +201,12 @@ export class ApprovalRequestsService {
   // expiry — same pattern as QuotationsService.autoExpireIfNeeded(), called
   // by ApprovalDecisionsService right after resolving the token, before any
   // decision is allowed.
-  async autoExpireIfNeeded(request: { id: string; status: OverrideApprovalStatus; tokenExpiresAt: Date }) {
+  async autoExpireIfNeeded(request: OverrideApprovalRequestWithDetail): Promise<OverrideApprovalRequestWithDetail> {
     if (request.status === 'PENDING' && request.tokenExpiresAt.getTime() < Date.now()) {
       return this.prisma.overrideApprovalRequest.update({
         where: { id: request.id },
         data: { status: 'EXPIRED' },
-        include: { salesOrder: { include: { customer: true } }, proformaInvoice: true },
+        include: OVERRIDE_APPROVAL_DETAIL_INCLUDE,
       });
     }
     return request;

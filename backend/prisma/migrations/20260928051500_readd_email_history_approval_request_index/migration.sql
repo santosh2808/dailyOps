@@ -1,0 +1,15 @@
+-- Re-adds the index that migration 20260928050701_v1 auto-dropped.
+--
+-- Root cause: the Override Approval workflow's original migration
+-- (20260924150000_add_override_approval_requests) created
+-- "EmailHistory_approvalRequestId_idx" in Postgres, but schema.prisma's
+-- EmailHistory model was never given the matching `@@index([approvalRequestId])`
+-- annotation (every other EmailHistory foreign key — quotationId,
+-- salesOrderId, proformaInvoiceId, jobExecutionOrderId, taxInvoiceId,
+-- leadId, complaintId — has one; this one was missed). `prisma migrate dev`
+-- treated the un-declared index as drift and generated 20260928050701_v1 to
+-- drop it. schema.prisma now has the missing `@@index([approvalRequestId])`
+-- added, so this migration restores the index to match — an
+-- unindexed foreign key column is worth avoiding given EmailHistory is
+-- queried by every *Id filter already.
+CREATE INDEX "EmailHistory_approvalRequestId_idx" ON "EmailHistory"("approvalRequestId");
