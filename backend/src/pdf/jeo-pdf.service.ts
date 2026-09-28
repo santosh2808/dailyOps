@@ -266,12 +266,17 @@ export class JeoPdfService {
     // only shown when actually set, same "blank rather than a dash for an
     // unset optional row" convention as the rest of this cover letter.
     {
+      // "Aluminium" is our internal name for the free/default finish —
+      // printed as "Standard" here, same customer/production-facing wording
+      // swap quotation-pdf.service.ts already applies to its Color row.
+      const fanColourRaw = jeo.color?.trim() || 'Aluminium';
+      const fanColourDisplay = fanColourRaw === 'Aluminium' ? 'Standard' : fanColourRaw;
       const scopeLines = [
         jeo.pipeLength?.trim() ? `Pipe Length : ${jeo.pipeLength.trim()}` : null,
         jeo.hangingStructureType
           ? `Hanging Structure : ${HANGING_STRUCTURE_LABELS[jeo.hangingStructureType]}`
           : null,
-        `Fan Colour : ${jeo.color?.trim() || 'Aluminium'}`,
+        `Fan Colour : ${fanColourDisplay}`,
       ].filter((line): line is string => !!line);
 
       doc.font('Helvetica-Bold').fontSize(10).fillColor('black');
@@ -407,6 +412,18 @@ export class JeoPdfService {
   // see JeoPdfInput's own comment on those fields), not a per-item one.
   private resolveScopeRowValue(row: { item: string; quantityPerFan: string }, jeo: JeoPdfInput): string {
     const rowLabel = row.item.trim().toLowerCase();
+    // Bug fix: same class of problem as the hanging structure/pipe length
+    // rows below — the seeded technicalSpec.scopeOfSupply "Paint" row (e.g.
+    // "BLACK COLOUR" for SPYRO-16) is only a catalog default, not this JEO's
+    // actual fan colour (jeo.color, already shown correctly in the SCOPE OF
+    // WORK block above). Mirrors quotation-pdf.service.ts's
+    // resolveScopeRowValue() Paint-row fix, including the same
+    // Aluminium->Standard customer/production-facing wording swap.
+    const isPaintRow = rowLabel === 'paint';
+    if (isPaintRow) {
+      const color = jeo.color?.trim();
+      if (color) return color === 'Aluminium' ? 'Standard' : color;
+    }
     const isHangingStructureRow = rowLabel === 'hanging structure';
     if (isHangingStructureRow && jeo.hangingStructureType) {
       const structureLabel = HANGING_STRUCTURE_LABELS[jeo.hangingStructureType];
