@@ -36,7 +36,7 @@ import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
+import { deleteLead, downloadLeadImportTemplate, exportLeads, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -97,6 +97,7 @@ export default function LeadList() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Bulk delete — select-multiple checkboxes in the table, scoped to the
   // rows currently on screen (see the reset effect below for why selection
@@ -235,6 +236,31 @@ export default function LeadList() {
       setDownloadingTemplate(false);
     }
   }
+  async function handleExport() {
+  setExporting(true);
+
+  try {
+    await exportLeads({
+      search: debouncedFilters.search || undefined,
+      status: debouncedFilters.status || undefined,
+      priority: debouncedFilters.priority || undefined,
+      source: debouncedFilters.source || undefined,
+      assignedToUserId: debouncedFilters.assignedToUserId || undefined,
+      state: debouncedFilters.state || undefined,
+      dateFrom: debouncedFilters.dateFrom || undefined,
+      dateTo: debouncedFilters.dateTo || undefined,
+      sortBy,
+      sortOrder,
+    });
+
+    toast.success("Leads exported.");
+  } catch (err) {
+    toast.error(getErrorMessage(err, "Failed to export leads."));
+  } finally {
+    setExporting(false);
+  }
+}
+
 
   return (
     <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -255,10 +281,19 @@ export default function LeadList() {
                 )}
                 {downloadingTemplate ? "Downloading..." : "Download Template"}
               </Button>
+              <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                {exporting ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                <Download className="mr-2 h-4 w-4" />
+                )}
+                {exporting ? "Exporting..." : "Export Excel"}
+                </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
                 Import Leads
               </Button>
+
               {hasPermission("Lead", "Create") && (
                 <Button onClick={() => navigate("/leads/new")}>
                   <Plus className="mr-2 h-4 w-4" />
