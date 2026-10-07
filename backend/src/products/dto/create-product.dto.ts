@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FanType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -75,6 +77,17 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   applicableTo?: string;
+
+  // Feature upgrade: mandatory (app-level — see ProductsService) mounting
+  // type for the HVLS Fans category. Optional on the DTO itself (so a
+  // non-fan product's create/update call never needs to send it); the
+  // actual "required when category is HVLS Fans" rule lives in
+  // ProductsService.create()/update(), the same conditional-required
+  // pattern already used for Customer.gstNumber/isGstRegistered.
+  @ApiPropertyOptional({ enum: FanType, example: FanType.ROOF, description: 'Required when category is "HVLS Fans"' })
+  @IsOptional()
+  @IsEnum(FanType, { message: 'Fan Type must be one of Roof, Floor, or Pole' })
+  fanType?: FanType;
 
   @ApiPropertyOptional({ example: 125000 })
   @IsOptional()

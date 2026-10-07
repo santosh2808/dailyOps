@@ -185,6 +185,14 @@ model Product {
   // filtering/search; just displayed on the product and printed on the
   // quotation for that line item.
   applicableTo String?
+  // Additive: mandatory (app-level, not DB-level — see ProductsService)
+  // mounting type for the HVLS Fans category only. Nullable here so a
+  // non-fan product (motor, drive, BMS, IoT, etc.) is never forced to pick
+  // one; ProductsService.create()/update() is what actually enforces "must
+  // be set whenever category is HVLS Fans", the same conditional-required
+  // pattern already used for Customer.gstNumber (requires isGstRegistered)
+  // and SalesOrder.customerPoNumber (requires !noPoAvailable).
+  fanType     FanType?
   price       Float?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1843,6 +1851,13 @@ enum HangingStructureType {
   HIGH_BEAM
   RCC_SLAB_BEAM
   PIPE_TRUSS
+}
+
+// How an HVLS Fans product is mounted — see Product.fanType.
+enum FanType {
+  ROOF
+  FLOOR
+  POLE
 }
 
 // Who arranges and pays for transport on a Quotation — see

@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { Product, ProductTechnicalSpec, PaginatedResponse } from "@/types";
+import type { Product, ProductTechnicalSpec, FanType, PaginatedResponse } from "@/types";
 
 export interface ProductListParams {
   page?: number;
@@ -14,6 +14,8 @@ export interface ProductPayload {
   sku?: string;
   description?: string;
   applicableTo?: string;
+  // Feature upgrade: required when category is "HVLS Fans" — see FanType.
+  fanType?: FanType;
   price?: number;
   // Additive: Sales Automation price validation.
   standardPrice?: number;
