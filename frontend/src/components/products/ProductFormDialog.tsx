@@ -272,7 +272,17 @@ export default function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} size="lg">
+      {/* Bug fix (QA re-fail of TC-065): expanding "Pricing rules &
+          technical specifications" (30 spec fields + price validation +
+          scope rows) used to grow this dialog to 1500-2000px+ with no
+          height boundary — Save/Cancel and the close button scrolled away
+          with the content along with everything else, matching the report
+          ("oversized ... fields difficult to access even on a large
+          screen"). Capping DialogContent to the viewport height and making
+          only the field area scroll internally (flex-1 overflow-y-auto)
+          keeps the footer and close button reachable at all times,
+          regardless of how long the expanded section gets. */}
+      <DialogContent onClose={() => onOpenChange(false)} size="lg" className="flex max-h-[85vh] flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Product" : "Add Product"}</DialogTitle>
           <DialogDescription>
@@ -282,7 +292,8 @@ export default function ProductFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           <div className="space-y-2">
             <Label htmlFor="name">Product Name *</Label>
             <Input
@@ -550,8 +561,12 @@ export default function ProductFormDialog({
           </div>
           </>
           )}
+        </div>
 
-          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+          {/* Outside the scrollable field area (see className above) so a
+              submit failure is always visible immediately, without having
+              to scroll back down through the whole form to see it. */}
+          {submitError && <p className="mt-4 text-sm text-destructive">{submitError}</p>}
 
           <DialogFooter>
             <Button
