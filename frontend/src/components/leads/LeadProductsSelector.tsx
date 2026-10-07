@@ -186,14 +186,24 @@ export default function LeadProductsSelector({ value, onChange }: LeadProductsSe
                     the Lead -> "Generate Quotation" flow at all. That
                     one-click action (see QuotationsService.create()'s
                     leadId branch) derives its Quotation items straight from
-                    this row, and QuotationsService.computeTotals() always
-                    rejects a fan-type item with no confirmed paint Color —
-                    so any lead with a fan product could never generate a
-                    quotation, with no way to fix it from this screen.
-                    Reuses the exact same options/logic as
+                    this row. Reuses the exact same options/logic as
                     QuotationItemsEditor.tsx's per-item Color field so this
                     matches what staff already know from the Quotation
                     screen.
+
+                    QA fix (re-fail of the Color redesign group): the "*"
+                    and "Required before this lead can be used to generate a
+                    quotation" message below used to live here, from when
+                    QuotationsService.computeTotals() really did reject a
+                    fan item with no color. That validation was later
+                    removed (a fan item left blank now just silently
+                    defaults to the free "Standard" finish — see
+                    computeTotals()'s own comment), but this screen was
+                    never updated to match, so staff saw what looked like a
+                    hard, mandatory error for a field that was never
+                    actually required — exactly the bug QA is reporting.
+                    Matches QuotationItemsEditor.tsx's own non-blocking hint
+                    now instead of claiming this blocks Generate Quotation.
                   */}
                   <TableRow>
                     <TableCell colSpan={5} className="bg-slate-50 py-3">
@@ -202,7 +212,7 @@ export default function LeadProductsSelector({ value, onChange }: LeadProductsSe
                       </p>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div className="space-y-1">
-                          <Label className="text-xs">Color{isFan ? " *" : ""}</Label>
+                          <Label className="text-xs">Color</Label>
                           <Select
                             value={
                               customColorProductIds.has(row.productId)
@@ -244,8 +254,8 @@ export default function LeadProductsSelector({ value, onChange }: LeadProductsSe
                           )}
                           {isFan && !row.color?.trim() && (
                             <p className="text-xs text-muted-foreground">
-                              Required before this lead can be used to generate a quotation —
-                              ask the customer which color they want.
+                              Defaults to Standard if left blank — ask the customer which color
+                              they want if known.
                             </p>
                           )}
                         </div>
