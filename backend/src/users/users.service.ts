@@ -351,4 +351,33 @@ export class UsersService {
     // (createdBy, UserRole assignment history) is preserved.
     return this.prisma.user.update({ where: { id }, data: { isActive: false } });
   }
+
+  // QA fix: "Delete User option is missing" — remove() above only ever
+  // disables (isActive: false); there was no way to actually remove a user
+  // record at all. This is a genuinely separate, permanent action, wired to
+  // its own route (DELETE /users/:id/permanent) rather than replacing
+  // remove() above, so the existing Disable/Enable behavior is untouched.
+  //
+  // FK safety (audited against schema.prisma before adding this): User has
+  // exactly four relations pointing at it — UserRole.user (onDelete:
+  // Cascade, so a user's own role-assignment rows are cleaned up
+  // automatically), and Lead.assignedToUser / Complaint.assignedToUser /
+  // FormSubjectRoute.assignedUser (all onDelete: SetNull, so those records
+  // survive with the assignment simply cleared). Every other "who did this"
+  // field app-wide (createdBy, performedBy, actorName, etc.) is a plain
+  // string snapshot, not a real foreign key, so it is unaffected by this
+  // delete and continues to display the name/email as historical text.
+  // There is no RESTRICT relation anywhere that could make this throw at
+  // the database level.
+  async hardDelete(id: string, actingUserId?: string) {
+    await this.findOne(id);
+    // Same self-protection as remove()/update(): deleting your own account
+    // would log you out permanently with no way to undo it.
+    if (actingUserId && actingUserId === id) {
+      throw new BadRequestException(
+        'You cannot delete your own account. Ask another Administrator to do this, or use a different account.',
+      );
+    }
+    return this.prisma.user.delete({ where: { id } });
+  }
 }

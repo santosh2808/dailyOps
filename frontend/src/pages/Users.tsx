@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Plus, Pencil, Ban, CheckCircle2, KeyRound } from "lucide-react";
+import { Search, Plus, Pencil, Ban, CheckCircle2, KeyRound, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   createUser,
   deleteUser,
+  deleteUserPermanently,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -48,6 +49,7 @@ export default function Users() {
   const [disableOpen, setDisableOpen] = useState(false);
   const [enableOpen, setEnableOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<RbacUser | null>(null);
 
   const fetchUsers = useCallback(async () => {
@@ -107,6 +109,13 @@ export default function Users() {
     setResetOpen(true);
   }
 
+  // QA fix: "Delete User option is missing" — distinct from Disable above,
+  // this permanently removes the user record (see deleteUserPermanently()).
+  function openDeleteDialog(user: RbacUser) {
+    setSelected(user);
+    setDeleteOpen(true);
+  }
+
   async function handleFormSubmit(payload: UserPayload & { password?: string }) {
     if (selected) {
       await updateUser(selected.id, payload);
@@ -129,6 +138,13 @@ export default function Users() {
     if (!selected) return;
     await deleteUser(selected.id);
     toast.success(`User "${selected.name}" disabled.`);
+    await fetchUsers();
+  }
+
+  async function handleDeleteConfirm() {
+    if (!selected) return;
+    await deleteUserPermanently(selected.id);
+    toast.success(`User "${selected.name}" permanently deleted.`);
     await fetchUsers();
   }
 
@@ -268,6 +284,25 @@ export default function Users() {
                             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                           </Button>
                         )}
+                        {/* QA fix: "Delete User option is missing" — a
+                            genuinely permanent action, distinct from
+                            Disable above. Same self-protection as Disable:
+                            backend enforces this independently
+                            (users.service.ts hardDelete()) — this is just
+                            defense-in-depth. */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={
+                            user.id === currentUser?.id
+                              ? "You can't delete your own account"
+                              : "Delete user"
+                          }
+                          disabled={user.id === currentUser?.id}
+                          onClick={() => openDeleteDialog(user)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -350,6 +385,24 @@ export default function Users() {
         confirmingLabel="Enabling..."
         errorMessage="Could not enable this user. Please try again."
         onConfirm={handleEnableConfirm}
+      />
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete User"
+        description={
+          <>
+            Permanently delete{" "}
+            <span className="font-medium text-slate-900">{selected?.name}</span>? This
+            cannot be undone. Their role assignments will be removed, and any leads or
+            complaints assigned to them will be unassigned — all other records they
+            created remain unchanged.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmingLabel="Deleting..."
+        errorMessage="Could not delete this user. Please try again."
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

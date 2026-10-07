@@ -68,6 +68,17 @@ export class UsersController {
     return this.usersService.remove(id, req.user.id);
   }
 
+  // QA fix: "Delete User option is missing" — a distinct, permanent action
+  // from the soft-delete (Disable) route above. Same permission (User:
+  // Delete) since it's the same underlying capability, just a stronger
+  // version of it. ':id/permanent' rather than reusing DELETE ':id' so the
+  // existing Disable button/behavior is left completely unchanged.
+  @Delete(':id/permanent')
+  @RequirePermission('User', 'Delete')
+  hardDelete(@Param('id') id: string, @Req() req: any) {
+    return this.usersService.hardDelete(id, req.user.id);
+  }
+
   // Administrator action ("Reset Passwords") — distinct from the general
   // Edit endpoint above; general update() no longer accepts a password at
   // all (see UpdateUserDto). Always forces the target user to change their

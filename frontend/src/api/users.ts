@@ -77,6 +77,14 @@ export async function deleteUser(id: string) {
   return res.data;
 }
 
+// QA fix: "Delete User option is missing" — distinct from deleteUser()
+// above, which only disables (isActive: false). This permanently removes
+// the user record (see UsersService.hardDelete()).
+export async function deleteUserPermanently(id: string) {
+  const res = await api.delete<void>(`/api/v1/users/${id}/permanent`);
+  return res.data;
+}
+
 // Administrator action ("Reset Passwords") — distinct from updateUser().
 // Always forces the target user to change their password again on their
 // next login (see UsersService.resetPassword()).
