@@ -37,7 +37,7 @@ import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
+import { deleteLead, downloadLeadData, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -103,6 +103,10 @@ export default function LeadList() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  // QA fix (TC-074 re-fail): "Download Data" — separate loading state from
+  // Download Template above, since these are two independent buttons/
+  // requests now.
+  const [downloadingData, setDownloadingData] = useState(false);
 
   // Bulk delete — select-multiple checkboxes in the table, scoped to the
   // rows currently on screen (see the reset effect below for why selection
@@ -242,6 +246,23 @@ export default function LeadList() {
     }
   }
 
+  // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
+  // records as Excel, kept entirely separate from handleDownloadTemplate()
+  // above (that one must keep producing a blank template for import, not
+  // real data).
+  async function handleDownloadData() {
+    setDownloadingData(true);
+    try {
+      await downloadLeadData();
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to download lead data.");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setDownloadingData(false);
+    }
+  }
+
   return (
     <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
@@ -260,6 +281,16 @@ export default function LeadList() {
                   <Download className="mr-2 h-4 w-4" />
                 )}
                 {downloadingTemplate ? "Downloading..." : "Download Template"}
+              </Button>
+              {/* QA fix (TC-074 re-fail): separate, real data export —
+                  distinct from the blank import template above. */}
+              <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
+                {downloadingData ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {downloadingData ? "Downloading..." : "Download Data"}
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />

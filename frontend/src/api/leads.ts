@@ -207,6 +207,21 @@ export async function downloadLeadImportTemplate() {
   window.URL.revokeObjectURL(url);
 }
 
+// QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
+// records, distinct from downloadLeadImportTemplate() above (which only
+// ever produces a blank header row for uploading).
+export async function downloadLeadData() {
+  const res = await api.get("/api/v1/leads/export", { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "leads-export.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export async function previewLeadImport(file: File) {
   const formData = new FormData();
   formData.append("file", file);

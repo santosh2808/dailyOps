@@ -76,6 +76,20 @@ export class LeadsController {
     return this.leadsService.importLeads(dto);
   }
 
+  // QA fix (TC-074 re-fail): "Download Data" — distinct from the Import
+  // Template routes above (those always produce a blank header row for
+  // uploading, by design). Registered ahead of the ':id' route below (same
+  // route-order note as Materials Export) so 'export' is never mistaken
+  // for a lead id.
+  @Get('export')
+  @RequirePermission('Lead', 'View')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="leads-export.xlsx"')
+  async exportLeads(@Res() res: Response) {
+    const buffer = await this.leadsService.exportLeadsToExcel();
+    res.send(buffer);
+  }
+
   @Get(':id')
   @RequirePermission('Lead', 'View')
   findOne(@Param('id') id: string) {
