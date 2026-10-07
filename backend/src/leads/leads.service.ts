@@ -2083,19 +2083,30 @@ export class LeadsService {
     const phoneRaw = raw.phone?.trim() ?? '';
     // Some CSV/XLSX exports prefix numeric-looking cells with a leading
     // apostrophe (a text-format marker) so leading zeros/plus signs aren't
-    // reinterpreted as a number — strip that before normalizing, otherwise
-    // it gets swept up with the rest of the punctuation below and the
-    // country-code "+" that follows it is lost along with it.
+    // reinterpreted as a number — strip that before normalizing. Not
+    // strictly necessary for normalizePhone() itself (it discards every
+    // non-digit character anyway via \D), but keeps the debug log below
+    // readable.
     let phoneForNormalization = phoneRaw;
     if (phoneForNormalization.startsWith("'")) {
       phoneForNormalization = phoneForNormalization.slice(1).trim();
     }
-    const phoneHasCountryCode = phoneForNormalization.startsWith('+');
-    const phoneDigitsOnly = phoneForNormalization.replace(/\D/g, '');
-    const phoneNormalized = phoneHasCountryCode ? `+${phoneDigitsOnly}` : phoneDigitsOnly;
+    // QA re-fail: "Mobile number validation during Lead Import" — this used
+    // to normalize by hand and then accept 10-15 digits (optionally with a
+    // "+" country code), which let obviously-wrong 11-15 digit numbers
+    // through on import even though every other phone entry point in the
+    // app (CreateLeadDto.phone, Customer.phone — see phone.util.ts's own
+    // comment, TC-083/097) enforces a bare 10-digit Indian mobile number.
+    // Lead Import was simply never brought in line with that pass. Reuse
+    // the same shared normalizePhone() helper everywhere else already
+    // calls: it strips a +91/91/leading-0 prefix down to the bare 10
+    // digits, and returns null for anything that isn't 10/11/12 digits in
+    // one of those recognized shapes — including the over-length numbers
+    // this ticket is about.
+    const phoneNormalized = normalizePhone(phoneForNormalization);
     if (phoneRaw) {
       this.logger.debug(
-        `Import row ${rowNumber} phone normalization: original="${phoneRaw}" normalized="${phoneNormalized}"`,
+        `Import row ${rowNumber} phone normalization: original="${phoneRaw}" normalized="${phoneNormalized ?? '(invalid)'}"`,
       );
     }
     const city = raw.city?.trim() || undefined;
@@ -2113,10 +2124,10 @@ export class LeadsService {
     if (email && !isEmail(email)) {
       errors.push('Email must be a valid email address');
     }
-    if (phoneRaw && !/^\+?\d{10,15}$/.test(phoneNormalized)) {
-      errors.push('Phone must be 10-15 digits');
+    if (phoneRaw && !phoneNormalized) {
+      errors.push('Phone must be exactly 10 digits');
       this.logger.debug(
-        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must be 10-15 digits"`,
+        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" reason="Phone must be exactly 10 digits"`,
       );
     }
 
