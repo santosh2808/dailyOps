@@ -72,8 +72,8 @@ export class LeadsController {
 
   @Post('import')
   @RequirePermission('Lead', 'Create')
-  importLeads(@Body() dto: ImportLeadsDto) {
-    return this.leadsService.importLeads(dto);
+  importLeads(@Body() dto: ImportLeadsDto, @Req() req: any) {
+    return this.leadsService.importLeads(dto, req.user?.name);
   }
 
   // QA fix (TC-074 re-fail): "Download Data" — distinct from the Import

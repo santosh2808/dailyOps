@@ -1953,7 +1953,7 @@ export class LeadsService {
     return this.summarizeImportRows(rows);
   }
 
-  async importLeads(dto: ImportLeadsDto) {
+  async importLeads(dto: ImportLeadsDto, actorName?: string) {
     const rows: LeadImportRowResult[] = [];
     for (let i = 0; i < dto.rows.length; i++) {
       const input = dto.rows[i];
@@ -1974,6 +1974,7 @@ export class LeadsService {
           },
           input.row ?? i + 2,
           { insert: true },
+          actorName,
         ),
       );
     }
@@ -2120,6 +2121,7 @@ export class LeadsService {
     raw: LeadImportRowInput,
     rowNumber: number,
     options: { insert: boolean },
+    actorName?: string,
   ): Promise<LeadImportRowResult> {
     const companyName = raw.companyName?.trim() ?? '';
     const contactPerson = raw.contactPerson?.trim() ?? '';
@@ -2272,50 +2274,70 @@ export class LeadsService {
       return { ...base, result: 'valid' };
     }
 
-    const created = await this.createImportedLead(base);
+    const created = await this.createImportedLead(base, actorName);
     return { ...base, result: 'created', leadNumber: created.leadNumber };
   }
 
-  private async createImportedLead(row: {
-    companyName: string;
-    contactPerson: string;
-    email: string;
-    phone: string;
-    city?: string;
-    state?: string;
-    industry?: string;
-    source: LeadSource;
-    status: LeadStatus;
-    remarks?: string;
-  }) {
+  private async createImportedLead(
+    row: {
+      companyName: string;
+      contactPerson: string;
+      email: string;
+      phone: string;
+      city?: string;
+      state?: string;
+      industry?: string;
+      source: LeadSource;
+      status: LeadStatus;
+      remarks?: string;
+    },
+    actorName?: string,
+  ) {
     if (row.phone) {
       this.logger.debug(`Saving lead phone to database: final="${row.phone}"`);
     }
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
       try {
-        return await this.prisma.lead.create({
-          data: {
-            leadNumber,
-            companyName: row.companyName,
-            contactPerson: row.contactPerson,
-            email: row.email,
-            phone: row.phone,
-            city: row.city,
-            state: row.state,
-            industry: row.industry,
-            remarks: row.remarks,
-            source: row.source,
-            status: row.status,
-            // Imported leads have no natural "opportunity title" — the
-            // import template has no Title column, unlike the manual Create
-            // Lead form where it's required and user-authored. Defaulted
-            // from Company Name so the required `title` column is always
-            // populated with something meaningful, and is editable
-            // afterwards from the Lead Details/Edit page like any other
-            // lead.
-            title: `Imported Lead - ${row.companyName}`,
-          },
+        // QA fail: "Imported lead creation not recorded in Timeline" —
+        // the plain prisma.lead.create() below never logged a CREATED
+        // LeadHistory row the way create() (the manual Create Lead path)
+        // always has, so an imported lead's Timeline was simply empty
+        // forever after. Wrapped in a transaction (mirroring create()'s
+        // own create+logHistory pattern) so the lead and its first
+        // Timeline entry are always written together.
+        return await this.prisma.$transaction(async (tx) => {
+          const created = await tx.lead.create({
+            data: {
+              leadNumber,
+              companyName: row.companyName,
+              contactPerson: row.contactPerson,
+              email: row.email,
+              phone: row.phone,
+              city: row.city,
+              state: row.state,
+              industry: row.industry,
+              remarks: row.remarks,
+              source: row.source,
+              status: row.status,
+              // Imported leads have no natural "opportunity title" — the
+              // import template has no Title column, unlike the manual
+              // Create Lead form where it's required and user-authored.
+              // Defaulted from Company Name so the required `title`
+              // column is always populated with something meaningful,
+              // and is editable afterwards from the Lead Details/Edit
+              // page like any other lead.
+              title: `Imported Lead - ${row.companyName}`,
+            },
+          });
+          await this.logHistory(
+            tx,
+            created.id,
+            'CREATED',
+            `Lead ${created.leadNumber} created via Lead Import`,
+            actorName,
+          );
+          return created;
         });
       } catch (error) {
         if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) {
