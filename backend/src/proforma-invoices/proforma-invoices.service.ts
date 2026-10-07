@@ -317,6 +317,12 @@ export class ProformaInvoicesService {
 
   async updateStatus(id: string, dto: UpdateProformaInvoiceStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+    // Once cancelled, the Proforma Invoice is permanently locked
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'A cancelled Proforma Invoice cannot have its status changed.',
+      );
+    }
     const updated = await this.prisma.proformaInvoice.update({
       where: { id },
       data: { status: dto.status },

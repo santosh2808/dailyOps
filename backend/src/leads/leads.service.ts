@@ -438,6 +438,136 @@ export class LeadsService {
     };
   }
 
+  async exportLeads(query: QueryLeadDto): Promise<Buffer> {
+    const search = query.search?.trim();
+
+    const where: Prisma.LeadWhereInput = {
+      deletedAt: null,
+
+      ...(query.status ? { status: query.status } : {}),
+
+      ...(query.priority ? { priority: query.priority } : {}),
+
+      ...(query.source ? { source: query.source } : {}),
+
+      ...(query.assignedToUserId
+        ? { assignedToUserId: query.assignedToUserId }
+        : {}),
+
+      ...(query.state ? { state: query.state } : {}),
+
+      ...(query.dateFrom || query.dateTo
+        ? {
+          createdAt: {
+            ...(query.dateFrom
+              ? { gte: new Date(query.dateFrom) }
+              : {}),
+            ...(query.dateTo
+              ? { lte: new Date(query.dateTo) }
+              : {}),
+          },
+        }
+        : {}),
+
+      ...(search
+        ? {
+          OR: [
+            {
+              leadNumber: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              companyName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              contactPerson: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              phone: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              title: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        }
+        : {}),
+    };
+
+    const sortBy = SORTABLE_FIELDS.includes(
+      query.sortBy as (typeof SORTABLE_FIELDS)[number],
+    )
+      ? (query.sortBy as (typeof SORTABLE_FIELDS)[number])
+      : 'createdAt';
+
+    const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
+
+    const leads = await this.prisma.lead.findMany({
+      where,
+      orderBy: {
+        [sortBy]: sortOrder,
+      },
+      include: {
+        assignedToUser: {
+          select: ASSIGNED_TO_USER_SELECT,
+        },
+      },
+    });
+
+    const exportData = leads.map((lead) => ({
+      'Lead Number': lead.leadNumber,
+      'Company Name': lead.companyName,
+      'Contact Person': lead.contactPerson,
+      Email: lead.email,
+      Phone: lead.phone,
+      Title: lead.title,
+      State: lead.state,
+      Source: lead.source,
+      Status: lead.status,
+      Priority: lead.priority,
+      'Assigned To': lead.assignedToUser?.name ?? '',
+      'Estimated Value': lead.estimatedValue,
+      'Next Follow Up': lead.nextFollowUp,
+      'Expected Close Date': lead.expectedCloseDate,
+      'Created At': lead.createdAt,
+      'Updated At': lead.updatedAt,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'Leads',
+    );
+
+    return XLSX.write(workbook, {
+      type: 'buffer',
+      bookType: 'xlsx',
+    }) as Buffer;
+  }
+
   async findOne(id: string) {
     // Matches the Customer/Product convention: a direct lookup by id still
     // returns the record even if it has been soft-deleted; only the list
@@ -2024,10 +2154,10 @@ export class LeadsService {
     if (email && !isEmail(email)) {
       errors.push('Email must be a valid email address');
     }
-    if (phoneRaw && !/^\+?\d{10,15}$/.test(phoneNormalized)) {
-      errors.push('Phone must be 10-15 digits');
+    if (phoneRaw && !/^\d{10}$/.test(phoneNormalized)) {
+      errors.push('Phone must contain exactly 10 digits');
       this.logger.debug(
-        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must be 10-15 digits"`,
+        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must contain exactly 10 digits"`,
       );
     }
 

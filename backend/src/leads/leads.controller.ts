@@ -38,12 +38,23 @@ import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('api/v1/leads')
 export class LeadsController {
-  constructor(private leadsService: LeadsService) {}
+  constructor(private leadsService: LeadsService) { }
 
   @Get()
   @RequirePermission('Lead', 'View')
   findAll(@Query() query: QueryLeadDto) {
     return this.leadsService.findAll(query);
+  }
+  @Get('export')
+  @RequirePermission('Lead', 'View')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="leads-export.xlsx"')
+  async exportLeads(
+    @Query() query: QueryLeadDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.leadsService.exportLeads(query);
+    res.send(buffer);
   }
 
   // Lead Import. All three are multi-segment or otherwise structurally

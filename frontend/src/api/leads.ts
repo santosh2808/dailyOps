@@ -124,6 +124,22 @@ export async function listLeads(params: LeadListParams) {
   return res.data;
 }
 
+export async function exportLeads(params: Omit<LeadListParams, "page" | "limit">) {
+  const res = await api.get("/api/v1/leads/export", {
+    params,
+    responseType: "blob",
+  });
+
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "leads-export.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export async function getLead(id: string) {
   const res = await api.get<Lead>(`/api/v1/leads/${id}`);
   return res.data;
