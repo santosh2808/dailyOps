@@ -1051,6 +1051,7 @@ export class SalesOrdersService {
       grandTotal: number;
       installationCharge: number;
       transportationCharge: number;
+      pricesIncludeChargesAndGst: boolean;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
   ): void {
@@ -1081,7 +1082,19 @@ export class SalesOrdersService {
     // collected starting here, at Sales Order creation — so this freeze
     // must add gstAmount back on top of the Quotation's (GST-less)
     // grandTotal, not just copy it verbatim like before.
-    totals.grandTotal = Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
+    //
+    // QA bug fix (Sales Order Grand Total mismatch): the line above used to
+    // run unconditionally, which double-counted GST whenever the Quotation
+    // had pricesIncludeChargesAndGst set — in that mode,
+    // QuotationsService.computeTotals() already folds GST into grandTotal
+    // and only reports gstAmount as an informational back-calculated figure
+    // (see its own comment: "GST is shown as the amount already embedded in
+    // the subtotal... not an additional line"). Adding it again here
+    // inflated the Sales Order's Grand Total above the actual accepted
+    // price.
+    totals.grandTotal = quotation.pricesIncludeChargesAndGst
+      ? quotation.grandTotal
+      : Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
 
     const lineTotalSum = quotation.items.reduce((sum, qi) => sum + qi.lineTotal, 0);
     totals.items = totals.items.map((item) => {

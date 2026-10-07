@@ -150,7 +150,16 @@ export default function SalesOrderForm() {
             productName: item.product?.name ?? "Unknown product",
             description: item.description ?? undefined,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            // QA bug fix (Sales Order Grand Total mismatch FAIL): this used
+            // to be the quotation item's raw unitPrice, which excludes its
+            // per-unit colour/hanging-structure charge (folded into
+            // lineTotal instead — see QuotationsService.computeTotals()).
+            // Seeding the row with the effective (charge-inclusive) unit
+            // price instead keeps this row's own total correct, and makes
+            // the Grand Total preview below correct for it too whenever the
+            // item is left unmodified.
+            unitPrice:
+              item.quantity > 0 ? Math.round((item.lineTotal / item.quantity) * 100) / 100 : item.unitPrice,
             discount: 0,
           }))
         );
@@ -369,19 +378,6 @@ export default function SalesOrderForm() {
     }
   }
 
-  const subtotal = computeSubtotal(items);
-  const itemDiscountSum = computeItemDiscountTotal(items);
-  const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
-  const tax = Math.max(0, subtotal - itemDiscountSum) * (gstPercentNum / 100);
-  // QA bug fix (SC-004): mirrors SalesOrdersService.computeTotals()'s own
-  // clamp — validate() already stops any single line's discount from
-  // exceeding that line's own amount before submit, but the SUM across
-  // lines could still exceed subtotal+tax if several lines are discounted
-  // generously at once. Clamping here keeps this preview (and the Grand
-  // Total below) from ever showing a negative figure the backend wouldn't
-  // actually save.
-  const totalDiscount = Math.min(Math.max(0, itemDiscountSum), subtotal + tax);
-
   // Bug fix (QA: "Quotation -> Sales Order" charge breakdown FAIL) — this
   // preview used to sum items + GST only, silently leaving out
   // Installation/Transportation entirely, so it showed a Grand Total far
@@ -399,9 +395,47 @@ export default function SalesOrderForm() {
       const qi = quotation.items?.find((q) => q.productId === item.productId);
       return !!qi && qi.quantity === item.quantity && (item.discount ?? 0) === 0;
     });
+
+  // QA bug fix (Sales Order Grand Total mismatch FAIL): when unmodified,
+  // read the quotation's own authoritative subtotal/GST/Grand Total instead
+  // of recomputing them here — re-deriving GST locally missed that it's
+  // calculated on subtotal+installation+transportation, not subtotal alone
+  // (see QuotationsService.computeTotals()), which understated tax even
+  // after the per-item colour/hanging-structure charge fix above. Reading
+  // the quotation's own numbers keeps this preview correct without having
+  // to keep two copies of that formula in sync. Falls back to the same
+  // from-scratch computation as before whenever the order has actually
+  // been modified (SalesOrdersService.computeTotals()'s own behavior for a
+  // modified order doesn't carry installation/transportation forward
+  // either, so this preview doesn't either).
+  const subtotal = matchesQuotationExactly ? quotation!.subtotal : computeSubtotal(items);
+  const itemDiscountSum = computeItemDiscountTotal(items);
+  const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
+  const tax = matchesQuotationExactly
+    ? quotation!.gstAmount
+    : Math.max(0, subtotal - itemDiscountSum) * (gstPercentNum / 100);
+  // QA bug fix (SC-004): mirrors SalesOrdersService.computeTotals()'s own
+  // clamp — validate() already stops any single line's discount from
+  // exceeding that line's own amount before submit, but the SUM across
+  // lines could still exceed subtotal+tax if several lines are discounted
+  // generously at once. Clamping here keeps this preview (and the Grand
+  // Total below) from ever showing a negative figure the backend wouldn't
+  // actually save.
+  const totalDiscount = matchesQuotationExactly
+    ? 0
+    : Math.min(Math.max(0, itemDiscountSum), subtotal + tax);
+
   const installationCharge = matchesQuotationExactly ? quotation!.installationCharge : 0;
   const transportationCharge = matchesQuotationExactly ? quotation!.transportationCharge : 0;
-  const grandTotal = subtotal - totalDiscount + tax + installationCharge + transportationCharge;
+  // Mirrors SalesOrdersService.freezeToQuotationTotalsIfUnmodified()'s own
+  // pricesIncludeChargesAndGst branch — that flag means the quotation's
+  // grandTotal already includes GST, so adding quotation.gstAmount again
+  // here would double-count it, same bug just fixed backend-side.
+  const grandTotal = matchesQuotationExactly
+    ? quotation!.pricesIncludeChargesAndGst
+      ? quotation!.grandTotal
+      : Math.round((quotation!.grandTotal + quotation!.gstAmount) * 100) / 100
+    : subtotal - totalDiscount + tax + installationCharge + transportationCharge;
 
   return (
     <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
