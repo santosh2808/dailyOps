@@ -311,6 +311,12 @@ export class TaxInvoicesService {
 
   async updateStatus(id: string, dto: UpdateTaxInvoiceStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+    // Once cancelled, the Tax Invoice is permanently locked
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'A cancelled Tax Invoice cannot have its status changed.',
+      );
+    }
     const updated = await this.prisma.taxInvoice.update({
       where: { id },
       data: { status: dto.status },
