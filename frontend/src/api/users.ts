@@ -5,6 +5,8 @@ export interface UserListParams {
   page?: number;
   limit?: number;
   search?: string;
+  // QA fix: Departments -> Users navigation filter. See QueryUserDto.
+  departmentId?: string;
 }
 
 // roleIds / departmentId here are also how the Role Assignment and

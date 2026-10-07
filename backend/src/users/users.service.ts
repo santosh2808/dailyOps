@@ -97,15 +97,22 @@ export class UsersService {
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { username: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    // QA fix: Departments -> Users navigation filter (departmentId). Built
+    // alongside the existing `search` OR-clause rather than replacing it, so
+    // a department-filtered Users link still honors a search term typed on
+    // top of it.
+    const where = {
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { email: { contains: search, mode: 'insensitive' as const } },
+              { username: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+    };
 
     return Promise.all([
       this.prisma.user.findMany({
