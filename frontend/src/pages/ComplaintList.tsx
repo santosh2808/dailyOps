@@ -18,6 +18,7 @@ import ComplaintFiltersBar, {
   type ComplaintFilters,
 } from "@/components/complaints/ComplaintFiltersBar";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
@@ -61,12 +62,17 @@ export default function ComplaintList() {
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(20);
-  const [filters, setFilters] = useState<ComplaintFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. Dashboard's Open Complaints KPI
+  // linking to /complaints?status=OPEN) always takes precedence over a
+  // remembered one.
+  const hasUrlFilterParams = searchParams.has("status");
+  const [filters, setFilters] = useSessionFilters<ComplaintFilters>(
+    "dailyops.filters.complaints",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyComplaintFilters,
   );
-  const [debouncedFilters, setDebouncedFilters] = useState<ComplaintFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
-  );
+  const [debouncedFilters, setDebouncedFilters] = useState<ComplaintFilters>(filters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);

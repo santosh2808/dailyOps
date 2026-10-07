@@ -33,6 +33,7 @@ import {
 } from "@/api/suppliers";
 import type { Supplier } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -46,8 +47,16 @@ export default function SupplierList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<SupplierFilters>(emptySupplierFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<SupplierFilters>(emptySupplierFilters);
+  // Sticky filters (persisted per browser tab via sessionStorage) — this
+  // page has no URL-filter-param convention (no Dashboard link lands here
+  // with a filter preapplied), so initialFromUrl is always null and
+  // sessionStorage/default decide the initial value.
+  const [filters, setFilters] = useSessionFilters<SupplierFilters>(
+    "dailyops.filters.suppliers",
+    null,
+    emptySupplierFilters,
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<SupplierFilters>(filters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 

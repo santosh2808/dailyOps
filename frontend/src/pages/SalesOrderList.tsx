@@ -18,6 +18,7 @@ import SalesOrderFiltersBar, {
   type SalesOrderFilters,
 } from "@/components/sales-orders/SalesOrderFiltersBar";
 import DeleteSalesOrderConfirmDialog from "@/components/sales-orders/DeleteSalesOrderConfirmDialog";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
@@ -75,12 +76,23 @@ export default function SalesOrderList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<SalesOrderFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /sales-orders?status=READY_FOR_DISPATCH) always takes precedence over a
+  // remembered one.
+  const hasUrlFilterParams =
+    searchParams.has("status") ||
+    searchParams.has("dateFrom") ||
+    searchParams.has("dateTo") ||
+    searchParams.has("customerState") ||
+    searchParams.has("createdBy") ||
+    searchParams.has("productId");
+  const [filters, setFilters] = useSessionFilters<SalesOrderFilters>(
+    "dailyops.filters.salesOrders",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptySalesOrderFilters,
   );
-  const [debouncedFilters, setDebouncedFilters] = useState<SalesOrderFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
-  );
+  const [debouncedFilters, setDebouncedFilters] = useState<SalesOrderFilters>(filters);
   const [sortBy, setSortBy] = useState<SortableColumn>("orderDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

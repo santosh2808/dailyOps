@@ -26,6 +26,7 @@ import LeadStatusBadge from "@/components/leads/LeadStatusBadge";
 import AiStatusBadge from "@/components/leads/AiStatusBadge";
 import AiQualificationBadge from "@/components/leads/AiQualificationBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
@@ -76,12 +77,17 @@ export default function LeadList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<LeadFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /leads?status=QUALIFIED) always takes precedence over a remembered one.
+  const hasUrlFilterParams =
+    searchParams.has("status") || searchParams.has("assignedToUserId") || searchParams.has("state");
+  const [filters, setFilters] = useSessionFilters<LeadFilters>(
+    "dailyops.filters.leads",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyLeadFilters,
   );
-  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
-  );
+  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(filters);
   // Request: leads should list "in sequence based on date uploaded" —
   // default sort is now createdAt desc (most recently uploaded/created
   // first) instead of Lead No., since Lead No. is no longer a reliable
