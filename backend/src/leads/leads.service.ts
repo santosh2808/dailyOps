@@ -883,13 +883,22 @@ export class LeadsService {
             changedBy: actorName,
           },
         });
-        await this.logHistory(
-          tx,
-          id,
-          'STATUS_CHANGED',
-          `Status changed from ${existing.status} to ${dto.status}`,
-          actorName,
-        );
+        // QA fix: "Remarks not reflected after Lead status update" — a
+        // remark entered in ChangeStatusDialog.tsx was already being saved
+        // onto the LeadStatusHistory row above (dto.remarks), but neither
+        // the Timeline (getHistory(), which only ever shows what
+        // logHistory() itself writes) nor Notes (a completely separate
+        // LeadNote table, never touched by this method) ever surfaced it —
+        // so it was invisible anywhere in the UI despite being in the
+        // database. Folding it into this description (same "stash extra
+        // context in the description string" convention used by EDITED/
+        // FOLLOWUP_ADDED elsewhere in this file) makes it show up in the
+        // Timeline, which both status-history detail and the general
+        // Timeline tab read from.
+        const statusChangeDescription = dto.remarks?.trim()
+          ? `Status changed from ${existing.status} to ${dto.status} — Remark: ${dto.remarks.trim()}`
+          : `Status changed from ${existing.status} to ${dto.status}`;
+        await this.logHistory(tx, id, 'STATUS_CHANGED', statusChangeDescription, actorName);
       }
 
       return updated;
