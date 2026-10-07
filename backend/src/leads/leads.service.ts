@@ -1967,8 +1967,50 @@ export class LeadsService {
   // as a React list key on the frontend — see previewLeadImport()/
   // importLeads(), which still just do `rawRows[i]` / `i + 2` over the
   // flattened array this returns.
+  // QA re-fail (TC-098): "Meta Lead Localization" — marketing exports leads
+  // from Meta Ads Manager as CSV and imports that file here via Lead
+  // Import. A real .xlsx/.xls upload is a binary zip/OLE container, so
+  // XLSX.read(buffer, {type:'buffer'}) always decodes its cell text
+  // correctly regardless of language. A CSV upload has no such container —
+  // it's just raw text bytes — and SheetJS's CSV parser only recognizes
+  // UTF-8 when the file starts with a UTF-8 BOM (EF BB BF); lacking one (the
+  // common case for Meta's export, and most CSV tools), it falls back to
+  // decoding byte-by-byte as Latin-1, turning multi-byte UTF-8 sequences
+  // (any Hindi/Tamil/Telugu/etc. name) into mojibake — reproduced directly
+  // with XLSX.read() on a BOM-less UTF-8 CSV buffer containing Hindi text.
+  // Fix: sniff whether the upload is actually a binary spreadsheet
+  // container (zip "PK" magic for .xlsx, OLE "D0 CF 11 E0" for legacy
+  // .xls) and only use the raw-buffer path for those. Anything else is
+  // treated as plain text, decoded as UTF-8 by Node itself (which doesn't
+  // depend on a BOM), and handed to XLSX.read as an already-decoded string
+  // (type: 'string') — this bypasses SheetJS's own BOM-dependent sniffing
+  // entirely, so a BOM-less UTF-8 CSV now decodes correctly too.
+  private readImportWorkbook(buffer: Buffer): XLSX.WorkBook {
+    const isZipContainer = buffer.length >= 4 && buffer.subarray(0, 2).toString('latin1') === 'PK';
+    const isLegacyOleContainer =
+      buffer.length >= 4 &&
+      buffer[0] === 0xd0 &&
+      buffer[1] === 0xcf &&
+      buffer[2] === 0x11 &&
+      buffer[3] === 0xe0;
+
+    if (isZipContainer || isLegacyOleContainer) {
+      return XLSX.read(buffer, { type: 'buffer' });
+    }
+
+    // Node's Buffer#toString('utf8') decodes the bytes correctly either way,
+    // but — unlike XLSX.read's own BOM handling on the raw-buffer path — it
+    // leaves a leading U+FEFF (the BOM, if the file happened to have one) in
+    // the resulting string, which would otherwise get stuck onto the first
+    // header cell (e.g. "﻿Contact Person", silently failing to match
+    // LEAD_IMPORT_COLUMN_MAP). Strip it so both BOM and non-BOM UTF-8 CSVs
+    // parse identically.
+    const text = buffer.toString('utf8').replace(/^﻿/, '');
+    return XLSX.read(text, { type: 'string' });
+  }
+
   private parseImportFile(buffer: Buffer): LeadImportRowInput[] {
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const workbook = this.readImportWorkbook(buffer);
     if (workbook.SheetNames.length === 0) {
       throw new BadRequestException('The uploaded file has no worksheets');
     }
