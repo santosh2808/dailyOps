@@ -1384,6 +1384,12 @@ export interface Complaint {
       status: ProformaInvoiceStatus;
     }[];
   };
+  // QA fix (JEO Number field): the Job Execution Order staff pick on the Log
+  // Complaint form — salesOrderId/salesOrder above are derived from it
+  // server-side and kept only for the paths noted on the backend schema's
+  // Complaint.jeoId comment.
+  jeoId?: string | null;
+  jeo?: { id: string; jeoNumber: string } | null;
   subject: string;
   description?: string | null;
   status: ComplaintStatus;

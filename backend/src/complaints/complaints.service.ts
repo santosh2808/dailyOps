@@ -64,6 +64,11 @@ const COMPLAINT_DETAIL_INCLUDE = {
   webFormIntake: {
     select: { id: true, referenceNumber: true, subjectLabel: true, submittedData: true, createdAt: true },
   },
+  // Additive (JEO Number field): the Job Execution Order the complaint was
+  // logged against — now the primary identifying field on the Log
+  // Complaint form (see CreateComplaintDto.jeoId); salesOrder above is kept
+  // for the reasons noted on the schema's own Complaint.jeoId comment.
+  jeo: { select: { id: true, jeoNumber: true } },
   taxInvoice: { select: { id: true, invoiceNumber: true, invoiceDate: true } },
   // Bug fix (TC-043): "warranty" isn't a computable field anywhere in this
   // schema — Product.technicalSpec only ever carries it as free descriptive
@@ -215,6 +220,10 @@ export class ComplaintsService {
               { description: { contains: search, mode: 'insensitive' } },
               { taxInvoice: { invoiceNumber: { contains: search, mode: 'insensitive' } } },
               { webFormIntake: { referenceNumber: { contains: search, mode: 'insensitive' } } },
+              // QA fix (JEO Number field): the JEO Number is now the
+              // primary identifier staff pick a complaint's Sales Order by,
+              // so it needs to be searchable here too.
+              { jeo: { jeoNumber: { contains: search, mode: 'insensitive' } } },
             ],
           }
         : {}),
@@ -405,7 +414,18 @@ export class ComplaintsService {
   }
 
   async create(dto: CreateComplaintDto, createdBy?: string) {
-    const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: dto.salesOrderId } });
+    // QA fix ("Sales Order field should be replaced with JEO Number"): staff
+    // now pick the JEO the complaint is about — salesOrderId is derived from
+    // it, never accepted directly (see CreateComplaintDto.jeoId). A JEO has
+    // no deletedAt/soft-delete of its own (see its schema comment), but the
+    // Sales Order it was generated from can still have been soft-deleted
+    // since, so that's checked the same way the old direct salesOrderId
+    // lookup did.
+    const jeo = await this.prisma.jobExecutionOrder.findUnique({ where: { id: dto.jeoId } });
+    if (!jeo) {
+      throw new NotFoundException('Job Execution Order not found');
+    }
+    const salesOrder = await this.prisma.salesOrder.findUnique({ where: { id: jeo.salesOrderId } });
     if (!salesOrder || salesOrder.deletedAt) {
       throw new NotFoundException('Sales Order not found');
     }
@@ -417,7 +437,8 @@ export class ComplaintsService {
           const complaint = await tx.complaint.create({
             data: {
               complaintNumber,
-              salesOrderId: dto.salesOrderId,
+              jeoId: dto.jeoId,
+              salesOrderId: salesOrder.id,
               subject: dto.subject,
               description: dto.description,
               createdBy,

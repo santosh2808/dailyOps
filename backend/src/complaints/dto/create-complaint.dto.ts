@@ -6,9 +6,15 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-valid
 // Lead.leadNumber / Supplier.supplierCode. status also isn't settable here —
 // every complaint starts OPEN; use PATCH /:id/status to move it along.
 export class CreateComplaintDto {
-  @ApiProperty({ description: 'The Sales Order this complaint is about (customer and invoice are derived from it)' })
+  // QA fix ("Sales Order field should be replaced with JEO Number"): staff
+  // pick the Job Execution Order the complaint is about, not the Sales
+  // Order directly — ComplaintsService.create() resolves this JEO and
+  // derives salesOrderId from jeo.salesOrderId automatically. salesOrderId
+  // itself is no longer accepted here (see UpdateComplaintDto for why it
+  // also can't be changed from the Edit form).
+  @ApiProperty({ description: 'The Job Execution Order this complaint is about (Sales Order, customer and invoice are all derived from it)' })
   @IsUUID()
-  salesOrderId: string;
+  jeoId: string;
 
   @ApiProperty({ example: 'Fan making unusual noise after installation' })
   @IsString()

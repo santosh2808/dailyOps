@@ -1389,6 +1389,16 @@ model Complaint {
   complaintNumber String          @unique
   salesOrderId    String?
   salesOrder      SalesOrder?     @relation(fields: [salesOrderId], references: [id])
+  // QA fix (JEO Number field): staff now pick the Job Execution Order the
+  // complaint is about, not the Sales Order directly — salesOrderId above
+  // is derived automatically from jeo.salesOrderId at create() time and
+  // kept (not removed) because several existing paths have no other way to
+  // reach the customer (see ComplaintsService.sendComplaintLoggedConfirmation()
+  // and the search/warranty/display paths that read complaint.salesOrder).
+  // Nullable for the same reason salesOrderId is: a web-form-originated
+  // complaint (source WEB_FORM) has neither a Sales Order nor a JEO yet.
+  jeoId              String?
+  jeo                JobExecutionOrder? @relation(fields: [jeoId], references: [id], onDelete: SetNull)
   subject         String
   description     String?
   status          ComplaintStatus @default(OPEN)
@@ -1474,6 +1484,7 @@ model Complaint {
 
   @@index([status])
   @@index([salesOrderId])
+  @@index([jeoId])
   @@index([deletedAt])
   @@index([source])
   @@index([sourceWebsiteId])
@@ -1922,6 +1933,11 @@ model JobExecutionOrder {
   // these are plain arrays, not enforced 1:1.
   proformaInvoices ProformaInvoice[]
   taxInvoices      TaxInvoice[]
+
+  // Additive: QA fix (JEO Number field) — back-relation for Complaint.jeoId.
+  // A single JEO can in principle have more than one complaint raised
+  // against it over its lifetime, so this is a plain array, not 1:1.
+  complaints Complaint[]
 
   @@index([status])
   @@index([priority])

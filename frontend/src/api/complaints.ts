@@ -33,7 +33,10 @@ export interface ComplaintListParams {
 // server-side (ComplaintsService.generateComplaintNumber()), same
 // convention as Supplier.supplierCode / Lead.leadNumber.
 export interface ComplaintPayload {
-  salesOrderId: string;
+  // QA fix (JEO Number field): replaces salesOrderId as the field staff pick
+  // on the Log Complaint form — the backend derives salesOrderId from this
+  // JEO automatically (see ComplaintsService.create()).
+  jeoId: string;
   subject: string;
   description?: string;
   // Bug fix (TC-042/TC-048): optional, create-only (see ComplaintForm) —
@@ -99,7 +102,7 @@ export async function createComplaint(payload: ComplaintPayload) {
   return res.data;
 }
 
-export async function updateComplaint(id: string, payload: Partial<Omit<ComplaintPayload, "salesOrderId">>) {
+export async function updateComplaint(id: string, payload: Partial<Omit<ComplaintPayload, "jeoId">>) {
   const res = await api.patch<Complaint>(`/api/v1/complaints/${id}`, payload);
   return res.data;
 }
