@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { LeadHistoryAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -250,7 +251,7 @@ export class UsersService {
     return candidate;
   }
 
-  async update(id: string, dto: UpdateUserDto, actingUserId?: string) {
+  async update(id: string, dto: UpdateUserDto, actingUserId?: string, actorName?: string) {
     await this.findOne(id);
 
     // QA fix (AD-003): an Administrator (or anyone) must not be able to
@@ -289,7 +290,7 @@ export class UsersService {
       if (dto.roleIds) {
         await tx.userRole.deleteMany({ where: { userId: id } });
       }
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id },
         data: {
           ...(dto.name ? { name: dto.name.trim() } : {}),
@@ -304,6 +305,13 @@ export class UsersService {
         },
         include: USER_LIST_INCLUDE,
       });
+      // QA fix: "Lead remains assigned to deactivated user" — this general
+      // Edit endpoint can disable a user the same way remove() below does
+      // (isActive: false), so it needs the same cascade.
+      if (dto.isActive === false) {
+        await this.unassignLeadsFromDeactivatedUser(tx, id, actorName);
+      }
+      return updated;
     });
   }
 
@@ -341,7 +349,7 @@ export class UsersService {
     });
   }
 
-  async remove(id: string, actingUserId?: string) {
+  async remove(id: string, actingUserId?: string, actorName?: string) {
     await this.findOne(id);
     // QA fix (AD-003): the Users list's Disable action calls this route
     // (DELETE, soft-delete) — block an Administrator from disabling their
@@ -356,7 +364,51 @@ export class UsersService {
     // Soft delete (disable), same isActive convention as
     // Customer/Product/Material — never a hard delete, so audit/history
     // (createdBy, UserRole assignment history) is preserved.
-    return this.prisma.user.update({ where: { id }, data: { isActive: false } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({ where: { id }, data: { isActive: false } });
+      // QA fix: "Lead remains assigned to deactivated user" — see
+      // unassignLeadsFromDeactivatedUser() below for the full rationale.
+      await this.unassignLeadsFromDeactivatedUser(tx, id, actorName);
+      return updated;
+    });
+  }
+
+  // QA fix: "Lead remains assigned to deactivated user" — before this,
+  // disabling a user (via either remove() above or update()'s isActive:
+  // false path) only ever flipped User.isActive; every Lead still
+  // pointing at them via assignedToUserId kept showing that now-inactive
+  // user's name as Assignee forever after, even though the assignable-user
+  // picker (findAssignable() below) already excludes inactive users from
+  // new assignments. Unassigns (sets assignedToUserId: null) rather than
+  // auto-reassigning to another active user, since there's no defined
+  // business rule for which user that should be — "Unassigned" is exactly
+  // how a never-assigned lead already renders on both LeadDetails.tsx and
+  // LeadList.tsx (both already fall back to "Unassigned" whenever
+  // assignedToUserId is null), so this requires zero frontend changes. A
+  // human can then deliberately re-assign the lead to a real active user.
+  // Logs a LeadHistory 'ASSIGNED' entry per affected lead, same action
+  // value/convention LeadsService.update() uses for ordinary reassignment,
+  // so the Timeline reflects why the lead became Unassigned.
+  private async unassignLeadsFromDeactivatedUser(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    actorName?: string,
+  ) {
+    const affectedLeads = await tx.lead.findMany({
+      where: { assignedToUserId: userId },
+      select: { id: true },
+    });
+    for (const { id: leadId } of affectedLeads) {
+      await tx.lead.update({ where: { id: leadId }, data: { assignedToUserId: null } });
+      await tx.leadHistory.create({
+        data: {
+          leadId,
+          action: LeadHistoryAction.ASSIGNED,
+          description: 'Unassigned automatically — previously assigned user was deactivated',
+          performedBy: actorName,
+        },
+      });
+    }
   }
 
   // QA fix: "Delete User option is missing" — remove() above only ever
