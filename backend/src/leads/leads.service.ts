@@ -1980,16 +1980,24 @@ export class LeadsService {
     return this.summarizeImportRows(rows);
   }
 
-  // Case-insensitive, whitespace-trimmed match of a workbook tab's own name
-  // against INDIA_STATES (the same list Customer.state/Lead.state are
-  // validated against elsewhere) — e.g. a tab literally named "telangana"
-  // or " Telangana " still resolves. A tab whose name doesn't match any
-  // recognized state (the default "Leads"/"Sheet1", a region name, a typo,
-  // ...) returns undefined and that sheet's rows keep whatever their own
-  // State column says, exactly like a single-sheet import always has.
-  private resolveSheetState(sheetName: string): string | undefined {
-    const normalized = sheetName.trim().toLowerCase();
+  // Case-insensitive, whitespace-trimmed match of a value against
+  // INDIA_STATES (the same list Customer.state/Lead.state are validated
+  // against elsewhere) — e.g. "telangana" or " Telangana " still resolves,
+  // returning the list's own canonical casing. A value that doesn't match
+  // any recognized state (a typo, a region name, ...) returns undefined.
+  // Shared by resolveSheetState() (a workbook tab's own name) and
+  // classifyImportRow()'s own State-column validation below.
+  private matchIndiaState(value: string): string | undefined {
+    const normalized = value.trim().toLowerCase();
     return INDIA_STATES.find((s) => s.toLowerCase() === normalized);
+  }
+
+  // A tab whose name doesn't match any recognized state (the default
+  // "Leads"/"Sheet1", a region name, a typo, ...) returns undefined and
+  // that sheet's rows keep whatever their own State column says, exactly
+  // like a single-sheet import always has.
+  private resolveSheetState(sheetName: string): string | undefined {
+    return this.matchIndiaState(sheetName);
   }
 
   // Multi-sheet import: sales teams keep one tab per state in the same
@@ -2146,7 +2154,22 @@ export class LeadsService {
       );
     }
     const city = raw.city?.trim() || undefined;
-    const state = raw.state?.trim() || undefined;
+    // QA fail: "State validation during Lead Import" — this used to accept
+    // any text verbatim with no validation at all, even though the Create
+    // Lead form requires State and restricts it to INDIA_STATES (see
+    // create-lead.dto.ts's @IsIn(INDIA_STATES)). An invalid/misspelled State
+    // ("Maharastra") imported clean, and since Lead.state carries straight
+    // through onto Customer.state at conversion (see convertToCustomer()),
+    // the bad value propagated there too with no way to catch it. Reuses
+    // the same case/whitespace-insensitive matchIndiaState() lookup
+    // resolveSheetState() already uses for a tab's own name, so "Telangana",
+    // "telangana", and " Telangana " all resolve to the list's own
+    // canonical casing. State is still optional on import (unlike the
+    // manual Create Lead form) — a blank cell is left blank, matching every
+    // other import column's "no field is mandatory" rule above; only a
+    // non-blank value that doesn't match a recognized state is rejected.
+    const stateRaw = raw.state?.trim() || undefined;
+    const state = stateRaw ? this.matchIndiaState(stateRaw) : undefined;
     const industry = raw.industry?.trim() || undefined;
     const remarks = raw.remarks?.trim() || undefined;
 
@@ -2164,6 +2187,12 @@ export class LeadsService {
       errors.push('Phone must be exactly 10 digits');
       this.logger.debug(
         `Import row ${rowNumber} phone rejected: original="${phoneRaw}" reason="Phone must be exactly 10 digits"`,
+      );
+    }
+    if (stateRaw && !state) {
+      errors.push(`Unrecognized State: "${stateRaw}"`);
+      this.logger.debug(
+        `Import row ${rowNumber} state rejected: original="${stateRaw}" reason="not in INDIA_STATES"`,
       );
     }
 
