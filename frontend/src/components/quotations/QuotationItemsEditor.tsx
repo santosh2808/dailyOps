@@ -112,16 +112,25 @@ export default function QuotationItemsEditor({
     });
   }
 
-  // QA bug-fix pass (TC-090): the main row used to show every field
-  // (including Description) inline, which crowded it on narrower screens.
-  // Description now lives in a per-row expandable detail area instead —
-  // same Set<string>-keyed-by-productId convention as
-  // customColorProductIds above, so it survives rows being added/removed
-  // above it. Rows that already have a Description filled in (loaded from
-  // a saved quotation) start expanded so existing data is never hidden by
-  // surprise — mirrors ProductFormDialog's hasAdvancedData() auto-open.
+  // QA bug-fix pass (TC-090), later re-failed: the main row used to show
+  // every field (including Description) inline, which crowded it on
+  // narrower screens. All per-product detail fields (Description, Color,
+  // Hanging Structure) now live in a per-row expandable detail area
+  // instead, toggled by the chevron — same Set<string>-keyed-by-productId
+  // convention as customColorProductIds above, so it survives rows being
+  // added/removed above it.
+  //
+  // The re-fail: expected behavior is "items remain expanded by default,
+  // collapse only when the user chooses to" — the original fix only
+  // auto-expanded rows that already had a saved Description, so every
+  // other row (including every newly-added one) opened collapsed, and the
+  // Color/Hanging Structure block was unconditionally visible regardless
+  // of the chevron, so collapsing never actually hid it. Both fixed here:
+  // every row starts expanded (addProduct() below adds new rows to this
+  // set too), and the whole detail block — not just Description — is
+  // gated on isExpanded.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(
-    () => new Set(value.filter((row) => row.description?.trim()).map((row) => row.productId)),
+    () => new Set(value.map((row) => row.productId)),
   );
 
   function toggleExpanded(productId: string) {
@@ -164,6 +173,9 @@ export default function QuotationItemsEditor({
         unitPrice: product?.price ?? 0,
       },
     ]);
+    // QA re-fail (TC-090): new rows must start expanded like every other
+    // row — see the expandedRows comment above.
+    setExpandedRows((prev) => new Set(prev).add(pendingProductId));
     setPendingProductId("");
   }
 
@@ -335,8 +347,13 @@ export default function QuotationItemsEditor({
                       </TableCell>
                     </TableRow>
                   )}
-                  {/* Color / Hanging Structure — always visible per item, not
-                      hidden behind a toggle, so it isn't easy to miss. */}
+                  {/* QA re-fail (TC-090): this used to render unconditionally
+                      regardless of the chevron, so "collapsing" a row never
+                      actually hid it — the expected behavior is that
+                      collapsing leaves only the main row (Product/Qty/Unit
+                      Price/Line Total/Delete) visible. Now gated on
+                      isExpanded, same as the Description block above. */}
+                  {isExpanded && (
                   <TableRow>
                     <TableCell colSpan={6} className="bg-slate-50 py-3">
                       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -494,6 +511,7 @@ export default function QuotationItemsEditor({
                       </div>
                     </TableCell>
                   </TableRow>
+                  )}
                 </Fragment>
               );
             })}
