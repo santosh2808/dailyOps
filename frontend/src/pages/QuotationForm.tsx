@@ -513,7 +513,19 @@ export default function QuotationForm() {
               <Spinner /> Loading quotation...
             </p>
           ) : (
-            <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-6">
+            <form
+              onSubmit={handleSubmit}
+              // QA re-fail (TC-092): noValidate disables the browser's own
+              // submit-time constraint validation (the native "Please enter
+              // a valid value" popup a step mismatch would otherwise throw
+              // now that the Unit Price field's step={10000} is restored in
+              // QuotationItemsEditor.tsx) — this form already does its own
+              // validate()/handleSubmit() checks, so the native validator
+              // was only ever getting in the way, never adding a real
+              // safeguard.
+              noValidate
+              className="mx-auto max-w-4xl space-y-6"
+            >
               {/* Bug fix (TC-025/TC-075): see existingSentInfo's own comment
                   above — warn before editing, since changes made here won't
                   reach the customer's already-sent copy until resent. */}

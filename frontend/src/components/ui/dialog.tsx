@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,10 +18,51 @@ interface DialogProps {
   overlayClassName?: string;
 }
 
+// See the inert-toggling effect inside Dialog below.
+let openDialogCount = 0;
+
 function Dialog({ open, onOpenChange, children, overlayClassName }: DialogProps) {
+  // QA re-fail (TC-092): "other dropdowns and fields should not overlap or
+  // appear above the popup" — a background native <select> (e.g. Color /
+  // Hanging Structure on the Quotation form) can still be focused and
+  // opened while a dialog is showing, and its OS-rendered option list is
+  // painted in the browser's own top layer, completely outside any web
+  // page's z-index stacking — no overlayClassName override can ever win
+  // against it. The only reliable fix is to stop the background from being
+  // interactive at all while a dialog is open, so a native select never
+  // gets the chance to open in the first place: mark the app root inert
+  // (unfocusable, unclickable) for the duration.
+  //
+  // This only works because the dialog itself is portaled to
+  // document.body below, i.e. outside #root — marking #root inert while
+  // the dialog is still rendered inside it would disable the dialog's own
+  // buttons too. Runs for every dialog in the app, not just this one,
+  // since the same native-select escape applies anywhere a dialog can be
+  // opened over a page with a <select> on it.
+  //
+  // Ref-counted (openDialogCount below, module-scoped) rather than a plain
+  // on/off toggle: a confirm dialog opened from within another dialog
+  // (e.g. a delete confirmation over a form) means two Dialog instances
+  // can be mounted-and-open at once — if each just set/removed the
+  // attribute independently, the inner one closing first would strip
+  // inert while the outer one is still open, reopening this exact bug.
+  React.useEffect(() => {
+    if (!open) return;
+    openDialogCount += 1;
+    const root = document.getElementById("root");
+    root?.setAttribute("inert", "");
+    return () => {
+      openDialogCount -= 1;
+      if (openDialogCount <= 0) {
+        openDialogCount = 0;
+        root?.removeAttribute("inert");
+      }
+    };
+  }, [open]);
+
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       // overflow-y-auto + items-start on the outer scroll container (with
       // items-center restored from sm up) is what lets a dialog taller
@@ -37,7 +79,8 @@ function Dialog({ open, onOpenChange, children, overlayClassName }: DialogProps)
       <div onClick={(e) => e.stopPropagation()} className="w-full">
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

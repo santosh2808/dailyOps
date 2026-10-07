@@ -294,19 +294,23 @@ export default function QuotationItemsEditor({
                       <Input
                         type="number"
                         min={0}
-                        // Bug fix: step={10000} was meant to only affect the
-                        // native up/down arrow increment (TC-092), but the
-                        // browser's own HTML5 constraint validation enforces
-                        // step on ANY value, not just ones typed via the
-                        // arrows — so a manually typed price that wasn't an
-                        // exact multiple of 10,000 (e.g. 162000) blocked the
-                        // whole form from submitting with a native "Please
-                        // enter a valid value" popup, even though onChange
-                        // below happily accepted and stored it. step="any"
-                        // disables that constraint entirely while leaving
-                        // the arrows working (browsers default to a step of
-                        // 1 for the arrows when step is "any").
-                        step="any"
+                        // QA re-fail (TC-092): step="any" was a prior
+                        // attempt to stop the browser's native step-mismatch
+                        // validation from blocking submission of a manually
+                        // typed, non-multiple-of-10,000 price (e.g. 162000)
+                        // — but "any" also made the up/down arrows default
+                        // to incrementing by 1 instead of 10,000, which QA
+                        // correctly flagged as a regression of its own
+                        // requirement. step={10000} is restored here so the
+                        // arrows behave correctly again; the native
+                        // constraint-validation popup that step={10000}
+                        // would otherwise trigger on submit is suppressed
+                        // the right way instead — via noValidate on the
+                        // <form> itself in QuotationForm.tsx, which only
+                        // disables the browser's own submit-time validation
+                        // UI, not this component's typed-value handling or
+                        // the arrows' step increment.
+                        step={10000}
                         value={row.unitPrice ?? ""}
                         onChange={(e) =>
                           updateRow(index, {
