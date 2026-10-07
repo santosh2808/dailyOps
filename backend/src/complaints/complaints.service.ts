@@ -203,6 +203,18 @@ export class ComplaintsService {
               { reporterEmail: { contains: search, mode: 'insensitive' } },
               { reporterPhone: { contains: search, mode: 'insensitive' } },
               { claimedInvoiceNumber: { contains: search, mode: 'insensitive' } },
+              // QA fix (Complaints search): a support agent reading a
+              // complaint's own description, the verified/linked Tax
+              // Invoice (distinct from the customer-typed
+              // claimedInvoiceNumber above — a complaint can be found by
+              // either), or the reference number a customer quotes from
+              // their website-enquiry acknowledgement email, all had no
+              // way to search back to the complaint. Both relations
+              // already exist on Complaint (taxInvoiceId/webFormIntakeId) —
+              // this just searches them too.
+              { description: { contains: search, mode: 'insensitive' } },
+              { taxInvoice: { invoiceNumber: { contains: search, mode: 'insensitive' } } },
+              { webFormIntake: { referenceNumber: { contains: search, mode: 'insensitive' } } },
             ],
           }
         : {}),

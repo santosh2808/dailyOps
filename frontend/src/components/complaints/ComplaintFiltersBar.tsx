@@ -84,7 +84,7 @@ export default function ComplaintFiltersBar({ filters, onChange }: ComplaintFilt
       <div className="relative w-full max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by complaint no., subject, sales order, or customer"
+          placeholder="Search by complaint no., caller name/phone/email, invoice, enquiry ref, subject, or customer"
           className="pl-9"
           value={filters.search}
           onChange={(e) => update("search", e.target.value)}
