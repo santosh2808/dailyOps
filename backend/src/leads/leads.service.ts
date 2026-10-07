@@ -655,6 +655,42 @@ export class LeadsService {
         include: LEAD_DETAIL_INCLUDE,
       });
 
+      // QA re-fail: "Lead/Customer Conversion — edited lead details are not
+      // reflected in the converted customer record." convertToCustomer()
+      // carries companyName/contactPerson/phone/email/state over onto a new
+      // Customer at the moment of conversion, but nothing afterward kept
+      // them in sync — editing any of those same fields on a Lead that's
+      // already been converted (existing.customerId set) silently diverged
+      // from the Customer record it created, with no way to reconcile them
+      // from the UI. Only touches the fields Lead and Customer actually
+      // share (see convertToCustomer()'s own field list above); Customer-only
+      // fields like isGstRegistered/gstNumber have no Lead equivalent and
+      // are never touched here. Only fires for a field the request actually
+      // changed (checked against leadData, not the post-update row), so a
+      // save that didn't touch any shared field doesn't issue a no-op
+      // Customer update. Direct tx.customer.update() rather than going
+      // through CustomersService, same precedent convertToCustomer() itself
+      // set (that module doesn't export its service, and this avoids
+      // modifying it).
+      if (existing.customerId) {
+        const customerSync: {
+          companyName?: string;
+          contactPerson?: string;
+          phone?: string;
+          email?: string | null;
+          state?: string;
+        } = {};
+        if (leadData.companyName !== undefined) customerSync.companyName = leadData.companyName;
+        if (leadData.contactPerson !== undefined) customerSync.contactPerson = leadData.contactPerson;
+        if (leadData.phone !== undefined) customerSync.phone = leadData.phone;
+        if (leadData.email !== undefined) customerSync.email = leadData.email || null;
+        if (leadData.state !== undefined) customerSync.state = leadData.state;
+
+        if (Object.keys(customerSync).length > 0) {
+          await tx.customer.update({ where: { id: existing.customerId }, data: customerSync });
+        }
+      }
+
       // Assignment change gets its own structured LeadAssignmentHistory row
       // plus a dedicated ASSIGNED timeline entry — kept separate from the
       // generic "Edited" entry below so the Assign action is always
