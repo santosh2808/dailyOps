@@ -2154,10 +2154,10 @@ export class LeadsService {
     if (email && !isEmail(email)) {
       errors.push('Email must be a valid email address');
     }
-    if (phoneRaw && !/^\+?\d{10,15}$/.test(phoneNormalized)) {
-      errors.push('Phone must be 10-15 digits');
+    if (phoneRaw && !/^\d{10}$/.test(phoneNormalized)) {
+      errors.push('Phone must contain exactly 10 digits');
       this.logger.debug(
-        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must be 10-15 digits"`,
+        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must contain exactly 10 digits"`,
       );
     }
 
