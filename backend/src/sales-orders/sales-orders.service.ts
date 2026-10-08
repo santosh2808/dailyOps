@@ -162,7 +162,6 @@ interface RawItem {
   description?: string | null;
   quantity: number;
   unitPrice: number;
-  discount: number;
 }
 
 interface ComputedItem extends RawItem {
@@ -173,7 +172,6 @@ interface ComputedItem extends RawItem {
 interface ComputedTotals {
   items: ComputedItem[];
   subtotal: number;
-  discount: number;
   tax: number;
   grandTotal: number;
   // QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL): only
@@ -331,7 +329,12 @@ export class SalesOrdersService {
             remarks: dto.remarks,
             createdBy,
             subtotal: totals.subtotal,
-            discount: totals.discount,
+            // Always 0 — discounting no longer happens at the Sales Order
+            // stage (see computeTotals()'s own comment). The column is kept
+            // in schema.prisma, unwritten-to going forward, purely so
+            // historical orders created before this change keep displaying
+            // whatever discount they already had.
+            discount: 0,
             tax: totals.tax,
             grandTotal: totals.grandTotal,
             installationCharge: totals.installationCharge,
@@ -421,11 +424,10 @@ export class SalesOrdersService {
     }
 
     // Items are derived 1:1 from the Quotation's own items (same product +
-    // quantity + description). unitPrice/discount are left undefined so
-    // create()'s resolveItemsAgainstQuotation() falls back to the price
-    // already recorded on the Quotation item — exactly what happens today
-    // when a user creates a Sales Order manually without editing those
-    // fields.
+    // quantity + description). unitPrice is left undefined so create()'s
+    // resolveItemsAgainstQuotation() falls back to the price already
+    // recorded on the Quotation item — exactly what happens today when a
+    // user creates a Sales Order manually without editing that field.
     const items: SalesOrderItemInputDto[] = quotation.items.map((item) => ({
       productId: item.productId,
       description: item.description ?? undefined,
@@ -456,7 +458,7 @@ export class SalesOrdersService {
       );
     }
 
-    let aggregate: { subtotal: number; discount: number; tax: number; grandTotal: number } | null = null;
+    let aggregate: { subtotal: number; tax: number; grandTotal: number } | null = null;
     // Only populated when the full item set is being replaced (dto.items
     // provided). When only gstPercent changes, existing items keep their
     // ids and are updated in place instead — see itemsToUpdateInPlace.
@@ -487,7 +489,6 @@ export class SalesOrdersService {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          discount: item.discount,
         }));
         const totals = this.computeTotals(rawItems, dto.gstPercent!);
         aggregate = totals;
@@ -495,11 +496,12 @@ export class SalesOrdersService {
       }
     }
     // Note: there used to be a third branch here for when only the
-    // order-level "Additional Discount" field changed (no items/GST edit).
-    // That field has been removed entirely (see create-sales-order.dto.ts)
-    // — discounting a Sales Order now only happens per line item, via
-    // dto.items above, or implicitly by way of Quotation.discount already
-    // baked into the frozen totals at creation.
+    // order-level "Additional Discount" field changed (no items/GST edit),
+    // and later a per-line item discount (see SalesOrderItemInputDto's
+    // comment). Both have been removed entirely — a Sales Order's items are
+    // never discounted on their own anymore. Quotation.discount, already
+    // baked into the frozen totals at creation, is the only discounting
+    // mechanism left in this whole pipeline.
 
     return this.prisma.$transaction(async (tx) => {
       if (itemsToReplace) {
@@ -543,7 +545,8 @@ export class SalesOrdersService {
           ...(aggregate
             ? {
                 subtotal: aggregate.subtotal,
-                discount: aggregate.discount,
+                // Always 0 — see computeTotals()'s own comment.
+                discount: 0,
                 tax: aggregate.tax,
                 grandTotal: aggregate.grandTotal,
               }
@@ -985,7 +988,6 @@ export class SalesOrdersService {
         description: item.description ?? quotationItem.description ?? quotationItem.product.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice ?? quotationItem.unitPrice,
-        discount: item.discount ?? 0,
       };
     });
   }
@@ -1008,9 +1010,9 @@ export class SalesOrdersService {
   // divergent way here, when the Sales Order being created is an exact,
   // unmodified pass-through of the Quotation it's generated from (true for
   // every automatic Accept-cascade, and for a manual creation where staff
-  // didn't touch quantity or add a discount — the Sales Order Items editor
-  // doesn't even let unitPrice be edited, only quantity/discount), we freeze
-  // the order-level totals to the Quotation's own already-computed
+  // didn't touch quantity — the Sales Order Items editor doesn't let
+  // unitPrice be edited either, only quantity), we freeze the order-level
+  // totals to the Quotation's own already-computed
   // subtotal/gstAmount/grandTotal instead of recomputing them. Per-item
   // rows (SalesOrderItem.unitPrice/tax/lineTotal) are left as computeTotals()
   // produced them — still a plain qty x unitPrice breakdown for display —
@@ -1021,10 +1023,10 @@ export class SalesOrdersService {
   // installation/transportation as summary lines rather than per-item ones.
   //
   // When quantities were actually edited from what was quoted, we
-  // deliberately do NOT freeze — how installationCharge/discount should
-  // scale with a changed quantity is a business decision, not something to
-  // guess here, so that case keeps using the recompute exactly as before
-  // (unchanged, pre-existing behavior, not a regression).
+  // deliberately do NOT freeze — how installationCharge should scale with a
+  // changed quantity is a business decision, not something to guess here,
+  // so that case keeps using the recompute exactly as before (unchanged,
+  // pre-existing behavior, not a regression).
   //
   // Bug fix (TC-049): freezing the order-level totals above was already
   // enough to fix the headline "Grand Total doesn't match" symptom, but
@@ -1059,9 +1061,8 @@ export class SalesOrdersService {
       rawItems.length === quotation.items.length &&
       rawItems.every((item) => {
         const qi = quotation.items.find((q) => q.productId === item.productId);
-        return !!qi && qi.quantity === item.quantity && item.discount === 0;
-      }) &&
-      totals.discount === 0;
+        return !!qi && qi.quantity === item.quantity;
+      });
 
     if (!matchesQuotationExactly) return;
 
@@ -1108,9 +1109,18 @@ export class SalesOrdersService {
   }
 
   private computeTotals(items: RawItem[], gstPercent: number): ComputedTotals {
+    // QA decision ("Discount validation based on Sales Order subtotal"):
+    // this used to also subtract a per-line item.discount here (clamped so
+    // taxable/grandTotal could never go negative — see the git history for
+    // that exact clamp math, tagged QA SC-004). Discounting was removed
+    // from the Sales Order stage entirely rather than patched further:
+    // Quotation.discount is the only discounting mechanism anywhere in this
+    // pipeline now (see SalesOrderItemInputDto's comment), and it already
+    // flows through into grandTotal below via
+    // freezeToQuotationTotalsIfUnmodified(). So every line's taxable amount
+    // here is simply quantity x unitPrice — nothing left to clamp.
     const computedItems: ComputedItem[] = items.map((item) => {
-      const lineSubtotal = item.quantity * item.unitPrice;
-      const taxable = Math.max(0, lineSubtotal - item.discount);
+      const taxable = item.quantity * item.unitPrice;
       const tax = Math.round(taxable * (gstPercent / 100) * 100) / 100;
       const lineTotal = Math.round((taxable + tax) * 100) / 100;
       return { ...item, tax, lineTotal };
@@ -1118,20 +1128,11 @@ export class SalesOrdersService {
 
     const subtotal = Math.round(computedItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0) * 100) / 100;
     const tax = Math.round(computedItems.reduce((sum, i) => sum + i.tax, 0) * 100) / 100;
-    // Each line's own discount is clamped above (taxable can't go below 0
-    // for that line), but the SUM of per-line discounts across the order
-    // could still exceed subtotal+tax if entered generously enough on
-    // several lines at once — clamp the aggregate too so grandTotal can
-    // never go negative (QA SC-004: "discount greater than subtotal ...
-    // total amount becomes negative").
-    const itemDiscountSum = computedItems.reduce((sum, i) => sum + i.discount, 0);
-    const discount = Math.round(Math.min(Math.max(0, itemDiscountSum), subtotal + tax) * 100) / 100;
-    const grandTotal = Math.round((subtotal - discount + tax) * 100) / 100;
+    const grandTotal = Math.round((subtotal + tax) * 100) / 100;
 
     return {
       items: computedItems,
       subtotal,
-      discount,
       tax,
       grandTotal,
       installationCharge: 0,

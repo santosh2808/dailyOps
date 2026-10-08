@@ -21,7 +21,10 @@ export interface SalesOrderItemPayload {
   productId: string;
   quantity: number;
   unitPrice?: number;
-  discount?: number;
+  // Removed (QA decision, "Discount validation based on Sales Order
+  // subtotal"): per-line discount is no longer a Sales Order concept —
+  // Quotation.discount is the only discounting mechanism left in this
+  // pipeline. See sales-order-item-input.dto.ts's comment on the backend.
   description?: string;
 }
 

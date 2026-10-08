@@ -76,8 +76,16 @@ export class CreateSalesOrderDto {
   // SalesOrdersService.freezeToQuotationTotalsIfUnmodified()). Stacking a
   // second, independent order-level discount on top of that was redundant
   // and — because it wasn't clamped against the subtotal — could drive
-  // grandTotal negative. Per-line item discounts (SalesOrderItemInputDto.discount)
-  // are unaffected and remain the one discounting mechanism at this stage.
+  // grandTotal negative.
+  //
+  // QA decision (follow-up, "Discount validation based on Sales Order
+  // subtotal"): the per-line item discount this comment used to describe as
+  // "the one discounting mechanism left" has ALSO now been removed (see
+  // SalesOrderItemInputDto) — even clamped, having a second independent
+  // discount entry point here alongside Quotation.discount was the actual
+  // root risk QA kept re-flagging. A Sales Order's items are never
+  // discounted on their own anymore; Quotation.discount is the only
+  // discounting mechanism in this whole pipeline now.
 
   // QA bug fix (SC-005): Billing/Shipping Address are required for every
   // manually created/edited Sales Order — dispatch, installation and

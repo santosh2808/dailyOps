@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AddressAutoFill from "@/components/AddressAutoFill";
 import SalesOrderItemsEditor, {
-  computeItemDiscountTotal,
   computeSubtotal,
   type SalesOrderItemRow,
 } from "@/components/sales-orders/SalesOrderItemsEditor";
@@ -115,7 +114,7 @@ export default function SalesOrderForm() {
   const [submitting, setSubmitting] = useState(false);
   // "items" isn't a FormState field (it's the separate items[] array edited
   // via SalesOrderItemsEditor) but shares this same error-bag/scroll-to-
-  // first-error convention — see the per-line discount check in validate().
+  // first-error convention.
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>> & { items?: string }>({});
 
   useEffect(() => {
@@ -160,7 +159,6 @@ export default function SalesOrderForm() {
             // item is left unmodified.
             unitPrice:
               item.quantity > 0 ? Math.round((item.lineTotal / item.quantity) * 100) / 100 : item.unitPrice,
-            discount: 0,
           }))
         );
       } catch (err) {
@@ -214,7 +212,6 @@ export default function SalesOrderForm() {
             description: item.description ?? undefined,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            discount: item.discount,
           }))
         );
       } catch (err) {
@@ -309,18 +306,14 @@ export default function SalesOrderForm() {
       next.customerPoNumber = "Purchase Order Number is required.";
     }
 
-    // QA bug fix (SC-004): the order-level "Additional Discount" field was
-    // removed (redundant with Quotation.discount, and unclamped — a
-    // discount larger than the subtotal drove the grand total negative).
-    // Per-line item discount is the one discounting mechanism left here, so
-    // it needs the same "can't exceed what it's discounting off of" check
-    // the backend now enforces (SalesOrdersService.computeTotals()) —
-    // otherwise a single line's discount could still push its own line
-    // total (and the order total) negative before the user ever submits.
-    const invalidItem = items.find((item) => (item.discount ?? 0) > item.quantity * (item.unitPrice ?? 0));
-    if (invalidItem) {
-      next.items = `${invalidItem.productName}'s discount can't exceed that line's own amount (Qty × Unit Price).`;
-    }
+    // QA decision ("Discount validation based on Sales Order subtotal"): the
+    // order-level "Additional Discount" field was removed per SC-004, and
+    // the per-line item discount that comment used to describe as "the one
+    // discounting mechanism left here" has ALSO now been removed (see
+    // SalesOrderItemsEditor.tsx) — having a second independent discount
+    // entry point here alongside Quotation.discount was the actual root
+    // risk, even clamped. Nothing to validate here anymore; Quotation.discount
+    // is the only discounting mechanism left in this whole pipeline.
 
     // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
     // submit is never silently invisible on a scrolled form.
@@ -340,7 +333,6 @@ export default function SalesOrderForm() {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        discount: item.discount ?? 0,
         description: item.description,
       })),
       orderDate: form.orderDate || undefined,
@@ -385,15 +377,15 @@ export default function SalesOrderForm() {
   // charges forward from the accepted quotation — see
   // SalesOrdersService.freezeToQuotationTotalsIfUnmodified). Mirrors that
   // same backend condition exactly: charges only carry forward when every
-  // item still matches the quotation's own quantity with no per-line
-  // discount — otherwise the backend doesn't guess how they should scale
-  // with a changed quantity, and neither does this preview.
+  // item still matches the quotation's own quantity — otherwise the backend
+  // doesn't guess how they should scale with a changed quantity, and
+  // neither does this preview.
   const matchesQuotationExactly =
     !!quotation &&
     items.length === (quotation.items?.length ?? 0) &&
     items.every((item) => {
       const qi = quotation.items?.find((q) => q.productId === item.productId);
-      return !!qi && qi.quantity === item.quantity && (item.discount ?? 0) === 0;
+      return !!qi && qi.quantity === item.quantity;
     });
 
   // QA bug fix (Sales Order Grand Total mismatch FAIL): when unmodified,
@@ -409,21 +401,8 @@ export default function SalesOrderForm() {
   // modified order doesn't carry installation/transportation forward
   // either, so this preview doesn't either).
   const subtotal = matchesQuotationExactly ? quotation!.subtotal : computeSubtotal(items);
-  const itemDiscountSum = computeItemDiscountTotal(items);
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
-  const tax = matchesQuotationExactly
-    ? quotation!.gstAmount
-    : Math.max(0, subtotal - itemDiscountSum) * (gstPercentNum / 100);
-  // QA bug fix (SC-004): mirrors SalesOrdersService.computeTotals()'s own
-  // clamp — validate() already stops any single line's discount from
-  // exceeding that line's own amount before submit, but the SUM across
-  // lines could still exceed subtotal+tax if several lines are discounted
-  // generously at once. Clamping here keeps this preview (and the Grand
-  // Total below) from ever showing a negative figure the backend wouldn't
-  // actually save.
-  const totalDiscount = matchesQuotationExactly
-    ? 0
-    : Math.min(Math.max(0, itemDiscountSum), subtotal + tax);
+  const tax = matchesQuotationExactly ? quotation!.gstAmount : subtotal * (gstPercentNum / 100);
 
   const installationCharge = matchesQuotationExactly ? quotation!.installationCharge : 0;
   const transportationCharge = matchesQuotationExactly ? quotation!.transportationCharge : 0;
@@ -435,7 +414,7 @@ export default function SalesOrderForm() {
     ? quotation!.pricesIncludeChargesAndGst
       ? quotation!.grandTotal
       : Math.round((quotation!.grandTotal + quotation!.gstAmount) * 100) / 100
-    : subtotal - totalDiscount + tax + installationCharge + transportationCharge;
+    : subtotal + tax + installationCharge + transportationCharge;
 
   return (
     <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -492,15 +471,6 @@ export default function SalesOrderForm() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <SalesOrderItemsEditor value={items} onChange={setItems} />
-                  {/* QA bug fix (SC-004): the separate order-level "Additional
-                      Discount" field was removed — it duplicated Quotation's
-                      own discount mechanism and wasn't clamped against the
-                      subtotal, so a large enough value drove the Grand Total
-                      negative. Per-line item discount (in the editor above)
-                      is the one discounting mechanism left at this stage; a
-                      validation error for it (line discount exceeding that
-                      line's own amount) surfaces here since there's no
-                      single input field of its own to attach to. */}
                   {errors.items && <p className="text-xs text-destructive">{errors.items}</p>}
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:max-w-xs">
@@ -547,10 +517,6 @@ export default function SalesOrderForm() {
                       </>
                     )}
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>
-                      <p className="font-medium text-slate-900">{formatCurrency(totalDiscount)}</p>
-                    </div>
-                    <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
                         GST ({gstPercentNum || 0}%)
                       </p>
@@ -564,7 +530,7 @@ export default function SalesOrderForm() {
                   {quotation && !matchesQuotationExactly && (
                     <p className="text-xs text-muted-foreground">
                       Installation/Transportation charges from the quotation are only carried forward
-                      when quantities and discounts are unchanged from it.
+                      when quantities are unchanged from it.
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">

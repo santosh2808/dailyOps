@@ -23,12 +23,18 @@ export class SalesOrderItemInputDto {
   @Min(0, { message: 'Unit price must be a positive number' })
   unitPrice?: number;
 
-  @ApiPropertyOptional({ example: 5000, default: 0, description: 'Flat discount amount for this line' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0, { message: 'Discount must be a positive number' })
-  discount?: number;
+  // Removed (QA decision, "Discount validation based on Sales Order
+  // subtotal"): a per-line discount here was a second, independent
+  // discounting mechanism alongside Quotation.discount — despite being
+  // clamped at every layer (see sales-orders.service.ts's computeTotals()
+  // history), its mere existence was flagged as the root risk, since
+  // Quotation already has its own order-level discount that's carried
+  // forward into the Sales Order's frozen totals. Discounting now only
+  // ever happens at the Quotation stage; a Sales Order's own items are
+  // never discounted again. The underlying SalesOrderItem.discount column
+  // is left in schema.prisma (always written as 0 from here on) so
+  // historical orders created before this change keep displaying whatever
+  // discount they already had.
 
   @ApiPropertyOptional({ example: 'HVLS fan, ceiling mounted' })
   @IsOptional()

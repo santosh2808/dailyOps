@@ -12,9 +12,15 @@ import type { SalesOrderItemPayload } from "@/api/sales-orders";
 
 // A Sales Order's products auto-populate from its originating Quotation
 // (business rule) — unlike QuotationItemsEditor/LeadProductsSelector, rows
-// here can't be freely added or removed; only quantity (and, if needed, a
-// per-line discount) can be edited before saving. Product name and unit
-// price are shown read-only because they were inherited from the quotation.
+// here can't be freely added or removed; only quantity can be edited before
+// saving. Product name and unit price are shown read-only because they were
+// inherited from the quotation. QA decision ("Discount validation based on
+// Sales Order subtotal"): this used to also let a per-line discount be
+// edited here, but a second independent discounting mechanism alongside
+// Quotation.discount was the actual root risk behind a class of QA-reported
+// "grand total goes negative" bugs — removed entirely rather than patched
+// further. Quotation.discount is the only discounting mechanism left
+// anywhere in this pipeline now.
 export interface SalesOrderItemRow extends SalesOrderItemPayload {
   productName: string;
 }
@@ -33,15 +39,11 @@ function formatCurrency(value: number) {
 }
 
 export function lineTotal(item: SalesOrderItemPayload) {
-  return item.quantity * (item.unitPrice ?? 0) - (item.discount ?? 0);
+  return item.quantity * (item.unitPrice ?? 0);
 }
 
 export function computeSubtotal(items: SalesOrderItemPayload[]) {
   return items.reduce((sum, item) => sum + item.quantity * (item.unitPrice ?? 0), 0);
-}
-
-export function computeItemDiscountTotal(items: SalesOrderItemPayload[]) {
-  return items.reduce((sum, item) => sum + (item.discount ?? 0), 0);
 }
 
 export default function SalesOrderItemsEditor({ value, onChange }: SalesOrderItemsEditorProps) {
@@ -65,7 +67,6 @@ export default function SalesOrderItemsEditor({ value, onChange }: SalesOrderIte
               <TableHead>Description</TableHead>
               <TableHead className="w-28">Qty</TableHead>
               <TableHead className="w-32">Unit Price</TableHead>
-              <TableHead className="w-28">Discount</TableHead>
               <TableHead className="w-32">Line Total</TableHead>
             </TableRow>
           </TableHeader>
@@ -83,16 +84,6 @@ export default function SalesOrderItemsEditor({ value, onChange }: SalesOrderIte
                   />
                 </TableCell>
                 <TableCell className="text-slate-700">{formatCurrency(row.unitPrice ?? 0)}</TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={row.discount ?? 0}
-                    onChange={(e) =>
-                      updateRow(index, { discount: e.target.value ? Number(e.target.value) : 0 })
-                    }
-                  />
-                </TableCell>
                 <TableCell className="text-slate-700">{formatCurrency(lineTotal(row))}</TableCell>
               </TableRow>
             ))}
