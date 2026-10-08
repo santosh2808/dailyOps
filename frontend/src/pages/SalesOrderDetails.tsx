@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ClipboardList,
+  Download,
   ExternalLink,
   FileSpreadsheet,
   FileText,
@@ -39,6 +40,7 @@ import {
   getSalesOrder,
   getSalesOrderEmailHistory,
   getSalesOrderPoDocumentBlobUrl,
+  openSalesOrderPdf,
   updateSalesOrderStatus,
   uploadSalesOrderPoDocument,
 } from "@/api/sales-orders";
@@ -445,6 +447,21 @@ export default function SalesOrderDetails() {
                         Record Advance Payment
                       </DropdownMenuItem>
                     )}
+                    {/* QA fix: "there is no View PDF option in the Sales
+                        Order within the application" — mirrors the
+                        Proforma Invoice/Tax Invoice/JEO Details pages' own
+                        View PDF item. See openSalesOrderPdf() in
+                        api/sales-orders.ts. */}
+                    <DropdownMenuItem
+                      icon={Download}
+                      onSelect={() =>
+                        openSalesOrderPdf(salesOrder.id).catch((err) => {
+                          toast.error(getErrorMessage(err, "Could not load the PDF. Please try again."));
+                        })
+                      }
+                    >
+                      View PDF
+                    </DropdownMenuItem>
                     {/* QA bug fix (SC-007): editing a Sales Order never
                         notified the customer — this is the explicit action
                         staff use afterward, any time, not just right after

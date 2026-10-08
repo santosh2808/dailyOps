@@ -12,6 +12,7 @@ import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
+import { SalesOrderPdfService } from '../pdf/sales-order-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
@@ -192,6 +193,7 @@ export class SalesOrdersService {
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
+    private salesOrderPdfService: SalesOrderPdfService,
     private auditLogService: AuditLogService,
     private approvalRequestsService: ApprovalRequestsService,
     private whatsAppService: WhatsAppService,
@@ -378,23 +380,129 @@ export class SalesOrdersService {
     actorName?: string,
   ) {
     try {
+      // QA fix ("Sales Order -> Customer Email: after confirmation, the
+      // customer email is sent without the Sales Order PDF/attachment and
+      // important details like items, shipping address, and delivery
+      // date."): Sales Order never had a dedicated PDF at all (unlike
+      // Quotation/ProformaInvoice/TaxInvoice/JEO) — see
+      // sales-order-pdf.service.ts's own comment. Now renders one and
+      // attaches it here, and the email body itself gains the
+      // itemsSummary/shippingAddress/deliveryDate vars the template can
+      // reference (fallback body below inlines them directly so this still
+      // reads correctly even before anyone edits the ORDER_CONFIRMATION
+      // template in Email Templates admin to use the new vars).
+      const pdf = await this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
+      const itemsSummary = this.formatItemsSummary(salesOrder.items);
       await this.mailerService.send({
         templateKey: 'ORDER_CONFIRMATION',
         fallbackSubject: `Order Confirmation - ${salesOrder.salesOrderNumber}`,
-        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed. Grand total: {{grandTotal}}.</p>`,
+        fallbackBodyHtml:
+          '<p>Dear {{customerName}},</p>' +
+          '<p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed.</p>' +
+          '<p><strong>Items:</strong><br/>{{itemsSummary}}</p>' +
+          '<p><strong>Shipping Address:</strong><br/>{{shippingAddress}}</p>' +
+          '<p><strong>Delivery Date:</strong> {{deliveryDate}}</p>' +
+          '<p><strong>Grand Total:</strong> {{grandTotal}}</p>' +
+          '<p>Please find the Sales Order attached as a PDF for your records.</p>',
         vars: {
           customerName: salesOrder.customer.contactPerson,
           salesOrderNumber: salesOrder.salesOrderNumber,
           quotationNumber: salesOrder.quotation.quotationNumber,
           grandTotal: salesOrder.grandTotal.toFixed(2),
+          itemsSummary,
+          shippingAddress: salesOrder.shippingAddress?.trim() || salesOrder.billingAddress?.trim() || '—',
+          deliveryDate: salesOrder.deliveryDate ? this.formatDateForEmail(salesOrder.deliveryDate) : '—',
         },
         to: salesOrder.customer.email,
+        attachments: [{ filename: `${this.sanitizeForFilename(salesOrder.salesOrderNumber)}.pdf`, content: pdf }],
         actorName,
         link: { module: 'SalesOrder', salesOrderId: salesOrder.id },
       });
     } catch (error) {
       this.logger.error(`Order Confirmation email failed for Sales Order ${salesOrder.id}`, error);
     }
+  }
+
+  // Human-readable "Qty x Product — ₹lineTotal" list, one per line, used by
+  // both order-confirmation and send/resend emails so the customer always
+  // sees exactly what they're being charged for without having to open the
+  // PDF attachment first.
+  private formatItemsSummary(
+    items: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>['items'],
+  ): string {
+    if (!items.length) return '—';
+    return items
+      .map((item) => `${item.quantity} x ${item.product.name} — ₹${item.lineTotal.toFixed(2)}`)
+      .join('<br/>');
+  }
+
+  private formatDateForEmail(date: Date): string {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
+  // Pipes in "SR|SO|108|2026" are not safe filename characters on every
+  // platform — sanitize for the attachment name only, same convention as
+  // QuotationsService.sanitizeForFilename().
+  private sanitizeForFilename(value: string): string {
+    return value.replace(/[\\/:*?"<>|]/g, '-');
+  }
+
+  // Builds the PDF input from a loaded SalesOrder (SALES_ORDER_DETAIL_INCLUDE
+  // shape) — shared by getPdf() (View PDF in-app) and every email send path
+  // below, so the PDF a customer receives by email always matches the one
+  // staff can view in-app.
+  private toPdfInput(
+    salesOrder: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>,
+  ) {
+    // taxPercent isn't a stored column (only the tax *amount* is snapshotted)
+    // — derived the same way ProformaInvoicesService.toPdfInput() does.
+    const taxableAmount = salesOrder.subtotal - salesOrder.installationCharge - salesOrder.transportationCharge;
+    const taxPercent = taxableAmount > 0 ? Math.round((salesOrder.tax / taxableAmount) * 10000) / 100 : 0;
+
+    return {
+      salesOrderNumber: salesOrder.salesOrderNumber,
+      orderDate: salesOrder.orderDate,
+      deliveryDate: salesOrder.deliveryDate,
+      status: salesOrder.status,
+      quotationNumber: salesOrder.quotation.quotationNumber,
+      customer: {
+        companyName: salesOrder.customer.companyName,
+        contactPerson: salesOrder.customer.contactPerson,
+        phone: salesOrder.customer.phone,
+        email: salesOrder.customer.email,
+        gstNumber: salesOrder.customer.gstNumber,
+        state: salesOrder.customer.state,
+      },
+      billingAddress: salesOrder.billingAddress,
+      shippingAddress: salesOrder.shippingAddress,
+      customerPoNumber: salesOrder.customerPoNumber,
+      items: salesOrder.items.map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+        description: item.description,
+        product: { name: item.product.name },
+      })),
+      subtotal: salesOrder.subtotal,
+      installationCharge: salesOrder.installationCharge,
+      transportationCharge: salesOrder.transportationCharge,
+      taxPercent,
+      tax: salesOrder.tax,
+      grandTotal: salesOrder.grandTotal,
+      paymentTerms: salesOrder.paymentTerms,
+      specialInstructions: salesOrder.specialInstructions,
+      remarks: salesOrder.remarks,
+    };
+  }
+
+  // QA fix: "there is no View PDF option in the Sales Order within the
+  // application" — mirrors ProformaInvoicesService.getPdf()/
+  // TaxInvoicesService.getPdf()/JobExecutionOrdersService.getPdf(). See
+  // SalesOrdersController's GET :id/pdf route.
+  async getPdf(id: string): Promise<Buffer> {
+    const salesOrder = await this.findOne(id);
+    return this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
   }
 
   // Automatic Sales Order creation — triggered the moment a Quotation is
@@ -576,20 +684,36 @@ export class SalesOrdersService {
       throw new BadRequestException('A cancelled Sales Order cannot be sent to the customer.');
     }
 
+    // QA fix — same gap as sendOrderConfirmationEmail() above: this explicit
+    // send/resend action had no PDF attachment and no items/shipping
+    // address/delivery date in the body either.
+    const pdf = await this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
+    const itemsSummary = this.formatItemsSummary(salesOrder.items);
+
     const to = dto.recipientEmail?.trim() || salesOrder.customer.email || undefined;
     const result = await this.mailerService.send({
       templateKey: 'SALES_ORDER_UPDATE',
       fallbackSubject: `Updated Sales Order - ${salesOrder.salesOrderNumber}`,
       fallbackBodyHtml:
-        '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated. Grand total: {{grandTotal}}.</p><p>Please reach out if you have any questions about this update.</p>',
+        '<p>Dear {{customerName}},</p>' +
+        '<p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated.</p>' +
+        '<p><strong>Items:</strong><br/>{{itemsSummary}}</p>' +
+        '<p><strong>Shipping Address:</strong><br/>{{shippingAddress}}</p>' +
+        '<p><strong>Delivery Date:</strong> {{deliveryDate}}</p>' +
+        '<p><strong>Grand Total:</strong> {{grandTotal}}</p>' +
+        '<p>Please find the updated Sales Order attached as a PDF. Reach out if you have any questions.</p>',
       vars: {
         customerName: salesOrder.customer.contactPerson,
         salesOrderNumber: salesOrder.salesOrderNumber,
         quotationNumber: salesOrder.quotation.quotationNumber,
         grandTotal: salesOrder.grandTotal.toFixed(2),
+        itemsSummary,
+        shippingAddress: salesOrder.shippingAddress?.trim() || salesOrder.billingAddress?.trim() || '—',
+        deliveryDate: salesOrder.deliveryDate ? this.formatDateForEmail(salesOrder.deliveryDate) : '—',
       },
       to,
       cc: mergeCc(dto.ccEmails),
+      attachments: [{ filename: `${this.sanitizeForFilename(salesOrder.salesOrderNumber)}.pdf`, content: pdf }],
       actorName,
       link: { module: 'SalesOrder', salesOrderId: id },
     });
