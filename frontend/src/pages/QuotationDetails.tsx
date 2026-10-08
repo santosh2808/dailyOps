@@ -461,7 +461,30 @@ export default function QuotationDetails() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <Field label="Status" value={<QuotationStatusBadge status={quotation.status} />} />
-                  <Field label="Customer" value={quotation.customer?.companyName ?? quotation.lead?.companyName} />
+                  {/* QA feature: "Customer name displayed in the quotation
+                      should be clickable and linked to the corresponding
+                      customer record in the Customers module." Same
+                      underline-button-as-link convention as the Sales Order
+                      Details Customer field (SC-015). Only the customer-
+                      backed case can be a real link — a quotation still
+                      sourced from a Lead (no customerId yet, no Customer
+                      record to open) falls back to plain text. */}
+                  <Field
+                    label="Customer"
+                    value={
+                      quotation.customer ? (
+                        <button
+                          type="button"
+                          className="underline underline-offset-2"
+                          onClick={() => navigate(`/customers/${quotation.customer!.id}`)}
+                        >
+                          {quotation.customer.companyName}
+                        </button>
+                      ) : (
+                        quotation.lead?.companyName
+                      )
+                    }
+                  />
                   <Field
                     label="Contact Person"
                     value={quotation.customer?.contactPerson ?? quotation.lead?.contactPerson}
