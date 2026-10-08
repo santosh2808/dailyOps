@@ -406,6 +406,12 @@ export default function SalesOrderForm() {
 
   const installationCharge = matchesQuotationExactly ? quotation!.installationCharge : 0;
   const transportationCharge = matchesQuotationExactly ? quotation!.transportationCharge : 0;
+  // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this preview never
+  // showed the Quotation's already-applied discount at all, even though it
+  // was already netted into quotation.grandTotal (and so into grandTotal
+  // below) — same display gap just fixed on the backend/Details-page side
+  // (see SalesOrdersService.freezeToQuotationTotalsIfUnmodified()).
+  const discount = matchesQuotationExactly ? quotation!.discount : 0;
   // Mirrors SalesOrdersService.freezeToQuotationTotalsIfUnmodified()'s own
   // pricesIncludeChargesAndGst branch — that flag means the quotation's
   // grandTotal already includes GST, so adding quotation.gstAmount again
@@ -512,6 +518,12 @@ export default function SalesOrderForm() {
                           <p className="text-xs uppercase tracking-wide text-muted-foreground">Transportation</p>
                           <p className="font-medium text-slate-900">
                             {matchesQuotationExactly ? formatCurrency(transportationCharge) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Discount</p>
+                          <p className="font-medium text-slate-900">
+                            {matchesQuotationExactly ? formatCurrency(discount) : "—"}
                           </p>
                         </div>
                       </>

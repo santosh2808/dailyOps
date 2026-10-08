@@ -184,6 +184,12 @@ interface ComputedTotals {
   // freezeToQuotationTotalsIfUnmodified).
   installationCharge: number;
   transportationCharge: number;
+  // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): only ever
+  // populated by freezeToQuotationTotalsIfUnmodified() below, from the
+  // Quotation's own already-applied discount — see that function's own
+  // comment for why this is a read-only echo, not a reintroduction of
+  // Sales-Order-level discount editing.
+  discount: number;
 }
 
 @Injectable()
@@ -331,12 +337,15 @@ export class SalesOrdersService {
             remarks: dto.remarks,
             createdBy,
             subtotal: totals.subtotal,
-            // Always 0 — discounting no longer happens at the Sales Order
-            // stage (see computeTotals()'s own comment). The column is kept
-            // in schema.prisma, unwritten-to going forward, purely so
-            // historical orders created before this change keep displaying
-            // whatever discount they already had.
-            discount: 0,
+            // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this used
+            // to be hardcoded to 0 unconditionally — discounting still
+            // doesn't happen AT the Sales Order stage (see computeTotals()'s
+            // own comment, unchanged), but totals.discount now carries the
+            // originating Quotation's already-applied discount forward for
+            // display whenever this order is an unmodified pass-through of
+            // it (see freezeToQuotationTotalsIfUnmodified()) — 0 otherwise,
+            // same as before, when items were edited from the quotation.
+            discount: totals.discount,
             tax: totals.tax,
             grandTotal: totals.grandTotal,
             installationCharge: totals.installationCharge,
@@ -653,8 +662,17 @@ export class SalesOrdersService {
           ...(aggregate
             ? {
                 subtotal: aggregate.subtotal,
-                // Always 0 — see computeTotals()'s own comment.
-                discount: 0,
+                // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this
+                // used to unconditionally reset discount to 0 on every edit —
+                // which, now that create() can store a real echoed-from-
+                // Quotation discount (see freezeToQuotationTotalsIfUnmodified()),
+                // would silently wipe it out the moment staff changed
+                // anything else (e.g. just GST %). This recompute path
+                // (unlike create()) has no Quotation context to re-derive it
+                // from, so — same as installationCharge/transportationCharge
+                // just below, which this data object already leaves
+                // untouched — discount is simply omitted here and keeps
+                // whatever create() originally stored.
                 tax: aggregate.tax,
                 grandTotal: aggregate.grandTotal,
               }
@@ -1178,6 +1196,7 @@ export class SalesOrdersService {
       installationCharge: number;
       transportationCharge: number;
       pricesIncludeChargesAndGst: boolean;
+      discount: number;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
   ): void {
@@ -1201,6 +1220,19 @@ export class SalesOrdersService {
     // them as separate line items — only the opaque combined total.
     totals.installationCharge = quotation.installationCharge;
     totals.transportationCharge = quotation.transportationCharge;
+    // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): same gap as
+    // installation/transportation above — the Quotation's discount was
+    // already netted into quotation.grandTotal (and therefore into
+    // totals.grandTotal below), so the Grand Total figure was always
+    // mathematically correct, but with this always hardcoded to 0 by
+    // create()/update() (see their own comments — a deliberate SC-004
+    // decision to remove Sales-Order-level discount *editing*), the
+    // Subtotal/Installation/Transportation/Discount/Tax breakdown shown on
+    // SalesOrderDetails.tsx silently didn't sum to the displayed Grand
+    // Total, which is exactly what QA caught. This only ever echoes the
+    // Quotation's own already-applied discount for display — it does not
+    // reintroduce any Sales-Order-level discount input/validation.
+    totals.discount = quotation.discount;
     // Bug fix: the Quotation itself no longer charges GST (it's quoted as
     // "Extra" — see QuotationsService.computeTotals(), which stopped
     // summing gstAmount into Quotation.grandTotal). GST is only actually
@@ -1261,6 +1293,7 @@ export class SalesOrdersService {
       grandTotal,
       installationCharge: 0,
       transportationCharge: 0,
+      discount: 0,
     };
   }
 
