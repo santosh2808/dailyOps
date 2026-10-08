@@ -206,7 +206,9 @@ export default function QuotationList() {
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Quotations" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <QuotationFiltersBar filters={filters} onChange={setFilters} />
             {hasPermission("Quotation", "Create") && (
               <div className="flex shrink-0 flex-wrap gap-2">

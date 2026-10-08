@@ -271,7 +271,20 @@ export default function LeadList() {
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Leads" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app"): this row's
+              two children (the filters bar — 5 selects + date-range picker —
+              and the action-button group) together need far more width than
+              fits beside each other at typical desktop widths. Without
+              flex-wrap, a non-wrapping flex row forces both children to fight
+              over space that doesn't exist: the button group (shrink-0)
+              never yields, so the filters bar gets a bogus/negative shrink
+              allocation and ends up rendered ~200px too far left, overlapping
+              the Sidebar, while the buttons overflow off the right edge of
+              the viewport. sm:flex-wrap lets the button group drop to its own
+              line instead of squeezing the filters bar into an impossible
+              width. Same fix applied to every other list page with this
+              filters-bar + action-buttons header pattern. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <LeadFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>

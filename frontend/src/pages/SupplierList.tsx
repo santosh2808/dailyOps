@@ -185,7 +185,12 @@ export default function SupplierList() {
       <div className="flex flex-1 flex-col">
         <Topbar title="Suppliers" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning:
+              sm:flex-wrap lets the action-buttons group drop to its own line
+              instead of forcing a non-wrapping flex row to squeeze the
+              filters bar into an impossible width. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <SupplierFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>

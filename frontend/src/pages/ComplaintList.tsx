@@ -241,7 +241,9 @@ export default function ComplaintList() {
             back button; this one and the others below were the outliers. */}
         <Topbar title="Complaints" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <ComplaintFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
