@@ -63,9 +63,9 @@ jobs:
             exit 1
           fi
 
-          # Verify API URL points to test ALB
-          if ! echo "${{ vars.TEST_API_URL }}" | grep -q "dailyops-backend-test-alb"; then
-            echo "ERROR: TEST_API_URL must contain 'dailyops-backend-test-alb'"
+          # Verify API URL is the TEST API CloudFront (HTTPS in front of the test ALB)
+          if [ "${{ vars.TEST_API_URL }}" != "https://da1vajf6p54s2.cloudfront.net" ]; then
+            echo "ERROR: TEST_API_URL must be https://da1vajf6p54s2.cloudfront.net"
             exit 1
           fi
 
