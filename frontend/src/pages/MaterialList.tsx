@@ -25,6 +25,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
 import type { Material } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -48,6 +49,25 @@ const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
   out_of_stock: "Out of Stock",
 };
 
+// MaterialList has no *FiltersBar component — its "filters" are just the
+// search box and the stock-status chip below. Combined into one object here
+// so both can be persisted together under a single sessionStorage key, same
+// sticky-filters behavior as every other list page.
+type MaterialListFilters = {
+  search: string;
+  stockStatus: StockStatus | null;
+};
+
+const emptyMaterialListFilters: MaterialListFilters = { search: "", stockStatus: null };
+
+// Additive: Dashboard Redesign — lets a Dashboard link like
+// `/materials?stockStatus=low_stock` land here with that filter already
+// applied (Materials had no stock-status filter UI at all before this).
+function initialFiltersFromSearchParams(searchParams: URLSearchParams): MaterialListFilters {
+  const value = searchParams.get("stockStatus");
+  return { search: "", stockStatus: isStockStatus(value) ? value : null };
+}
+
 export default function MaterialList() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -60,15 +80,25 @@ export default function MaterialList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  // Additive: Dashboard Redesign — lets a Dashboard link like
-  // `/materials?stockStatus=low_stock` land here with that filter already
-  // applied (Materials had no stock-status filter UI at all before this).
-  const [stockStatus, setStockStatus] = useState<StockStatus | null>(() => {
-    const value = searchParams.get("stockStatus");
-    return isStockStatus(value) ? value : null;
-  });
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /materials?stockStatus=low_stock) always takes precedence over a
+  // remembered one.
+  const hasUrlFilterParams = searchParams.has("stockStatus");
+  const [filters, setFilters] = useSessionFilters<MaterialListFilters>(
+    "dailyops.filters.materials",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyMaterialListFilters,
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+
+  function setSearch(value: string) {
+    setFilters((prev) => ({ ...prev, search: value }));
+  }
+
+  function setStockStatus(value: StockStatus | null) {
+    setFilters((prev) => ({ ...prev, stockStatus: value }));
+  }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -88,7 +118,7 @@ export default function MaterialList() {
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
-        stockStatus: stockStatus ?? undefined,
+        stockStatus: filters.stockStatus ?? undefined,
       });
       setMaterials(res.data);
       setTotal(res.total);
@@ -100,7 +130,7 @@ export default function MaterialList() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, stockStatus]);
+  }, [page, debouncedSearch, filters.stockStatus]);
 
   useEffect(() => {
     fetchMaterials();
@@ -108,15 +138,15 @@ export default function MaterialList() {
 
   useEffect(() => {
     const handle = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearch(filters.search);
       setPage(1);
     }, 300);
     return () => clearTimeout(handle);
-  }, [search]);
+  }, [filters.search]);
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [page, debouncedSearch, stockStatus]);
+  }, [page, debouncedSearch, filters.stockStatus]);
 
   function openDeleteDialog(material: Material) {
     setSelectedMaterial(material);
@@ -185,19 +215,21 @@ export default function MaterialList() {
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Materials" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={search}
+                value={filters.search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by code, name, or description"
                 className="pl-9"
               />
             </div>
-            {stockStatus && (
+            {filters.stockStatus && (
               <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
-                {STOCK_STATUS_LABEL[stockStatus]}
+                {STOCK_STATUS_LABEL[filters.stockStatus]}
                 <button
                   type="button"
                   onClick={() => setStockStatus(null)}

@@ -185,6 +185,14 @@ model Product {
   // filtering/search; just displayed on the product and printed on the
   // quotation for that line item.
   applicableTo String?
+  // Additive: mandatory (app-level, not DB-level — see ProductsService)
+  // mounting type for the HVLS Fans category only. Nullable here so a
+  // non-fan product (motor, drive, BMS, IoT, etc.) is never forced to pick
+  // one; ProductsService.create()/update() is what actually enforces "must
+  // be set whenever category is HVLS Fans", the same conditional-required
+  // pattern already used for Customer.gstNumber (requires isGstRegistered)
+  // and SalesOrder.customerPoNumber (requires !noPoAvailable).
+  fanType     FanType?
   price       Float?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1389,6 +1397,16 @@ model Complaint {
   complaintNumber String          @unique
   salesOrderId    String?
   salesOrder      SalesOrder?     @relation(fields: [salesOrderId], references: [id])
+  // QA fix (JEO Number field): staff now pick the Job Execution Order the
+  // complaint is about, not the Sales Order directly — salesOrderId above
+  // is derived automatically from jeo.salesOrderId at create() time and
+  // kept (not removed) because several existing paths have no other way to
+  // reach the customer (see ComplaintsService.sendComplaintLoggedConfirmation()
+  // and the search/warranty/display paths that read complaint.salesOrder).
+  // Nullable for the same reason salesOrderId is: a web-form-originated
+  // complaint (source WEB_FORM) has neither a Sales Order nor a JEO yet.
+  jeoId              String?
+  jeo                JobExecutionOrder? @relation(fields: [jeoId], references: [id], onDelete: SetNull)
   subject         String
   description     String?
   status          ComplaintStatus @default(OPEN)
@@ -1474,6 +1492,7 @@ model Complaint {
 
   @@index([status])
   @@index([salesOrderId])
+  @@index([jeoId])
   @@index([deletedAt])
   @@index([source])
   @@index([sourceWebsiteId])
@@ -1834,6 +1853,13 @@ enum HangingStructureType {
   PIPE_TRUSS
 }
 
+// How an HVLS Fans product is mounted — see Product.fanType.
+enum FanType {
+  ROOF
+  FLOOR
+  POLE
+}
+
 // Who arranges and pays for transport on a Quotation — see
 // Quotation.transportScope.
 enum TransportScope {
@@ -1922,6 +1948,11 @@ model JobExecutionOrder {
   // these are plain arrays, not enforced 1:1.
   proformaInvoices ProformaInvoice[]
   taxInvoices      TaxInvoice[]
+
+  // Additive: QA fix (JEO Number field) — back-relation for Complaint.jeoId.
+  // A single JEO can in principle have more than one complaint raised
+  // against it over its lifetime, so this is a plain array, not 1:1.
+  complaints Complaint[]
 
   @@index([status])
   @@index([priority])

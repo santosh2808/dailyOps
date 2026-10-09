@@ -59,13 +59,24 @@ export class UsersController {
   @Patch(':id')
   @RequirePermission('User', 'Edit')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: any) {
-    return this.usersService.update(id, dto, req.user.id);
+    return this.usersService.update(id, dto, req.user.id, req.user?.name);
   }
 
   @Delete(':id')
   @RequirePermission('User', 'Delete')
   remove(@Param('id') id: string, @Req() req: any) {
-    return this.usersService.remove(id, req.user.id);
+    return this.usersService.remove(id, req.user.id, req.user?.name);
+  }
+
+  // QA fix: "Delete User option is missing" — a distinct, permanent action
+  // from the soft-delete (Disable) route above. Same permission (User:
+  // Delete) since it's the same underlying capability, just a stronger
+  // version of it. ':id/permanent' rather than reusing DELETE ':id' so the
+  // existing Disable button/behavior is left completely unchanged.
+  @Delete(':id/permanent')
+  @RequirePermission('User', 'Delete')
+  hardDelete(@Param('id') id: string, @Req() req: any) {
+    return this.usersService.hardDelete(id, req.user.id);
   }
 
   // Administrator action ("Reset Passwords") — distinct from the general

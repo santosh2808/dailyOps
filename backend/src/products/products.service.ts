@@ -1,9 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
+
+// Feature upgrade: "Fan Type is missing when HVLS Fans category is
+// selected" — case/whitespace-insensitive so "HVLS Fans", " hvls fans ",
+// etc. all match the one canonical category string products are actually
+// seeded/created with (see prisma/seed.ts).
+function isHvlsFansCategory(category: string | null | undefined): boolean {
+  return (category ?? '').trim().toLowerCase() === 'hvls fans';
+}
 
 @Injectable()
 export class ProductsService {
@@ -67,6 +75,16 @@ export class ProductsService {
   }
 
   create(dto: CreateProductDto) {
+    // Feature upgrade: Fan Type is mandatory for the HVLS Fans category —
+    // enforced here (not just on the frontend) so the API itself can't be
+    // used to create a fan product with no mounting type, the same
+    // belt-and-suspenders approach as every other conditional-required
+    // field in this codebase.
+    if (isHvlsFansCategory(dto.category) && !dto.fanType) {
+      throw new BadRequestException(
+        'Fan Type is required for HVLS Fans products. Choose Roof, Floor, or Pole mounted.',
+      );
+    }
     // technicalSpec is a plain TS interface (ProductTechnicalSpec), not
     // Prisma's generated InputJsonValue — Prisma requires an explicit index
     // signature for JSON input types, which a named interface doesn't
@@ -80,7 +98,18 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    // Same rule as create() above, evaluated against the merged
+    // category/fanType — a PATCH that only sends one of the two fields
+    // must still be checked against whichever value (new or existing)
+    // ends up actually stored.
+    const effectiveCategory = dto.category !== undefined ? dto.category : existing.category;
+    const effectiveFanType = dto.fanType !== undefined ? dto.fanType : existing.fanType;
+    if (isHvlsFansCategory(effectiveCategory) && !effectiveFanType) {
+      throw new BadRequestException(
+        'Fan Type is required for HVLS Fans products. Choose Roof, Floor, or Pole mounted.',
+      );
+    }
     return this.prisma.product.update({
       where: { id },
       data: { ...dto, technicalSpec: dto.technicalSpec as Prisma.InputJsonValue | undefined },

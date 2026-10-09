@@ -23,6 +23,7 @@ import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listProformaInvoices } from "@/api/proforma-invoices";
 import type { ProformaInvoice } from "@/types";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -49,8 +50,15 @@ export default function ProformaInvoiceList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<ProformaInvoiceFilters>(emptyProformaInvoiceFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<ProformaInvoiceFilters>(emptyProformaInvoiceFilters);
+  // Sticky filters (persisted per browser tab via sessionStorage) — this
+  // page has no URL-filter-param convention, so initialFromUrl is always
+  // null and sessionStorage/default decide the initial value.
+  const [filters, setFilters] = useSessionFilters<ProformaInvoiceFilters>(
+    "dailyops.filters.proformaInvoices",
+    null,
+    emptyProformaInvoiceFilters,
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<ProformaInvoiceFilters>(filters);
   const [sortBy, setSortBy] = useState<SortableColumn>("invoiceDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

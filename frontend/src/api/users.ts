@@ -5,6 +5,8 @@ export interface UserListParams {
   page?: number;
   limit?: number;
   search?: string;
+  // QA fix: Departments -> Users navigation filter. See QueryUserDto.
+  departmentId?: string;
 }
 
 // roleIds / departmentId here are also how the Role Assignment and
@@ -74,6 +76,14 @@ export async function updateUser(id: string, payload: Partial<UserPayload>) {
 
 export async function deleteUser(id: string) {
   const res = await api.delete<RbacUser>(`/api/v1/users/${id}`);
+  return res.data;
+}
+
+// QA fix: "Delete User option is missing" — distinct from deleteUser()
+// above, which only disables (isActive: false). This permanently removes
+// the user record (see UsersService.hardDelete()).
+export async function deleteUserPermanently(id: string) {
+  const res = await api.delete<void>(`/api/v1/users/${id}/permanent`);
   return res.data;
 }
 

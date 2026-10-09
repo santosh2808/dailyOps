@@ -655,6 +655,42 @@ export class LeadsService {
         include: LEAD_DETAIL_INCLUDE,
       });
 
+      // QA re-fail: "Lead/Customer Conversion — edited lead details are not
+      // reflected in the converted customer record." convertToCustomer()
+      // carries companyName/contactPerson/phone/email/state over onto a new
+      // Customer at the moment of conversion, but nothing afterward kept
+      // them in sync — editing any of those same fields on a Lead that's
+      // already been converted (existing.customerId set) silently diverged
+      // from the Customer record it created, with no way to reconcile them
+      // from the UI. Only touches the fields Lead and Customer actually
+      // share (see convertToCustomer()'s own field list above); Customer-only
+      // fields like isGstRegistered/gstNumber have no Lead equivalent and
+      // are never touched here. Only fires for a field the request actually
+      // changed (checked against leadData, not the post-update row), so a
+      // save that didn't touch any shared field doesn't issue a no-op
+      // Customer update. Direct tx.customer.update() rather than going
+      // through CustomersService, same precedent convertToCustomer() itself
+      // set (that module doesn't export its service, and this avoids
+      // modifying it).
+      if (existing.customerId) {
+        const customerSync: {
+          companyName?: string;
+          contactPerson?: string;
+          phone?: string;
+          email?: string | null;
+          state?: string;
+        } = {};
+        if (leadData.companyName !== undefined) customerSync.companyName = leadData.companyName;
+        if (leadData.contactPerson !== undefined) customerSync.contactPerson = leadData.contactPerson;
+        if (leadData.phone !== undefined) customerSync.phone = leadData.phone;
+        if (leadData.email !== undefined) customerSync.email = leadData.email || null;
+        if (leadData.state !== undefined) customerSync.state = leadData.state;
+
+        if (Object.keys(customerSync).length > 0) {
+          await tx.customer.update({ where: { id: existing.customerId }, data: customerSync });
+        }
+      }
+
       // Assignment change gets its own structured LeadAssignmentHistory row
       // plus a dedicated ASSIGNED timeline entry — kept separate from the
       // generic "Edited" entry below so the Assign action is always
@@ -847,13 +883,22 @@ export class LeadsService {
             changedBy: actorName,
           },
         });
-        await this.logHistory(
-          tx,
-          id,
-          'STATUS_CHANGED',
-          `Status changed from ${existing.status} to ${dto.status}`,
-          actorName,
-        );
+        // QA fix: "Remarks not reflected after Lead status update" — a
+        // remark entered in ChangeStatusDialog.tsx was already being saved
+        // onto the LeadStatusHistory row above (dto.remarks), but neither
+        // the Timeline (getHistory(), which only ever shows what
+        // logHistory() itself writes) nor Notes (a completely separate
+        // LeadNote table, never touched by this method) ever surfaced it —
+        // so it was invisible anywhere in the UI despite being in the
+        // database. Folding it into this description (same "stash extra
+        // context in the description string" convention used by EDITED/
+        // FOLLOWUP_ADDED elsewhere in this file) makes it show up in the
+        // Timeline, which both status-history detail and the general
+        // Timeline tab read from.
+        const statusChangeDescription = dto.remarks?.trim()
+          ? `Status changed from ${existing.status} to ${dto.status} — Remark: ${dto.remarks.trim()}`
+          : `Status changed from ${existing.status} to ${dto.status}`;
+        await this.logHistory(tx, id, 'STATUS_CHANGED', statusChangeDescription, actorName);
       }
 
       return updated;
@@ -1861,6 +1906,53 @@ export class LeadsService {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 
+  // QA fix (TC-074 re-fail): "Download Template" above has only ever
+  // produced a blank header row — it's the import template, by design (see
+  // its own comment). The QA report is right that there has never actually
+  // been a way to export the *existing* lead data; a prior bug-fix pass's
+  // report claimed this was fixed, but no such export code was ever
+  // written. This adds that as a genuinely separate "Download Data"
+  // capability, mirroring MaterialsService.exportToExcel()'s existing
+  // export pattern — same isActive-equivalent scope (deletedAt: null, same
+  // soft-delete convention as findAll() above), same xlsx library, same
+  // "all matching records, not paginated" shape.
+  async exportLeadsToExcel(): Promise<Buffer> {
+    const leads = await this.prisma.lead.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { assignedToUser: { select: ASSIGNED_TO_USER_SELECT } },
+    });
+
+    const rows = leads.map((lead) => ({
+      'Lead Number': lead.leadNumber,
+      'Company Name': lead.companyName,
+      'Contact Person': lead.contactPerson,
+      Designation: lead.designation ?? '',
+      Email: lead.email ?? '',
+      Phone: lead.phone,
+      'Alternate Phone': lead.alternatePhone ?? '',
+      City: lead.city ?? '',
+      State: lead.state ?? '',
+      Industry: lead.industry ?? '',
+      'Lead Source': lead.source,
+      Status: lead.status,
+      Priority: lead.priority,
+      'Estimated Value': lead.estimatedValue ?? '',
+      'Next Follow-up': lead.nextFollowUp ? lead.nextFollowUp.toISOString().slice(0, 10) : '',
+      'Expected Close Date': lead.expectedCloseDate
+        ? lead.expectedCloseDate.toISOString().slice(0, 10)
+        : '',
+      'Assigned To': lead.assignedToUser?.name ?? '',
+      Remarks: lead.remarks ?? '',
+      'Created At': lead.createdAt.toISOString().slice(0, 10),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
+
   async previewLeadImport(fileBuffer: Buffer) {
     const rawRows = this.parseImportFile(fileBuffer);
     const rows: LeadImportRowResult[] = [];
@@ -1870,7 +1962,7 @@ export class LeadsService {
     return this.summarizeImportRows(rows);
   }
 
-  async importLeads(dto: ImportLeadsDto) {
+  async importLeads(dto: ImportLeadsDto, actorName?: string) {
     const rows: LeadImportRowResult[] = [];
     for (let i = 0; i < dto.rows.length; i++) {
       const input = dto.rows[i];
@@ -1891,22 +1983,31 @@ export class LeadsService {
           },
           input.row ?? i + 2,
           { insert: true },
+          actorName,
         ),
       );
     }
     return this.summarizeImportRows(rows);
   }
 
-  // Case-insensitive, whitespace-trimmed match of a workbook tab's own name
-  // against INDIA_STATES (the same list Customer.state/Lead.state are
-  // validated against elsewhere) — e.g. a tab literally named "telangana"
-  // or " Telangana " still resolves. A tab whose name doesn't match any
-  // recognized state (the default "Leads"/"Sheet1", a region name, a typo,
-  // ...) returns undefined and that sheet's rows keep whatever their own
-  // State column says, exactly like a single-sheet import always has.
-  private resolveSheetState(sheetName: string): string | undefined {
-    const normalized = sheetName.trim().toLowerCase();
+  // Case-insensitive, whitespace-trimmed match of a value against
+  // INDIA_STATES (the same list Customer.state/Lead.state are validated
+  // against elsewhere) — e.g. "telangana" or " Telangana " still resolves,
+  // returning the list's own canonical casing. A value that doesn't match
+  // any recognized state (a typo, a region name, ...) returns undefined.
+  // Shared by resolveSheetState() (a workbook tab's own name) and
+  // classifyImportRow()'s own State-column validation below.
+  private matchIndiaState(value: string): string | undefined {
+    const normalized = value.trim().toLowerCase();
     return INDIA_STATES.find((s) => s.toLowerCase() === normalized);
+  }
+
+  // A tab whose name doesn't match any recognized state (the default
+  // "Leads"/"Sheet1", a region name, a typo, ...) returns undefined and
+  // that sheet's rows keep whatever their own State column says, exactly
+  // like a single-sheet import always has.
+  private resolveSheetState(sheetName: string): string | undefined {
+    return this.matchIndiaState(sheetName);
   }
 
   // Multi-sheet import: sales teams keep one tab per state in the same
@@ -1920,8 +2021,50 @@ export class LeadsService {
   // as a React list key on the frontend — see previewLeadImport()/
   // importLeads(), which still just do `rawRows[i]` / `i + 2` over the
   // flattened array this returns.
+  // QA re-fail (TC-098): "Meta Lead Localization" — marketing exports leads
+  // from Meta Ads Manager as CSV and imports that file here via Lead
+  // Import. A real .xlsx/.xls upload is a binary zip/OLE container, so
+  // XLSX.read(buffer, {type:'buffer'}) always decodes its cell text
+  // correctly regardless of language. A CSV upload has no such container —
+  // it's just raw text bytes — and SheetJS's CSV parser only recognizes
+  // UTF-8 when the file starts with a UTF-8 BOM (EF BB BF); lacking one (the
+  // common case for Meta's export, and most CSV tools), it falls back to
+  // decoding byte-by-byte as Latin-1, turning multi-byte UTF-8 sequences
+  // (any Hindi/Tamil/Telugu/etc. name) into mojibake — reproduced directly
+  // with XLSX.read() on a BOM-less UTF-8 CSV buffer containing Hindi text.
+  // Fix: sniff whether the upload is actually a binary spreadsheet
+  // container (zip "PK" magic for .xlsx, OLE "D0 CF 11 E0" for legacy
+  // .xls) and only use the raw-buffer path for those. Anything else is
+  // treated as plain text, decoded as UTF-8 by Node itself (which doesn't
+  // depend on a BOM), and handed to XLSX.read as an already-decoded string
+  // (type: 'string') — this bypasses SheetJS's own BOM-dependent sniffing
+  // entirely, so a BOM-less UTF-8 CSV now decodes correctly too.
+  private readImportWorkbook(buffer: Buffer): XLSX.WorkBook {
+    const isZipContainer = buffer.length >= 4 && buffer.subarray(0, 2).toString('latin1') === 'PK';
+    const isLegacyOleContainer =
+      buffer.length >= 4 &&
+      buffer[0] === 0xd0 &&
+      buffer[1] === 0xcf &&
+      buffer[2] === 0x11 &&
+      buffer[3] === 0xe0;
+
+    if (isZipContainer || isLegacyOleContainer) {
+      return XLSX.read(buffer, { type: 'buffer' });
+    }
+
+    // Node's Buffer#toString('utf8') decodes the bytes correctly either way,
+    // but — unlike XLSX.read's own BOM handling on the raw-buffer path — it
+    // leaves a leading U+FEFF (the BOM, if the file happened to have one) in
+    // the resulting string, which would otherwise get stuck onto the first
+    // header cell (e.g. "﻿Contact Person", silently failing to match
+    // LEAD_IMPORT_COLUMN_MAP). Strip it so both BOM and non-BOM UTF-8 CSVs
+    // parse identically.
+    const text = buffer.toString('utf8').replace(/^﻿/, '');
+    return XLSX.read(text, { type: 'string' });
+  }
+
   private parseImportFile(buffer: Buffer): LeadImportRowInput[] {
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const workbook = this.readImportWorkbook(buffer);
     if (workbook.SheetNames.length === 0) {
       throw new BadRequestException('The uploaded file has no worksheets');
     }
@@ -1987,6 +2130,7 @@ export class LeadsService {
     raw: LeadImportRowInput,
     rowNumber: number,
     options: { insert: boolean },
+    actorName?: string,
   ): Promise<LeadImportRowResult> {
     const companyName = raw.companyName?.trim() ?? '';
     const contactPerson = raw.contactPerson?.trim() ?? '';
@@ -1994,23 +2138,49 @@ export class LeadsService {
     const phoneRaw = raw.phone?.trim() ?? '';
     // Some CSV/XLSX exports prefix numeric-looking cells with a leading
     // apostrophe (a text-format marker) so leading zeros/plus signs aren't
-    // reinterpreted as a number — strip that before normalizing, otherwise
-    // it gets swept up with the rest of the punctuation below and the
-    // country-code "+" that follows it is lost along with it.
+    // reinterpreted as a number — strip that before normalizing. Not
+    // strictly necessary for normalizePhone() itself (it discards every
+    // non-digit character anyway via \D), but keeps the debug log below
+    // readable.
     let phoneForNormalization = phoneRaw;
     if (phoneForNormalization.startsWith("'")) {
       phoneForNormalization = phoneForNormalization.slice(1).trim();
     }
-    const phoneHasCountryCode = phoneForNormalization.startsWith('+');
-    const phoneDigitsOnly = phoneForNormalization.replace(/\D/g, '');
-    const phoneNormalized = phoneHasCountryCode ? `+${phoneDigitsOnly}` : phoneDigitsOnly;
+    // QA re-fail: "Mobile number validation during Lead Import" — this used
+    // to normalize by hand and then accept 10-15 digits (optionally with a
+    // "+" country code), which let obviously-wrong 11-15 digit numbers
+    // through on import even though every other phone entry point in the
+    // app (CreateLeadDto.phone, Customer.phone — see phone.util.ts's own
+    // comment, TC-083/097) enforces a bare 10-digit Indian mobile number.
+    // Lead Import was simply never brought in line with that pass. Reuse
+    // the same shared normalizePhone() helper everywhere else already
+    // calls: it strips a +91/91/leading-0 prefix down to the bare 10
+    // digits, and returns null for anything that isn't 10/11/12 digits in
+    // one of those recognized shapes — including the over-length numbers
+    // this ticket is about.
+    const phoneNormalized = normalizePhone(phoneForNormalization);
     if (phoneRaw) {
       this.logger.debug(
-        `Import row ${rowNumber} phone normalization: original="${phoneRaw}" normalized="${phoneNormalized}"`,
+        `Import row ${rowNumber} phone normalization: original="${phoneRaw}" normalized="${phoneNormalized ?? '(invalid)'}"`,
       );
     }
     const city = raw.city?.trim() || undefined;
-    const state = raw.state?.trim() || undefined;
+    // QA fail: "State validation during Lead Import" — this used to accept
+    // any text verbatim with no validation at all, even though the Create
+    // Lead form requires State and restricts it to INDIA_STATES (see
+    // create-lead.dto.ts's @IsIn(INDIA_STATES)). An invalid/misspelled State
+    // ("Maharastra") imported clean, and since Lead.state carries straight
+    // through onto Customer.state at conversion (see convertToCustomer()),
+    // the bad value propagated there too with no way to catch it. Reuses
+    // the same case/whitespace-insensitive matchIndiaState() lookup
+    // resolveSheetState() already uses for a tab's own name, so "Telangana",
+    // "telangana", and " Telangana " all resolve to the list's own
+    // canonical casing. State is still optional on import (unlike the
+    // manual Create Lead form) — a blank cell is left blank, matching every
+    // other import column's "no field is mandatory" rule above; only a
+    // non-blank value that doesn't match a recognized state is rejected.
+    const stateRaw = raw.state?.trim() || undefined;
+    const state = stateRaw ? this.matchIndiaState(stateRaw) : undefined;
     const industry = raw.industry?.trim() || undefined;
     const remarks = raw.remarks?.trim() || undefined;
 
@@ -2024,10 +2194,16 @@ export class LeadsService {
     if (email && !isEmail(email)) {
       errors.push('Email must be a valid email address');
     }
-    if (phoneRaw && !/^\+?\d{10,15}$/.test(phoneNormalized)) {
-      errors.push('Phone must be 10-15 digits');
+    if (phoneRaw && !phoneNormalized) {
+      errors.push('Phone must be exactly 10 digits');
       this.logger.debug(
-        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" normalized="${phoneNormalized}" reason="Phone must be 10-15 digits"`,
+        `Import row ${rowNumber} phone rejected: original="${phoneRaw}" reason="Phone must be exactly 10 digits"`,
+      );
+    }
+    if (stateRaw && !state) {
+      errors.push(`Unrecognized State: "${stateRaw}"`);
+      this.logger.debug(
+        `Import row ${rowNumber} state rejected: original="${stateRaw}" reason="not in INDIA_STATES"`,
       );
     }
 
@@ -2107,50 +2283,70 @@ export class LeadsService {
       return { ...base, result: 'valid' };
     }
 
-    const created = await this.createImportedLead(base);
+    const created = await this.createImportedLead(base, actorName);
     return { ...base, result: 'created', leadNumber: created.leadNumber };
   }
 
-  private async createImportedLead(row: {
-    companyName: string;
-    contactPerson: string;
-    email: string;
-    phone: string;
-    city?: string;
-    state?: string;
-    industry?: string;
-    source: LeadSource;
-    status: LeadStatus;
-    remarks?: string;
-  }) {
+  private async createImportedLead(
+    row: {
+      companyName: string;
+      contactPerson: string;
+      email: string;
+      phone: string;
+      city?: string;
+      state?: string;
+      industry?: string;
+      source: LeadSource;
+      status: LeadStatus;
+      remarks?: string;
+    },
+    actorName?: string,
+  ) {
     if (row.phone) {
       this.logger.debug(`Saving lead phone to database: final="${row.phone}"`);
     }
     for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
       const leadNumber = await this.generateLeadNumber();
       try {
-        return await this.prisma.lead.create({
-          data: {
-            leadNumber,
-            companyName: row.companyName,
-            contactPerson: row.contactPerson,
-            email: row.email,
-            phone: row.phone,
-            city: row.city,
-            state: row.state,
-            industry: row.industry,
-            remarks: row.remarks,
-            source: row.source,
-            status: row.status,
-            // Imported leads have no natural "opportunity title" — the
-            // import template has no Title column, unlike the manual Create
-            // Lead form where it's required and user-authored. Defaulted
-            // from Company Name so the required `title` column is always
-            // populated with something meaningful, and is editable
-            // afterwards from the Lead Details/Edit page like any other
-            // lead.
-            title: `Imported Lead - ${row.companyName}`,
-          },
+        // QA fail: "Imported lead creation not recorded in Timeline" —
+        // the plain prisma.lead.create() below never logged a CREATED
+        // LeadHistory row the way create() (the manual Create Lead path)
+        // always has, so an imported lead's Timeline was simply empty
+        // forever after. Wrapped in a transaction (mirroring create()'s
+        // own create+logHistory pattern) so the lead and its first
+        // Timeline entry are always written together.
+        return await this.prisma.$transaction(async (tx) => {
+          const created = await tx.lead.create({
+            data: {
+              leadNumber,
+              companyName: row.companyName,
+              contactPerson: row.contactPerson,
+              email: row.email,
+              phone: row.phone,
+              city: row.city,
+              state: row.state,
+              industry: row.industry,
+              remarks: row.remarks,
+              source: row.source,
+              status: row.status,
+              // Imported leads have no natural "opportunity title" — the
+              // import template has no Title column, unlike the manual
+              // Create Lead form where it's required and user-authored.
+              // Defaulted from Company Name so the required `title`
+              // column is always populated with something meaningful,
+              // and is editable afterwards from the Lead Details/Edit
+              // page like any other lead.
+              title: `Imported Lead - ${row.companyName}`,
+            },
+          });
+          await this.logHistory(
+            tx,
+            created.id,
+            'CREATED',
+            `Lead ${created.leadNumber} created via Lead Import`,
+            actorName,
+          );
+          return created;
         });
       } catch (error) {
         if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) {

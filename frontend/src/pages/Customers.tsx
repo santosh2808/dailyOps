@@ -29,6 +29,7 @@ import {
 import type { Customer } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { getErrorMessage } from "@/lib/errors";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -42,8 +43,16 @@ export default function Customers() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  // Sticky filters (persisted per browser tab via sessionStorage) — this
+  // page has no FiltersBar/filters-object, just a simple search box. The
+  // debounced `search` (the value that actually drives fetchCustomers) is
+  // the one persisted, same relationship as filters/debouncedFilters on
+  // every other list page; `searchInput` (the live-typing box) stays plain
+  // local state, seeded from the restored value so the box doesn't show
+  // empty while a remembered search is still in effect. No URL-filter-param
+  // convention exists here, so initialFromUrl is always null.
+  const [search, setSearch] = useSessionFilters<string>("dailyops.filters.customers", null, "");
+  const [searchInput, setSearchInput] = useState(search);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -118,7 +127,9 @@ export default function Customers() {
       <div className="flex flex-1 flex-col">
         <Topbar title="Customers" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input

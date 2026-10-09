@@ -112,16 +112,25 @@ export default function QuotationItemsEditor({
     });
   }
 
-  // QA bug-fix pass (TC-090): the main row used to show every field
-  // (including Description) inline, which crowded it on narrower screens.
-  // Description now lives in a per-row expandable detail area instead —
-  // same Set<string>-keyed-by-productId convention as
-  // customColorProductIds above, so it survives rows being added/removed
-  // above it. Rows that already have a Description filled in (loaded from
-  // a saved quotation) start expanded so existing data is never hidden by
-  // surprise — mirrors ProductFormDialog's hasAdvancedData() auto-open.
+  // QA bug-fix pass (TC-090), later re-failed: the main row used to show
+  // every field (including Description) inline, which crowded it on
+  // narrower screens. All per-product detail fields (Description, Color,
+  // Hanging Structure) now live in a per-row expandable detail area
+  // instead, toggled by the chevron — same Set<string>-keyed-by-productId
+  // convention as customColorProductIds above, so it survives rows being
+  // added/removed above it.
+  //
+  // The re-fail: expected behavior is "items remain expanded by default,
+  // collapse only when the user chooses to" — the original fix only
+  // auto-expanded rows that already had a saved Description, so every
+  // other row (including every newly-added one) opened collapsed, and the
+  // Color/Hanging Structure block was unconditionally visible regardless
+  // of the chevron, so collapsing never actually hid it. Both fixed here:
+  // every row starts expanded (addProduct() below adds new rows to this
+  // set too), and the whole detail block — not just Description — is
+  // gated on isExpanded.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(
-    () => new Set(value.filter((row) => row.description?.trim()).map((row) => row.productId)),
+    () => new Set(value.map((row) => row.productId)),
   );
 
   function toggleExpanded(productId: string) {
@@ -164,6 +173,9 @@ export default function QuotationItemsEditor({
         unitPrice: product?.price ?? 0,
       },
     ]);
+    // QA re-fail (TC-090): new rows must start expanded like every other
+    // row — see the expandedRows comment above.
+    setExpandedRows((prev) => new Set(prev).add(pendingProductId));
     setPendingProductId("");
   }
 
@@ -282,19 +294,23 @@ export default function QuotationItemsEditor({
                       <Input
                         type="number"
                         min={0}
-                        // Bug fix: step={10000} was meant to only affect the
-                        // native up/down arrow increment (TC-092), but the
-                        // browser's own HTML5 constraint validation enforces
-                        // step on ANY value, not just ones typed via the
-                        // arrows — so a manually typed price that wasn't an
-                        // exact multiple of 10,000 (e.g. 162000) blocked the
-                        // whole form from submitting with a native "Please
-                        // enter a valid value" popup, even though onChange
-                        // below happily accepted and stored it. step="any"
-                        // disables that constraint entirely while leaving
-                        // the arrows working (browsers default to a step of
-                        // 1 for the arrows when step is "any").
-                        step="any"
+                        // QA re-fail (TC-092): step="any" was a prior
+                        // attempt to stop the browser's native step-mismatch
+                        // validation from blocking submission of a manually
+                        // typed, non-multiple-of-10,000 price (e.g. 162000)
+                        // — but "any" also made the up/down arrows default
+                        // to incrementing by 1 instead of 10,000, which QA
+                        // correctly flagged as a regression of its own
+                        // requirement. step={10000} is restored here so the
+                        // arrows behave correctly again; the native
+                        // constraint-validation popup that step={10000}
+                        // would otherwise trigger on submit is suppressed
+                        // the right way instead — via noValidate on the
+                        // <form> itself in QuotationForm.tsx, which only
+                        // disables the browser's own submit-time validation
+                        // UI, not this component's typed-value handling or
+                        // the arrows' step increment.
+                        step={10000}
                         value={row.unitPrice ?? ""}
                         onChange={(e) =>
                           updateRow(index, {
@@ -335,8 +351,13 @@ export default function QuotationItemsEditor({
                       </TableCell>
                     </TableRow>
                   )}
-                  {/* Color / Hanging Structure — always visible per item, not
-                      hidden behind a toggle, so it isn't easy to miss. */}
+                  {/* QA re-fail (TC-090): this used to render unconditionally
+                      regardless of the chevron, so "collapsing" a row never
+                      actually hid it — the expected behavior is that
+                      collapsing leaves only the main row (Product/Qty/Unit
+                      Price/Line Total/Delete) visible. Now gated on
+                      isExpanded, same as the Description block above. */}
+                  {isExpanded && (
                   <TableRow>
                     <TableCell colSpan={6} className="bg-slate-50 py-3">
                       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -494,6 +515,7 @@ export default function QuotationItemsEditor({
                       </div>
                     </TableCell>
                   </TableRow>
+                  )}
                 </Fragment>
               );
             })}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -29,6 +30,7 @@ import {
 import type { Department } from "@/types";
 
 export default function Departments() {
+  const navigate = useNavigate();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -71,6 +73,14 @@ export default function Departments() {
   function openDeleteDialog(department: Department) {
     setSelected(department);
     setDeleteOpen(true);
+  }
+
+  // QA fix: "clicking a department should navigate to the Users page with
+  // the selected department automatically applied as a filter" — Users.tsx
+  // reads ?departmentId= once on mount the same way LeadList.tsx already
+  // reads /leads?status= from a Dashboard card link.
+  function viewDepartmentUsers(department: Department) {
+    navigate(`/admin/users?departmentId=${department.id}`);
   }
 
   async function handleFormSubmit(payload: DepartmentPayload) {
@@ -202,13 +212,28 @@ export default function Departments() {
                       />
                     </TableCell>
                     <TableCell className="font-medium text-slate-900">
-                      {department.name}
+                      <button
+                        type="button"
+                        title="View users in this department"
+                        onClick={() => viewDepartmentUsers(department)}
+                        className="text-left hover:underline hover:text-primary"
+                      >
+                        {department.name}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <TruncatedText text={department.description || "—"} />
                     </TableCell>
                     <TableCell>
-                      <Badge variant="muted">{department._count?.users ?? 0}</Badge>
+                      <button
+                        type="button"
+                        title="View users in this department"
+                        onClick={() => viewDepartmentUsers(department)}
+                      >
+                        <Badge variant="muted" className="hover:bg-slate-200">
+                          {department._count?.users ?? 0}
+                        </Badge>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

@@ -17,8 +17,22 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
-import type { Product, ProductTechnicalSpec } from "@/types";
+import type { Product, ProductTechnicalSpec, FanType } from "@/types";
 import type { ProductPayload } from "@/api/products";
+
+// Feature upgrade: "Fan Type is missing when HVLS Fans category is selected"
+// — mandatory mounting-type choice shown whenever Category resolves to the
+// HVLS Fans category (case/whitespace-insensitive, mirrors the backend's
+// isHvlsFansCategory() helper in products.service.ts).
+const FAN_TYPE_OPTIONS: { value: FanType; label: string }[] = [
+  { value: "ROOF", label: "Roof Mounted" },
+  { value: "FLOOR", label: "Floor Mounted" },
+  { value: "POLE", label: "Pole Mounted" },
+];
+
+function isHvlsFansCategory(category: string): boolean {
+  return category.trim().toLowerCase() === "hvls fans";
+}
 
 // TC-066: the fixed set of SPYRO HVLS fan sizes this business actually
 // sells — taken from the canonical Annexure-I spec sheets seeded in
@@ -128,6 +142,14 @@ interface FormState {
   // simple always-visible section since it's the main thing that
   // distinguishes one spare part from another.
   applicableTo: string;
+  // Feature upgrade: mandatory mounting type when category is HVLS Fans.
+  // Kept as a plain string (not FanType | "") like every other dropdown
+  // field in this form's FormState (e.g. category) — the `errors` state is
+  // typed Partial<FormState>, so a restricted union here would reject the
+  // validation error message string assigned to it in validate().
+  // form.fanType is cast to FanType at the one place it actually needs to
+  // be the enum type: the onSubmit() payload below.
+  fanType: string;
   // Price Validation (requirement #8): Standard Price is what discount % is
   // measured against, Minimum Price is the hard floor a Quotation item may
   // never go below without an approval request, and Max Discount % is
@@ -147,6 +169,7 @@ const emptyForm: FormState = {
   price: "",
   description: "",
   applicableTo: "",
+  fanType: "",
   standardPrice: "",
   minPrice: "",
   maxDiscountPercent: "",
@@ -180,6 +203,7 @@ export default function ProductFormDialog({
               price: product.price != null ? String(product.price) : "",
               description: product.description ?? "",
               applicableTo: product.applicableTo ?? "",
+              fanType: product.fanType ?? "",
               standardPrice: product.standardPrice != null ? String(product.standardPrice) : "",
               minPrice: product.minPrice != null ? String(product.minPrice) : "",
               maxDiscountPercent:
@@ -202,6 +226,11 @@ export default function ProductFormDialog({
     }
     if (!form.category.trim()) {
       next.category = "Category is required";
+    }
+    // Feature upgrade: Fan Type is mandatory for the HVLS Fans category —
+    // the product must not be savable until one of Roof/Floor/Pole is picked.
+    if (isHvlsFansCategory(form.category) && !form.fanType) {
+      next.fanType = "Fan Type is required for HVLS Fans products";
     }
     if (form.price.trim()) {
       const parsed = Number(form.price);
@@ -251,6 +280,7 @@ export default function ProductFormDialog({
         sku: form.sku.trim() || undefined,
         description: form.description.trim() || undefined,
         applicableTo: form.applicableTo.trim() || undefined,
+        fanType: form.fanType ? (form.fanType as FanType) : undefined,
         price: form.price.trim() ? Number(form.price) : undefined,
         standardPrice: form.standardPrice.trim() ? Number(form.standardPrice) : undefined,
         minPrice: form.minPrice.trim() ? Number(form.minPrice) : undefined,
@@ -272,7 +302,17 @@ export default function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} size="lg">
+      {/* Bug fix (QA re-fail of TC-065): expanding "Pricing rules &
+          technical specifications" (30 spec fields + price validation +
+          scope rows) used to grow this dialog to 1500-2000px+ with no
+          height boundary — Save/Cancel and the close button scrolled away
+          with the content along with everything else, matching the report
+          ("oversized ... fields difficult to access even on a large
+          screen"). Capping DialogContent to the viewport height and making
+          only the field area scroll internally (flex-1 overflow-y-auto)
+          keeps the footer and close button reachable at all times,
+          regardless of how long the expanded section gets. */}
+      <DialogContent onClose={() => onOpenChange(false)} size="lg" className="flex max-h-[85vh] flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Product" : "Add Product"}</DialogTitle>
           <DialogDescription>
@@ -282,7 +322,8 @@ export default function ProductFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           <div className="space-y-2">
             <Label htmlFor="name">Product Name *</Label>
             <Input
@@ -322,6 +363,28 @@ export default function ProductFormDialog({
               />
             </div>
           </div>
+
+          {isHvlsFansCategory(form.category) && (
+            <div className="space-y-2">
+              <Label htmlFor="fanType">Fan Type *</Label>
+              <Select
+                id="fanType"
+                value={form.fanType}
+                onChange={(e) => setForm({ ...form, fanType: e.target.value })}
+              >
+                <option value="">Select fan type</option>
+                {FAN_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+              {errors.fanType && <p className="text-xs text-destructive">{errors.fanType}</p>}
+              <p className="text-xs text-muted-foreground">
+                Required for HVLS Fans products — how the fan is mounted.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="applicableTo">Applicable To</Label>
@@ -550,8 +613,12 @@ export default function ProductFormDialog({
           </div>
           </>
           )}
+        </div>
 
-          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+          {/* Outside the scrollable field area (see className above) so a
+              submit failure is always visible immediately, without having
+              to scroll back down through the whole form to see it. */}
+          {submitError && <p className="mt-4 text-sm text-destructive">{submitError}</p>}
 
           <DialogFooter>
             <Button

@@ -4,6 +4,7 @@ import { QuotationPdfService } from './quotation-pdf.service';
 import { ProformaInvoicePdfService } from './proforma-invoice-pdf.service';
 import { JeoPdfService } from './jeo-pdf.service';
 import { TaxInvoicePdfService } from './tax-invoice-pdf.service';
+import { SalesOrderPdfService } from './sales-order-pdf.service';
 
 @Module({
   // PdfService: generic renderer, still available for any future
@@ -14,7 +15,24 @@ import { TaxInvoicePdfService } from './tax-invoice-pdf.service';
   // Order templates (see ProformaInvoicesService.getPdf()/
   // JobExecutionOrdersService.getPdf()). TaxInvoicePdfService: the branded
   // GST Tax Invoice template (see TaxInvoicesService.getPdf()).
-  providers: [PdfService, QuotationPdfService, ProformaInvoicePdfService, JeoPdfService, TaxInvoicePdfService],
-  exports: [PdfService, QuotationPdfService, ProformaInvoicePdfService, JeoPdfService, TaxInvoicePdfService],
+  // SalesOrderPdfService: QA fix — Sales Order had no PDF of its own at all
+  // (see its own file comment); now matches the same house style as the
+  // other four (see SalesOrdersService.getPdf()).
+  providers: [
+    PdfService,
+    QuotationPdfService,
+    ProformaInvoicePdfService,
+    JeoPdfService,
+    TaxInvoicePdfService,
+    SalesOrderPdfService,
+  ],
+  exports: [
+    PdfService,
+    QuotationPdfService,
+    ProformaInvoicePdfService,
+    JeoPdfService,
+    TaxInvoicePdfService,
+    SalesOrderPdfService,
+  ],
 })
 export class PdfModule {}

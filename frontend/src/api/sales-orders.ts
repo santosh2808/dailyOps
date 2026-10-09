@@ -21,7 +21,10 @@ export interface SalesOrderItemPayload {
   productId: string;
   quantity: number;
   unitPrice?: number;
-  discount?: number;
+  // Removed (QA decision, "Discount validation based on Sales Order
+  // subtotal"): per-line discount is no longer a Sales Order concept —
+  // Quotation.discount is the only discounting mechanism left in this
+  // pipeline. See sales-order-item-input.dto.ts's comment on the backend.
   description?: string;
 }
 
@@ -129,4 +132,15 @@ export async function getSalesOrderPoDocumentBlobUrl(id: string) {
 export async function deleteSalesOrderPoDocument(id: string) {
   const res = await api.delete<SalesOrder>(`/api/v1/sales-orders/${id}/po-document`);
   return res.data;
+}
+
+// QA fix: "there is no View PDF option in the Sales Order within the
+// application" — same blob-fetch-then-window.open pattern as
+// openProformaInvoicePdf() in api/proforma-invoices.ts. See
+// SalesOrdersController.getPdf() for the backend side.
+export async function openSalesOrderPdf(id: string) {
+  const res = await api.get(`/api/v1/sales-orders/${id}/pdf`, { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+  window.open(url, "_blank");
+  setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }

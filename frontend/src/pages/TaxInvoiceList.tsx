@@ -23,6 +23,7 @@ import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listTaxInvoices } from "@/api/tax-invoices";
 import type { TaxInvoice } from "@/types";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -49,8 +50,15 @@ export default function TaxInvoiceList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<TaxInvoiceFilters>(emptyTaxInvoiceFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<TaxInvoiceFilters>(emptyTaxInvoiceFilters);
+  // Sticky filters (persisted per browser tab via sessionStorage) — this
+  // page has no URL-filter-param convention, so initialFromUrl is always
+  // null and sessionStorage/default decide the initial value.
+  const [filters, setFilters] = useSessionFilters<TaxInvoiceFilters>(
+    "dailyops.filters.taxInvoices",
+    null,
+    emptyTaxInvoiceFilters,
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<TaxInvoiceFilters>(filters);
   const [sortBy, setSortBy] = useState<SortableColumn>("invoiceDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);

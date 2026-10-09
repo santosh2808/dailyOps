@@ -150,6 +150,12 @@ export interface ProductTechnicalSpec {
   scopeOfSupply?: { item: string; quantityPerFan: string }[];
 }
 
+// Feature upgrade: how an HVLS Fans product is mounted (mirrors the
+// backend's FanType enum). Mandatory whenever Product.category is "HVLS
+// Fans" — see ProductFormDialog.tsx / ProductsService.
+export const FAN_TYPES = ["ROOF", "FLOOR", "POLE"] as const;
+export type FanType = (typeof FAN_TYPES)[number];
+
 export interface Product {
   id: string;
   name: string;
@@ -158,6 +164,9 @@ export interface Product {
   description?: string | null;
   // Additive: which fan(s) a spare part (motor, drive, etc.) applies to.
   applicableTo?: string | null;
+  // Feature upgrade: required for category "HVLS Fans", null/unset for
+  // everything else — see FanType above.
+  fanType?: FanType | null;
   price?: number | null;
   isActive: boolean;
   createdAt: string;
@@ -1384,6 +1393,12 @@ export interface Complaint {
       status: ProformaInvoiceStatus;
     }[];
   };
+  // QA fix (JEO Number field): the Job Execution Order staff pick on the Log
+  // Complaint form — salesOrderId/salesOrder above are derived from it
+  // server-side and kept only for the paths noted on the backend schema's
+  // Complaint.jeoId comment.
+  jeoId?: string | null;
+  jeo?: { id: string; jeoNumber: string } | null;
   subject: string;
   description?: string | null;
   status: ComplaintStatus;

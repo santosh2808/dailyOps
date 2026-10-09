@@ -547,6 +547,24 @@ export default function ComplaintDetails() {
                   <CardTitle className="text-base">Linked Sales Order</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {/* QA fix (JEO Number field): JEO Number is now the
+                      primary identifying field staff pick a complaint's
+                      Sales Order by (see ComplaintForm.tsx) — shown first,
+                      ahead of the Sales Order it was derived from. */}
+                  <Field
+                    label="JEO Number"
+                    value={
+                      complaint.jeo ? (
+                        <button
+                          type="button"
+                          className="text-left text-srm-green hover:underline"
+                          onClick={() => navigate(`/job-execution-orders/${complaint.jeo!.id}`)}
+                        >
+                          {complaint.jeo.jeoNumber}
+                        </button>
+                      ) : null
+                    }
+                  />
                   <Field
                     label="Sales Order No."
                     value={

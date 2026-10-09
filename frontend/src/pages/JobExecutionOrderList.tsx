@@ -24,6 +24,7 @@ import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -51,10 +52,17 @@ export default function JobExecutionOrderList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<JeoFilters>(() => initialFiltersFromSearchParams(searchParams));
-  const [debouncedFilters, setDebouncedFilters] = useState<JeoFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /job-execution-orders?status=QC) always takes precedence over a
+  // remembered one.
+  const hasUrlFilterParams = searchParams.has("status");
+  const [filters, setFilters] = useSessionFilters<JeoFilters>(
+    "dailyops.filters.jeo",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyJeoFilters,
   );
+  const [debouncedFilters, setDebouncedFilters] = useState<JeoFilters>(filters);
   const [sortBy, setSortBy] = useState<SortableColumn>("deliveryDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);

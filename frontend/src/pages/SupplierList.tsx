@@ -33,6 +33,7 @@ import {
 } from "@/api/suppliers";
 import type { Supplier } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 
 const PAGE_SIZE = 20;
 
@@ -46,8 +47,16 @@ export default function SupplierList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<SupplierFilters>(emptySupplierFilters);
-  const [debouncedFilters, setDebouncedFilters] = useState<SupplierFilters>(emptySupplierFilters);
+  // Sticky filters (persisted per browser tab via sessionStorage) — this
+  // page has no URL-filter-param convention (no Dashboard link lands here
+  // with a filter preapplied), so initialFromUrl is always null and
+  // sessionStorage/default decide the initial value.
+  const [filters, setFilters] = useSessionFilters<SupplierFilters>(
+    "dailyops.filters.suppliers",
+    null,
+    emptySupplierFilters,
+  );
+  const [debouncedFilters, setDebouncedFilters] = useState<SupplierFilters>(filters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -176,7 +185,12 @@ export default function SupplierList() {
       <div className="flex flex-1 flex-col">
         <Topbar title="Suppliers" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning:
+              sm:flex-wrap lets the action-buttons group drop to its own line
+              instead of forcing a non-wrapping flex row to squeeze the
+              filters bar into an impossible width. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <SupplierFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>

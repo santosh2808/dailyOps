@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import SalesOrderPicker from "@/components/complaints/SalesOrderPicker";
+import JeoPicker from "@/components/complaints/JeoPicker";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -21,10 +21,12 @@ import {
   type ComplaintPayload,
   type InvoiceLookupResult,
 } from "@/api/complaints";
-import type { SalesOrder } from "@/types";
+import type { JobExecutionOrder } from "@/types";
 
 interface FormState {
-  salesOrderId: string;
+  // QA fix (JEO Number field): replaces salesOrderId as the field this form
+  // collects — the backend derives the Sales Order from the chosen JEO.
+  jeoId: string;
   subject: string;
   description: string;
   invoiceNumber: string;
@@ -34,7 +36,7 @@ interface FormState {
 }
 
 const emptyForm: FormState = {
-  salesOrderId: "",
+  jeoId: "",
   subject: "",
   description: "",
   invoiceNumber: "",
@@ -47,7 +49,7 @@ export default function ComplaintForm() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [selectedSalesOrder, setSelectedSalesOrder] = useState<SalesOrder | null>(null);
+  const [selectedJeo, setSelectedJeo] = useState<JobExecutionOrder | null>(null);
   const [complaintNumber, setComplaintNumber] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(isEdit);
@@ -69,14 +71,14 @@ export default function ComplaintForm() {
         if (cancelled) return;
         setComplaintNumber(complaint.complaintNumber);
         setForm({
-          salesOrderId: complaint.salesOrderId ?? "",
+          jeoId: complaint.jeoId ?? "",
           subject: complaint.subject,
           description: complaint.description ?? "",
           invoiceNumber: complaint.claimedInvoiceNumber ?? "",
           sendConfirmationEmail: true,
         });
-        if (complaint.salesOrder) {
-          setSelectedSalesOrder(complaint.salesOrder as unknown as SalesOrder);
+        if (complaint.jeo) {
+          setSelectedJeo(complaint.jeo as unknown as JobExecutionOrder);
         }
       } catch (err) {
         const message = getErrorMessage(err, "Could not load this complaint.");
@@ -128,7 +130,7 @@ export default function ComplaintForm() {
   function validate(): boolean {
     const next: Partial<Record<keyof FormState, string>> = {};
 
-    if (!isEdit && !form.salesOrderId) next.salesOrderId = "Please select a sales order";
+    if (!isEdit && !form.jeoId) next.jeoId = "Please select a job execution order";
     if (!form.subject.trim()) next.subject = "Subject is required";
 
     // Bug fix (TC-067): scroll/focus the topmost invalid field so a failed
@@ -154,7 +156,7 @@ export default function ComplaintForm() {
         navigate(`/complaints/${id}`);
       } else {
         const payload: ComplaintPayload = {
-          salesOrderId: form.salesOrderId,
+          jeoId: form.jeoId,
           subject: form.subject.trim(),
           description: form.description.trim() || undefined,
           invoiceNumber: form.invoiceNumber.trim() || undefined,
@@ -200,28 +202,28 @@ export default function ComplaintForm() {
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="salesOrderId">Sales Order *</Label>
+                    <Label htmlFor="jeoId">JEO Number *</Label>
                     {isEdit ? (
                       <Input
                         value={
-                          selectedSalesOrder
-                            ? `${selectedSalesOrder.salesOrderNumber} — ${selectedSalesOrder.customer?.companyName ?? ""}`
-                            : form.salesOrderId
+                          selectedJeo
+                            ? `${selectedJeo.jeoNumber} — ${selectedJeo.customer?.companyName ?? selectedJeo.salesOrder?.customer?.companyName ?? ""}`
+                            : form.jeoId
                         }
                         disabled
                       />
                     ) : (
-                      <SalesOrderPicker
-                        value={form.salesOrderId}
-                        selectedSalesOrder={selectedSalesOrder}
-                        onChange={(order) => {
-                          setSelectedSalesOrder(order);
-                          update("salesOrderId", order?.id ?? "");
+                      <JeoPicker
+                        value={form.jeoId}
+                        selectedJeo={selectedJeo}
+                        onChange={(jeo) => {
+                          setSelectedJeo(jeo);
+                          update("jeoId", jeo?.id ?? "");
                         }}
                       />
                     )}
-                    {errors.salesOrderId && (
-                      <p className="text-xs text-destructive">{errors.salesOrderId}</p>
+                    {errors.jeoId && (
+                      <p className="text-xs text-destructive">{errors.jeoId}</p>
                     )}
                   </div>
 

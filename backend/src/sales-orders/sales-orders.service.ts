@@ -12,6 +12,7 @@ import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
+import { SalesOrderPdfService } from '../pdf/sales-order-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
@@ -162,7 +163,6 @@ interface RawItem {
   description?: string | null;
   quantity: number;
   unitPrice: number;
-  discount: number;
 }
 
 interface ComputedItem extends RawItem {
@@ -173,7 +173,6 @@ interface ComputedItem extends RawItem {
 interface ComputedTotals {
   items: ComputedItem[];
   subtotal: number;
-  discount: number;
   tax: number;
   grandTotal: number;
   // QA bug fix ("Quotation -> Sales Order" charge breakdown FAIL): only
@@ -185,6 +184,12 @@ interface ComputedTotals {
   // freezeToQuotationTotalsIfUnmodified).
   installationCharge: number;
   transportationCharge: number;
+  // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): only ever
+  // populated by freezeToQuotationTotalsIfUnmodified() below, from the
+  // Quotation's own already-applied discount — see that function's own
+  // comment for why this is a read-only echo, not a reintroduction of
+  // Sales-Order-level discount editing.
+  discount: number;
 }
 
 @Injectable()
@@ -194,6 +199,7 @@ export class SalesOrdersService {
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
+    private salesOrderPdfService: SalesOrderPdfService,
     private auditLogService: AuditLogService,
     private approvalRequestsService: ApprovalRequestsService,
     private whatsAppService: WhatsAppService,
@@ -331,6 +337,14 @@ export class SalesOrdersService {
             remarks: dto.remarks,
             createdBy,
             subtotal: totals.subtotal,
+            // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this used
+            // to be hardcoded to 0 unconditionally — discounting still
+            // doesn't happen AT the Sales Order stage (see computeTotals()'s
+            // own comment, unchanged), but totals.discount now carries the
+            // originating Quotation's already-applied discount forward for
+            // display whenever this order is an unmodified pass-through of
+            // it (see freezeToQuotationTotalsIfUnmodified()) — 0 otherwise,
+            // same as before, when items were edited from the quotation.
             discount: totals.discount,
             tax: totals.tax,
             grandTotal: totals.grandTotal,
@@ -375,23 +389,129 @@ export class SalesOrdersService {
     actorName?: string,
   ) {
     try {
+      // QA fix ("Sales Order -> Customer Email: after confirmation, the
+      // customer email is sent without the Sales Order PDF/attachment and
+      // important details like items, shipping address, and delivery
+      // date."): Sales Order never had a dedicated PDF at all (unlike
+      // Quotation/ProformaInvoice/TaxInvoice/JEO) — see
+      // sales-order-pdf.service.ts's own comment. Now renders one and
+      // attaches it here, and the email body itself gains the
+      // itemsSummary/shippingAddress/deliveryDate vars the template can
+      // reference (fallback body below inlines them directly so this still
+      // reads correctly even before anyone edits the ORDER_CONFIRMATION
+      // template in Email Templates admin to use the new vars).
+      const pdf = await this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
+      const itemsSummary = this.formatItemsSummary(salesOrder.items);
       await this.mailerService.send({
         templateKey: 'ORDER_CONFIRMATION',
         fallbackSubject: `Order Confirmation - ${salesOrder.salesOrderNumber}`,
-        fallbackBodyHtml: `<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed. Grand total: {{grandTotal}}.</p>`,
+        fallbackBodyHtml:
+          '<p>Dear {{customerName}},</p>' +
+          '<p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been confirmed.</p>' +
+          '<p><strong>Items:</strong><br/>{{itemsSummary}}</p>' +
+          '<p><strong>Shipping Address:</strong><br/>{{shippingAddress}}</p>' +
+          '<p><strong>Delivery Date:</strong> {{deliveryDate}}</p>' +
+          '<p><strong>Grand Total:</strong> {{grandTotal}}</p>' +
+          '<p>Please find the Sales Order attached as a PDF for your records.</p>',
         vars: {
           customerName: salesOrder.customer.contactPerson,
           salesOrderNumber: salesOrder.salesOrderNumber,
           quotationNumber: salesOrder.quotation.quotationNumber,
           grandTotal: salesOrder.grandTotal.toFixed(2),
+          itemsSummary,
+          shippingAddress: salesOrder.shippingAddress?.trim() || salesOrder.billingAddress?.trim() || '—',
+          deliveryDate: salesOrder.deliveryDate ? this.formatDateForEmail(salesOrder.deliveryDate) : '—',
         },
         to: salesOrder.customer.email,
+        attachments: [{ filename: `${this.sanitizeForFilename(salesOrder.salesOrderNumber)}.pdf`, content: pdf }],
         actorName,
         link: { module: 'SalesOrder', salesOrderId: salesOrder.id },
       });
     } catch (error) {
       this.logger.error(`Order Confirmation email failed for Sales Order ${salesOrder.id}`, error);
     }
+  }
+
+  // Human-readable "Qty x Product — ₹lineTotal" list, one per line, used by
+  // both order-confirmation and send/resend emails so the customer always
+  // sees exactly what they're being charged for without having to open the
+  // PDF attachment first.
+  private formatItemsSummary(
+    items: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>['items'],
+  ): string {
+    if (!items.length) return '—';
+    return items
+      .map((item) => `${item.quantity} x ${item.product.name} — ₹${item.lineTotal.toFixed(2)}`)
+      .join('<br/>');
+  }
+
+  private formatDateForEmail(date: Date): string {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
+  // Pipes in "SR|SO|108|2026" are not safe filename characters on every
+  // platform — sanitize for the attachment name only, same convention as
+  // QuotationsService.sanitizeForFilename().
+  private sanitizeForFilename(value: string): string {
+    return value.replace(/[\\/:*?"<>|]/g, '-');
+  }
+
+  // Builds the PDF input from a loaded SalesOrder (SALES_ORDER_DETAIL_INCLUDE
+  // shape) — shared by getPdf() (View PDF in-app) and every email send path
+  // below, so the PDF a customer receives by email always matches the one
+  // staff can view in-app.
+  private toPdfInput(
+    salesOrder: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>,
+  ) {
+    // taxPercent isn't a stored column (only the tax *amount* is snapshotted)
+    // — derived the same way ProformaInvoicesService.toPdfInput() does.
+    const taxableAmount = salesOrder.subtotal - salesOrder.installationCharge - salesOrder.transportationCharge;
+    const taxPercent = taxableAmount > 0 ? Math.round((salesOrder.tax / taxableAmount) * 10000) / 100 : 0;
+
+    return {
+      salesOrderNumber: salesOrder.salesOrderNumber,
+      orderDate: salesOrder.orderDate,
+      deliveryDate: salesOrder.deliveryDate,
+      status: salesOrder.status,
+      quotationNumber: salesOrder.quotation.quotationNumber,
+      customer: {
+        companyName: salesOrder.customer.companyName,
+        contactPerson: salesOrder.customer.contactPerson,
+        phone: salesOrder.customer.phone,
+        email: salesOrder.customer.email,
+        gstNumber: salesOrder.customer.gstNumber,
+        state: salesOrder.customer.state,
+      },
+      billingAddress: salesOrder.billingAddress,
+      shippingAddress: salesOrder.shippingAddress,
+      customerPoNumber: salesOrder.customerPoNumber,
+      items: salesOrder.items.map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+        description: item.description,
+        product: { name: item.product.name },
+      })),
+      subtotal: salesOrder.subtotal,
+      installationCharge: salesOrder.installationCharge,
+      transportationCharge: salesOrder.transportationCharge,
+      taxPercent,
+      tax: salesOrder.tax,
+      grandTotal: salesOrder.grandTotal,
+      paymentTerms: salesOrder.paymentTerms,
+      specialInstructions: salesOrder.specialInstructions,
+      remarks: salesOrder.remarks,
+    };
+  }
+
+  // QA fix: "there is no View PDF option in the Sales Order within the
+  // application" — mirrors ProformaInvoicesService.getPdf()/
+  // TaxInvoicesService.getPdf()/JobExecutionOrdersService.getPdf(). See
+  // SalesOrdersController's GET :id/pdf route.
+  async getPdf(id: string): Promise<Buffer> {
+    const salesOrder = await this.findOne(id);
+    return this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
   }
 
   // Automatic Sales Order creation — triggered the moment a Quotation is
@@ -421,11 +541,10 @@ export class SalesOrdersService {
     }
 
     // Items are derived 1:1 from the Quotation's own items (same product +
-    // quantity + description). unitPrice/discount are left undefined so
-    // create()'s resolveItemsAgainstQuotation() falls back to the price
-    // already recorded on the Quotation item — exactly what happens today
-    // when a user creates a Sales Order manually without editing those
-    // fields.
+    // quantity + description). unitPrice is left undefined so create()'s
+    // resolveItemsAgainstQuotation() falls back to the price already
+    // recorded on the Quotation item — exactly what happens today when a
+    // user creates a Sales Order manually without editing that field.
     const items: SalesOrderItemInputDto[] = quotation.items.map((item) => ({
       productId: item.productId,
       description: item.description ?? undefined,
@@ -456,7 +575,7 @@ export class SalesOrdersService {
       );
     }
 
-    let aggregate: { subtotal: number; discount: number; tax: number; grandTotal: number } | null = null;
+    let aggregate: { subtotal: number; tax: number; grandTotal: number } | null = null;
     // Only populated when the full item set is being replaced (dto.items
     // provided). When only gstPercent changes, existing items keep their
     // ids and are updated in place instead — see itemsToUpdateInPlace.
@@ -487,7 +606,6 @@ export class SalesOrdersService {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          discount: item.discount,
         }));
         const totals = this.computeTotals(rawItems, dto.gstPercent!);
         aggregate = totals;
@@ -495,11 +613,12 @@ export class SalesOrdersService {
       }
     }
     // Note: there used to be a third branch here for when only the
-    // order-level "Additional Discount" field changed (no items/GST edit).
-    // That field has been removed entirely (see create-sales-order.dto.ts)
-    // — discounting a Sales Order now only happens per line item, via
-    // dto.items above, or implicitly by way of Quotation.discount already
-    // baked into the frozen totals at creation.
+    // order-level "Additional Discount" field changed (no items/GST edit),
+    // and later a per-line item discount (see SalesOrderItemInputDto's
+    // comment). Both have been removed entirely — a Sales Order's items are
+    // never discounted on their own anymore. Quotation.discount, already
+    // baked into the frozen totals at creation, is the only discounting
+    // mechanism left in this whole pipeline.
 
     return this.prisma.$transaction(async (tx) => {
       if (itemsToReplace) {
@@ -543,7 +662,17 @@ export class SalesOrdersService {
           ...(aggregate
             ? {
                 subtotal: aggregate.subtotal,
-                discount: aggregate.discount,
+                // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this
+                // used to unconditionally reset discount to 0 on every edit —
+                // which, now that create() can store a real echoed-from-
+                // Quotation discount (see freezeToQuotationTotalsIfUnmodified()),
+                // would silently wipe it out the moment staff changed
+                // anything else (e.g. just GST %). This recompute path
+                // (unlike create()) has no Quotation context to re-derive it
+                // from, so — same as installationCharge/transportationCharge
+                // just below, which this data object already leaves
+                // untouched — discount is simply omitted here and keeps
+                // whatever create() originally stored.
                 tax: aggregate.tax,
                 grandTotal: aggregate.grandTotal,
               }
@@ -573,20 +702,36 @@ export class SalesOrdersService {
       throw new BadRequestException('A cancelled Sales Order cannot be sent to the customer.');
     }
 
+    // QA fix — same gap as sendOrderConfirmationEmail() above: this explicit
+    // send/resend action had no PDF attachment and no items/shipping
+    // address/delivery date in the body either.
+    const pdf = await this.salesOrderPdfService.render(this.toPdfInput(salesOrder));
+    const itemsSummary = this.formatItemsSummary(salesOrder.items);
+
     const to = dto.recipientEmail?.trim() || salesOrder.customer.email || undefined;
     const result = await this.mailerService.send({
       templateKey: 'SALES_ORDER_UPDATE',
       fallbackSubject: `Updated Sales Order - ${salesOrder.salesOrderNumber}`,
       fallbackBodyHtml:
-        '<p>Dear {{customerName}},</p><p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated. Grand total: {{grandTotal}}.</p><p>Please reach out if you have any questions about this update.</p>',
+        '<p>Dear {{customerName}},</p>' +
+        '<p>Your Sales Order {{salesOrderNumber}} (from Quotation {{quotationNumber}}) has been updated.</p>' +
+        '<p><strong>Items:</strong><br/>{{itemsSummary}}</p>' +
+        '<p><strong>Shipping Address:</strong><br/>{{shippingAddress}}</p>' +
+        '<p><strong>Delivery Date:</strong> {{deliveryDate}}</p>' +
+        '<p><strong>Grand Total:</strong> {{grandTotal}}</p>' +
+        '<p>Please find the updated Sales Order attached as a PDF. Reach out if you have any questions.</p>',
       vars: {
         customerName: salesOrder.customer.contactPerson,
         salesOrderNumber: salesOrder.salesOrderNumber,
         quotationNumber: salesOrder.quotation.quotationNumber,
         grandTotal: salesOrder.grandTotal.toFixed(2),
+        itemsSummary,
+        shippingAddress: salesOrder.shippingAddress?.trim() || salesOrder.billingAddress?.trim() || '—',
+        deliveryDate: salesOrder.deliveryDate ? this.formatDateForEmail(salesOrder.deliveryDate) : '—',
       },
       to,
       cc: mergeCc(dto.ccEmails),
+      attachments: [{ filename: `${this.sanitizeForFilename(salesOrder.salesOrderNumber)}.pdf`, content: pdf }],
       actorName,
       link: { module: 'SalesOrder', salesOrderId: id },
     });
@@ -985,7 +1130,6 @@ export class SalesOrdersService {
         description: item.description ?? quotationItem.description ?? quotationItem.product.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice ?? quotationItem.unitPrice,
-        discount: item.discount ?? 0,
       };
     });
   }
@@ -1008,9 +1152,9 @@ export class SalesOrdersService {
   // divergent way here, when the Sales Order being created is an exact,
   // unmodified pass-through of the Quotation it's generated from (true for
   // every automatic Accept-cascade, and for a manual creation where staff
-  // didn't touch quantity or add a discount — the Sales Order Items editor
-  // doesn't even let unitPrice be edited, only quantity/discount), we freeze
-  // the order-level totals to the Quotation's own already-computed
+  // didn't touch quantity — the Sales Order Items editor doesn't let
+  // unitPrice be edited either, only quantity), we freeze the order-level
+  // totals to the Quotation's own already-computed
   // subtotal/gstAmount/grandTotal instead of recomputing them. Per-item
   // rows (SalesOrderItem.unitPrice/tax/lineTotal) are left as computeTotals()
   // produced them — still a plain qty x unitPrice breakdown for display —
@@ -1021,10 +1165,10 @@ export class SalesOrdersService {
   // installation/transportation as summary lines rather than per-item ones.
   //
   // When quantities were actually edited from what was quoted, we
-  // deliberately do NOT freeze — how installationCharge/discount should
-  // scale with a changed quantity is a business decision, not something to
-  // guess here, so that case keeps using the recompute exactly as before
-  // (unchanged, pre-existing behavior, not a regression).
+  // deliberately do NOT freeze — how installationCharge should scale with a
+  // changed quantity is a business decision, not something to guess here,
+  // so that case keeps using the recompute exactly as before (unchanged,
+  // pre-existing behavior, not a regression).
   //
   // Bug fix (TC-049): freezing the order-level totals above was already
   // enough to fix the headline "Grand Total doesn't match" symptom, but
@@ -1051,6 +1195,8 @@ export class SalesOrdersService {
       grandTotal: number;
       installationCharge: number;
       transportationCharge: number;
+      pricesIncludeChargesAndGst: boolean;
+      discount: number;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
   ): void {
@@ -1058,9 +1204,8 @@ export class SalesOrdersService {
       rawItems.length === quotation.items.length &&
       rawItems.every((item) => {
         const qi = quotation.items.find((q) => q.productId === item.productId);
-        return !!qi && qi.quantity === item.quantity && item.discount === 0;
-      }) &&
-      totals.discount === 0;
+        return !!qi && qi.quantity === item.quantity;
+      });
 
     if (!matchesQuotationExactly) return;
 
@@ -1075,13 +1220,38 @@ export class SalesOrdersService {
     // them as separate line items — only the opaque combined total.
     totals.installationCharge = quotation.installationCharge;
     totals.transportationCharge = quotation.transportationCharge;
+    // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): same gap as
+    // installation/transportation above — the Quotation's discount was
+    // already netted into quotation.grandTotal (and therefore into
+    // totals.grandTotal below), so the Grand Total figure was always
+    // mathematically correct, but with this always hardcoded to 0 by
+    // create()/update() (see their own comments — a deliberate SC-004
+    // decision to remove Sales-Order-level discount *editing*), the
+    // Subtotal/Installation/Transportation/Discount/Tax breakdown shown on
+    // SalesOrderDetails.tsx silently didn't sum to the displayed Grand
+    // Total, which is exactly what QA caught. This only ever echoes the
+    // Quotation's own already-applied discount for display — it does not
+    // reintroduce any Sales-Order-level discount input/validation.
+    totals.discount = quotation.discount;
     // Bug fix: the Quotation itself no longer charges GST (it's quoted as
     // "Extra" — see QuotationsService.computeTotals(), which stopped
     // summing gstAmount into Quotation.grandTotal). GST is only actually
     // collected starting here, at Sales Order creation — so this freeze
     // must add gstAmount back on top of the Quotation's (GST-less)
     // grandTotal, not just copy it verbatim like before.
-    totals.grandTotal = Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
+    //
+    // QA bug fix (Sales Order Grand Total mismatch): the line above used to
+    // run unconditionally, which double-counted GST whenever the Quotation
+    // had pricesIncludeChargesAndGst set — in that mode,
+    // QuotationsService.computeTotals() already folds GST into grandTotal
+    // and only reports gstAmount as an informational back-calculated figure
+    // (see its own comment: "GST is shown as the amount already embedded in
+    // the subtotal... not an additional line"). Adding it again here
+    // inflated the Sales Order's Grand Total above the actual accepted
+    // price.
+    totals.grandTotal = quotation.pricesIncludeChargesAndGst
+      ? quotation.grandTotal
+      : Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
 
     const lineTotalSum = quotation.items.reduce((sum, qi) => sum + qi.lineTotal, 0);
     totals.items = totals.items.map((item) => {
@@ -1095,9 +1265,18 @@ export class SalesOrdersService {
   }
 
   private computeTotals(items: RawItem[], gstPercent: number): ComputedTotals {
+    // QA decision ("Discount validation based on Sales Order subtotal"):
+    // this used to also subtract a per-line item.discount here (clamped so
+    // taxable/grandTotal could never go negative — see the git history for
+    // that exact clamp math, tagged QA SC-004). Discounting was removed
+    // from the Sales Order stage entirely rather than patched further:
+    // Quotation.discount is the only discounting mechanism anywhere in this
+    // pipeline now (see SalesOrderItemInputDto's comment), and it already
+    // flows through into grandTotal below via
+    // freezeToQuotationTotalsIfUnmodified(). So every line's taxable amount
+    // here is simply quantity x unitPrice — nothing left to clamp.
     const computedItems: ComputedItem[] = items.map((item) => {
-      const lineSubtotal = item.quantity * item.unitPrice;
-      const taxable = Math.max(0, lineSubtotal - item.discount);
+      const taxable = item.quantity * item.unitPrice;
       const tax = Math.round(taxable * (gstPercent / 100) * 100) / 100;
       const lineTotal = Math.round((taxable + tax) * 100) / 100;
       return { ...item, tax, lineTotal };
@@ -1105,24 +1284,16 @@ export class SalesOrdersService {
 
     const subtotal = Math.round(computedItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0) * 100) / 100;
     const tax = Math.round(computedItems.reduce((sum, i) => sum + i.tax, 0) * 100) / 100;
-    // Each line's own discount is clamped above (taxable can't go below 0
-    // for that line), but the SUM of per-line discounts across the order
-    // could still exceed subtotal+tax if entered generously enough on
-    // several lines at once — clamp the aggregate too so grandTotal can
-    // never go negative (QA SC-004: "discount greater than subtotal ...
-    // total amount becomes negative").
-    const itemDiscountSum = computedItems.reduce((sum, i) => sum + i.discount, 0);
-    const discount = Math.round(Math.min(Math.max(0, itemDiscountSum), subtotal + tax) * 100) / 100;
-    const grandTotal = Math.round((subtotal - discount + tax) * 100) / 100;
+    const grandTotal = Math.round((subtotal + tax) * 100) / 100;
 
     return {
       items: computedItems,
       subtotal,
-      discount,
       tax,
       grandTotal,
       installationCharge: 0,
       transportationCharge: 0,
+      discount: 0,
     };
   }
 

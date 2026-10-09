@@ -79,6 +79,17 @@ export class SalesOrdersController {
     return this.salesOrdersService.getEmailHistory(id);
   }
 
+  // QA fix: "there is no View PDF option in the Sales Order within the
+  // application" — mirrors ProformaInvoicesController/
+  // TaxInvoicesController/JobExecutionOrdersController's own GET :id/pdf.
+  @Get(':id/pdf')
+  @RequirePermission('SalesOrder', 'View')
+  async getPdf(@Param('id') id: string, @Res() res: Response) {
+    const pdf = await this.salesOrdersService.getPdf(id);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
+    res.send(pdf);
+  }
+
   // QA bug fix (SC-007): explicit send/resend so staff can notify the
   // customer after editing a Sales Order — see
   // SalesOrdersService.sendSalesOrder()'s own comment for why this exists.

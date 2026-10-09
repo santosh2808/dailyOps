@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { LeadHistoryAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -97,15 +98,22 @@ export class UsersService {
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { username: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    // QA fix: Departments -> Users navigation filter (departmentId). Built
+    // alongside the existing `search` OR-clause rather than replacing it, so
+    // a department-filtered Users link still honors a search term typed on
+    // top of it.
+    const where = {
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { email: { contains: search, mode: 'insensitive' as const } },
+              { username: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+    };
 
     return Promise.all([
       this.prisma.user.findMany({
@@ -243,7 +251,7 @@ export class UsersService {
     return candidate;
   }
 
-  async update(id: string, dto: UpdateUserDto, actingUserId?: string) {
+  async update(id: string, dto: UpdateUserDto, actingUserId?: string, actorName?: string) {
     await this.findOne(id);
 
     // QA fix (AD-003): an Administrator (or anyone) must not be able to
@@ -282,7 +290,7 @@ export class UsersService {
       if (dto.roleIds) {
         await tx.userRole.deleteMany({ where: { userId: id } });
       }
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id },
         data: {
           ...(dto.name ? { name: dto.name.trim() } : {}),
@@ -297,6 +305,13 @@ export class UsersService {
         },
         include: USER_LIST_INCLUDE,
       });
+      // QA fix: "Lead remains assigned to deactivated user" — this general
+      // Edit endpoint can disable a user the same way remove() below does
+      // (isActive: false), so it needs the same cascade.
+      if (dto.isActive === false) {
+        await this.unassignLeadsFromDeactivatedUser(tx, id, actorName);
+      }
+      return updated;
     });
   }
 
@@ -334,7 +349,7 @@ export class UsersService {
     });
   }
 
-  async remove(id: string, actingUserId?: string) {
+  async remove(id: string, actingUserId?: string, actorName?: string) {
     await this.findOne(id);
     // QA fix (AD-003): the Users list's Disable action calls this route
     // (DELETE, soft-delete) — block an Administrator from disabling their
@@ -349,6 +364,79 @@ export class UsersService {
     // Soft delete (disable), same isActive convention as
     // Customer/Product/Material — never a hard delete, so audit/history
     // (createdBy, UserRole assignment history) is preserved.
-    return this.prisma.user.update({ where: { id }, data: { isActive: false } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({ where: { id }, data: { isActive: false } });
+      // QA fix: "Lead remains assigned to deactivated user" — see
+      // unassignLeadsFromDeactivatedUser() below for the full rationale.
+      await this.unassignLeadsFromDeactivatedUser(tx, id, actorName);
+      return updated;
+    });
+  }
+
+  // QA fix: "Lead remains assigned to deactivated user" — before this,
+  // disabling a user (via either remove() above or update()'s isActive:
+  // false path) only ever flipped User.isActive; every Lead still
+  // pointing at them via assignedToUserId kept showing that now-inactive
+  // user's name as Assignee forever after, even though the assignable-user
+  // picker (findAssignable() below) already excludes inactive users from
+  // new assignments. Unassigns (sets assignedToUserId: null) rather than
+  // auto-reassigning to another active user, since there's no defined
+  // business rule for which user that should be — "Unassigned" is exactly
+  // how a never-assigned lead already renders on both LeadDetails.tsx and
+  // LeadList.tsx (both already fall back to "Unassigned" whenever
+  // assignedToUserId is null), so this requires zero frontend changes. A
+  // human can then deliberately re-assign the lead to a real active user.
+  // Logs a LeadHistory 'ASSIGNED' entry per affected lead, same action
+  // value/convention LeadsService.update() uses for ordinary reassignment,
+  // so the Timeline reflects why the lead became Unassigned.
+  private async unassignLeadsFromDeactivatedUser(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    actorName?: string,
+  ) {
+    const affectedLeads = await tx.lead.findMany({
+      where: { assignedToUserId: userId },
+      select: { id: true },
+    });
+    for (const { id: leadId } of affectedLeads) {
+      await tx.lead.update({ where: { id: leadId }, data: { assignedToUserId: null } });
+      await tx.leadHistory.create({
+        data: {
+          leadId,
+          action: LeadHistoryAction.ASSIGNED,
+          description: 'Unassigned automatically — previously assigned user was deactivated',
+          performedBy: actorName,
+        },
+      });
+    }
+  }
+
+  // QA fix: "Delete User option is missing" — remove() above only ever
+  // disables (isActive: false); there was no way to actually remove a user
+  // record at all. This is a genuinely separate, permanent action, wired to
+  // its own route (DELETE /users/:id/permanent) rather than replacing
+  // remove() above, so the existing Disable/Enable behavior is untouched.
+  //
+  // FK safety (audited against schema.prisma before adding this): User has
+  // exactly four relations pointing at it — UserRole.user (onDelete:
+  // Cascade, so a user's own role-assignment rows are cleaned up
+  // automatically), and Lead.assignedToUser / Complaint.assignedToUser /
+  // FormSubjectRoute.assignedUser (all onDelete: SetNull, so those records
+  // survive with the assignment simply cleared). Every other "who did this"
+  // field app-wide (createdBy, performedBy, actorName, etc.) is a plain
+  // string snapshot, not a real foreign key, so it is unaffected by this
+  // delete and continues to display the name/email as historical text.
+  // There is no RESTRICT relation anywhere that could make this throw at
+  // the database level.
+  async hardDelete(id: string, actingUserId?: string) {
+    await this.findOne(id);
+    // Same self-protection as remove()/update(): deleting your own account
+    // would log you out permanently with no way to undo it.
+    if (actingUserId && actingUserId === id) {
+      throw new BadRequestException(
+        'You cannot delete your own account. Ask another Administrator to do this, or use a different account.',
+      );
+    }
+    return this.prisma.user.delete({ where: { id } });
   }
 }

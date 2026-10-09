@@ -19,6 +19,7 @@ import QuotationFiltersBar, {
   type QuotationFilters,
 } from "@/components/quotations/QuotationFiltersBar";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
@@ -68,12 +69,17 @@ export default function QuotationList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<QuotationFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /quotations?status=ACCEPTED) always takes precedence over a remembered
+  // one.
+  const hasUrlFilterParams = searchParams.has("status");
+  const [filters, setFilters] = useSessionFilters<QuotationFilters>(
+    "dailyops.filters.quotations",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyQuotationFilters,
   );
-  const [debouncedFilters, setDebouncedFilters] = useState<QuotationFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
-  );
+  const [debouncedFilters, setDebouncedFilters] = useState<QuotationFilters>(filters);
   const [sortBy, setSortBy] = useState<SortableColumn>("quotationNumber");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
@@ -200,7 +206,9 @@ export default function QuotationList() {
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Quotations" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app") — see
+              LeadList.tsx's identical fix for the full reasoning. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <QuotationFiltersBar filters={filters} onChange={setFilters} />
             {hasPermission("Quotation", "Create") && (
               <div className="flex shrink-0 flex-wrap gap-2">

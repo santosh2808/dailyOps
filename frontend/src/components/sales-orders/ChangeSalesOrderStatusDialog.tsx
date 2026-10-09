@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { STATUS_OPTIONS } from "./salesOrderOptions";
+import { getValidNextStatusOptions } from "./salesOrderOptions";
 import type { SalesOrder, SalesOrderStatus } from "@/types";
 
 interface ChangeSalesOrderStatusDialogProps {
@@ -98,6 +98,12 @@ export default function ChangeSalesOrderStatusDialog({
 
   if (!salesOrder) return null;
 
+  // QA fix: only offer statuses the backend will actually accept from this
+  // order's current status (see getValidNextStatusOptions()'s own comment),
+  // instead of always listing all 7 — that unfiltered list is what made
+  // Draft and Confirmed look like duplicate options to QA.
+  const selectableOptions = getValidNextStatusOptions(salesOrder.status);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onClose={() => onOpenChange(false)}>
@@ -120,7 +126,7 @@ export default function ChangeSalesOrderStatusDialog({
               setApprovalRequested(false);
             }}
           >
-            {STATUS_OPTIONS.map((s) => (
+            {selectableOptions.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>

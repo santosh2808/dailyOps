@@ -26,6 +26,7 @@ import LeadStatusBadge from "@/components/leads/LeadStatusBadge";
 import AiStatusBadge from "@/components/leads/AiStatusBadge";
 import AiQualificationBadge from "@/components/leads/AiQualificationBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
+import { useSessionFilters } from "@/hooks/useSessionFilters";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
@@ -36,7 +37,7 @@ import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteLead, downloadLeadImportTemplate, listLeads } from "@/api/leads";
+import { deleteLead, downloadLeadData, downloadLeadImportTemplate, listLeads } from "@/api/leads";
 import type { Lead, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -76,12 +77,17 @@ export default function LeadList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<LeadFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
+  // Sticky filters (persisted per browser tab via sessionStorage) — an
+  // explicit incoming URL filter (e.g. a Dashboard card linking to
+  // /leads?status=QUALIFIED) always takes precedence over a remembered one.
+  const hasUrlFilterParams =
+    searchParams.has("status") || searchParams.has("assignedToUserId") || searchParams.has("state");
+  const [filters, setFilters] = useSessionFilters<LeadFilters>(
+    "dailyops.filters.leads",
+    hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
+    emptyLeadFilters,
   );
-  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(() =>
-    initialFiltersFromSearchParams(searchParams),
-  );
+  const [debouncedFilters, setDebouncedFilters] = useState<LeadFilters>(filters);
   // Request: leads should list "in sequence based on date uploaded" —
   // default sort is now createdAt desc (most recently uploaded/created
   // first) instead of Lead No., since Lead No. is no longer a reliable
@@ -97,6 +103,10 @@ export default function LeadList() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  // QA fix (TC-074 re-fail): "Download Data" — separate loading state from
+  // Download Template above, since these are two independent buttons/
+  // requests now.
+  const [downloadingData, setDownloadingData] = useState(false);
 
   // Bulk delete — select-multiple checkboxes in the table, scoped to the
   // rows currently on screen (see the reset effect below for why selection
@@ -236,6 +246,23 @@ export default function LeadList() {
     }
   }
 
+  // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
+  // records as Excel, kept entirely separate from handleDownloadTemplate()
+  // above (that one must keep producing a blank template for import, not
+  // real data).
+  async function handleDownloadData() {
+    setDownloadingData(true);
+    try {
+      await downloadLeadData();
+    } catch (err) {
+      const message = getErrorMessage(err, "Failed to download lead data.");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setDownloadingData(false);
+    }
+  }
+
   return (
     <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
@@ -244,7 +271,20 @@ export default function LeadList() {
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Leads" />
         <main className="flex-1 p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* QA fix ("There is overlap on screen in complete app"): this row's
+              two children (the filters bar — 5 selects + date-range picker —
+              and the action-button group) together need far more width than
+              fits beside each other at typical desktop widths. Without
+              flex-wrap, a non-wrapping flex row forces both children to fight
+              over space that doesn't exist: the button group (shrink-0)
+              never yields, so the filters bar gets a bogus/negative shrink
+              allocation and ends up rendered ~200px too far left, overlapping
+              the Sidebar, while the buttons overflow off the right edge of
+              the viewport. sm:flex-wrap lets the button group drop to its own
+              line instead of squeezing the filters bar into an impossible
+              width. Same fix applied to every other list page with this
+              filters-bar + action-buttons header pattern. */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <LeadFiltersBar filters={filters} onChange={setFilters} />
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
@@ -254,6 +294,16 @@ export default function LeadList() {
                   <Download className="mr-2 h-4 w-4" />
                 )}
                 {downloadingTemplate ? "Downloading..." : "Download Template"}
+              </Button>
+              {/* QA fix (TC-074 re-fail): separate, real data export —
+                  distinct from the blank import template above. */}
+              <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
+                {downloadingData ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {downloadingData ? "Downloading..." : "Download Data"}
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />

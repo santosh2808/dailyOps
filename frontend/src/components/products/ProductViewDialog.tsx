@@ -36,6 +36,13 @@ function formatPrice(price?: number | null) {
   }).format(price);
 }
 
+// Feature upgrade: mirrors FAN_TYPE_OPTIONS in ProductFormDialog.tsx.
+const FAN_TYPE_LABELS: Record<string, string> = {
+  ROOF: "Roof Mounted",
+  FLOOR: "Floor Mounted",
+  POLE: "Pole Mounted",
+};
+
 export default function ProductViewDialog({
   open,
   onOpenChange,
@@ -55,6 +62,10 @@ export default function ProductViewDialog({
           <Field label="Category" value={<Badge variant="orange">{product.category}</Badge>} />
           <Field label="SKU / Model Code" value={product.sku} />
           <Field label="Applicable To" value={product.applicableTo} />
+          <Field
+            label="Fan Type"
+            value={product.fanType ? FAN_TYPE_LABELS[product.fanType] : null}
+          />
           <Field label="Price" value={formatPrice(product.price)} />
           <Field
             label="Status"
