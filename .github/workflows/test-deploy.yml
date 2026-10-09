@@ -131,6 +131,9 @@ jobs:
           IMAGE="$REGISTRY/$REPOSITORY:$SHA"
           docker build --platform linux/amd64 -t "$IMAGE" ./backend
           docker push "$IMAGE"
+          # Test task definition runs :latest; keep it pointed at this build
+          docker tag "$IMAGE" "$REGISTRY/$REPOSITORY:latest"
+          docker push "$REGISTRY/$REPOSITORY:latest"
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
