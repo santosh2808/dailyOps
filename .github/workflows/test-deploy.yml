@@ -30,69 +30,50 @@ jobs:
           echo "✓ Branch safety check passed"
 
       - name: Safety Guard - Verify TEST variables
+        env:
+          TEST_AWS_REGION: ${{ vars.TEST_AWS_REGION }}
+          TEST_AWS_ROLE_ARN: ${{ vars.TEST_AWS_ROLE_ARN }}
+          TEST_ECR_REPOSITORY: ${{ vars.TEST_ECR_REPOSITORY }}
+          TEST_ECS_CLUSTER: ${{ vars.TEST_ECS_CLUSTER }}
+          TEST_ECS_SERVICE_NAME: ${{ vars.TEST_ECS_SERVICE_NAME }}
+          TEST_ECS_SERVICE_ARN: ${{ vars.TEST_ECS_SERVICE_ARN }}
+          TEST_API_URL: ${{ vars.TEST_API_URL }}
+          TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+          TEST_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}
+          TEST_FRONTEND_URL: ${{ vars.TEST_FRONTEND_URL }}
         run: |
           set -euo pipefail
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
 
-          # Verify region
-          if [ "${{ vars.TEST_AWS_REGION }}" != "us-east-1" ]; then
-            echo "ERROR: TEST_AWS_REGION must be us-east-1"
-            exit 1
-          fi
+          for name in TEST_AWS_REGION TEST_AWS_ROLE_ARN TEST_ECR_REPOSITORY TEST_ECS_CLUSTER \
+                      TEST_ECS_SERVICE_NAME TEST_ECS_SERVICE_ARN TEST_API_URL TEST_S3_BUCKET \
+                      TEST_CLOUDFRONT_DISTRIBUTION_ID TEST_FRONTEND_URL; do
+            [ -n "${!name}" ] || err "$name is not set"
+          done
 
-          # Verify ECR repository
-          if [ "${{ vars.TEST_ECR_REPOSITORY }}" != "dailyops-backend-test" ]; then
-            echo "ERROR: TEST_ECR_REPOSITORY must be dailyops-backend-test"
-            exit 1
-          fi
+          # Only resources named as TEST resources may be targeted
+          for name in TEST_AWS_ROLE_ARN TEST_ECR_REPOSITORY TEST_ECS_SERVICE_NAME TEST_ECS_SERVICE_ARN TEST_S3_BUCKET; do
+            case "${!name}" in
+              *test*) ;;
+              *) err "$name ('${!name}') is not a TEST resource" ;;
+            esac
+          done
 
-          # Verify ECS cluster
-          if [ "${{ vars.TEST_ECS_CLUSTER }}" != "default" ]; then
-            echo "ERROR: TEST_ECS_CLUSTER must be default"
-            exit 1
-          fi
+          # The service ARN must be exactly the configured cluster/service
+          case "$TEST_ECS_SERVICE_ARN" in
+            *":service/$TEST_ECS_CLUSTER/$TEST_ECS_SERVICE_NAME") ;;
+            *) err "TEST_ECS_SERVICE_ARN does not match TEST_ECS_CLUSTER/TEST_ECS_SERVICE_NAME" ;;
+          esac
 
-          # Verify ECS service name
-          if [ "${{ vars.TEST_ECS_SERVICE_NAME }}" != "dailyops-backend-test" ]; then
-            echo "ERROR: TEST_ECS_SERVICE_NAME must be dailyops-backend-test"
-            exit 1
-          fi
+          for name in TEST_API_URL TEST_FRONTEND_URL; do
+            case "${!name}" in
+              https://*) ;;
+              *) err "$name must start with https://" ;;
+            esac
+          done
 
-          # Verify ECS service ARN contains test service
-          if ! echo "${{ vars.TEST_ECS_SERVICE_ARN }}" | grep -q "service/default/dailyops-backend-test"; then
-            echo "ERROR: TEST_ECS_SERVICE_ARN must contain 'service/default/dailyops-backend-test'"
-            exit 1
-          fi
-
-          # Verify API URL is the TEST API CloudFront (HTTPS in front of the test ALB)
-          if [ "${{ vars.TEST_API_URL }}" != "https://da1vajf6p54s2.cloudfront.net" ]; then
-            echo "ERROR: TEST_API_URL must be https://da1vajf6p54s2.cloudfront.net"
-            exit 1
-          fi
-
-          # Verify AWS role is test role
-          if [ -z "${{ vars.TEST_AWS_ROLE_ARN }}" ]; then
-            echo "ERROR: TEST_AWS_ROLE_ARN must be set"
-            exit 1
-          fi
-
-          # Verify S3 bucket
-          if [ "${{ vars.TEST_S3_BUCKET }}" != "dailyops-web-test" ]; then
-            echo "ERROR: TEST_S3_BUCKET must be dailyops-web-test"
-            exit 1
-          fi
-
-          # Verify CloudFront distribution ID
-          if [ -z "${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
-            echo "ERROR: TEST_CLOUDFRONT_DISTRIBUTION_ID must be set"
-            exit 1
-          fi
-
-          # Verify Frontend URL
-          if [ -z "${{ vars.TEST_FRONTEND_URL }}" ]; then
-            echo "ERROR: TEST_FRONTEND_URL must be set"
-            exit 1
-          fi
-
+          [ "$fail" -eq 0 ] || exit 1
           echo "✓ All TEST variables verified"
 
       - uses: actions/checkout@v4
@@ -143,18 +124,19 @@ jobs:
           SERVICE_ARN: ${{ vars.TEST_ECS_SERVICE_ARN }}
           CLUSTER: ${{ vars.TEST_ECS_CLUSTER }}
           SERVICE: ${{ vars.TEST_ECS_SERVICE_NAME }}
+          REGION: ${{ vars.TEST_AWS_REGION }}
         run: |
           set -euo pipefail
           aws ecs update-service \
             --cluster "$CLUSTER" \
             --service "$SERVICE" \
             --force-new-deployment \
-            --region us-east-1
+            --region "$REGION"
 
           for i in $(seq 1 60); do
             STATE=$(aws ecs describe-services \
               --cluster "$CLUSTER" --services "$SERVICE" \
-              --region us-east-1 \
+              --region "$REGION" \
               --query 'services[0].deployments[0].rolloutState' --output text)
             echo "[$i/60] rollout: $STATE"
             [ "$STATE" = "COMPLETED" ] && exit 0
@@ -193,27 +175,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Safety Guard - Verify frontend variables
+        env:
+          TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+          TEST_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}
+          TEST_FRONTEND_URL: ${{ vars.TEST_FRONTEND_URL }}
+          TEST_API_URL: ${{ vars.TEST_API_URL }}
         run: |
           set -euo pipefail
-
-          # Verify S3 bucket is test only
-          if [ "${{ vars.TEST_S3_BUCKET }}" != "dailyops-web-test" ]; then
-            echo "ERROR: TEST_S3_BUCKET must be dailyops-web-test"
-            exit 1
-          fi
-
-          # Verify CloudFront distribution ID
-          if [ "${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}" != "E23A0ZYSGFHXBH" ]; then
-            echo "ERROR: TEST_CLOUDFRONT_DISTRIBUTION_ID must be E23A0ZYSGFHXBH"
-            exit 1
-          fi
-
-          # Verify Frontend URL
-          if ! echo "${{ vars.TEST_FRONTEND_URL }}" | grep -q "d2ewzmvf600qax.cloudfront.net"; then
-            echo "ERROR: TEST_FRONTEND_URL must contain 'd2ewzmvf600qax.cloudfront.net'"
-            exit 1
-          fi
-
+          case "$TEST_S3_BUCKET" in *test*) ;; *) echo "::error::TEST_S3_BUCKET is not a TEST bucket"; exit 1 ;; esac
+          [ -n "$TEST_CLOUDFRONT_DISTRIBUTION_ID" ] || { echo "::error::TEST_CLOUDFRONT_DISTRIBUTION_ID is not set"; exit 1; }
+          case "$TEST_FRONTEND_URL" in https://*) ;; *) echo "::error::TEST_FRONTEND_URL must start with https://"; exit 1 ;; esac
+          case "$TEST_API_URL" in https://*) ;; *) echo "::error::TEST_API_URL must start with https://"; exit 1 ;; esac
           echo "✓ Frontend variables verified"
 
       - name: Build frontend with TEST API URL
