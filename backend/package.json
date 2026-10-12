@@ -13,7 +13,11 @@
     "seed": "ts-node prisma/seed.ts",
     "seed:hvls-products": "ts-node prisma/seed-hvls-products.ts",
     "seed:sales-resources": "ts-node prisma/seed-sales-resources.ts",
-    "db:ensure": "ts-node prisma/ensure-database.ts"
+    "db:ensure": "ts-node prisma/ensure-database.ts",
+    "test": "jest --selectProjects unit",
+    "test:unit": "jest --selectProjects unit",
+    "test:int": "jest --selectProjects integration --runInBand",
+    "test:all": "jest --runInBand"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -45,12 +49,17 @@
     "@nestjs/cli": "^10.4.5",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
     "@types/multer": "^1.4.11",
     "@types/node": "^22.7.5",
     "@types/nodemailer": "^8.0.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
+    "jest": "^29.7.0",
+    "pg": "^8.23.1",
     "prisma": "^5.20.0",
+    "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   }

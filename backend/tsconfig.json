@@ -17,6 +17,14 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "prisma/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma/**/*.ts",
+    "test",
+    "**/*.spec.ts"
+  ]
 }
