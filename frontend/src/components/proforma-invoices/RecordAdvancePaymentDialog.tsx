@@ -72,12 +72,18 @@ export default function RecordAdvancePaymentDialog({
   const parsedAmount = Number(amount);
   const validAmount = amount.trim() !== "" && !Number.isNaN(parsedAmount) && parsedAmount >= 0;
   const belowThreshold = validAmount && parsedAmount < requiredAdvance;
+  const maxAdvance = invoice?.grandTotal ?? 0;
+  const exceedsGrandTotal = validAmount && maxAdvance > 0 && parsedAmount > maxAdvance + 0.01;
 
   async function handleConfirm() {
     setError("");
     setApprovalRequested(false);
     if (!validAmount) {
       setError("Enter a valid, non-negative amount.");
+      return;
+    }
+    if (exceedsGrandTotal) {
+      setError(`Advance cannot exceed the invoice Grand Total (${formatRupees(maxAdvance)}).`);
       return;
     }
     setSubmitting(true);
@@ -119,6 +125,7 @@ export default function RecordAdvancePaymentDialog({
             id="advanceReceivedAmount"
             type="number"
             min="0"
+            max={maxAdvance > 0 ? maxAdvance : undefined}
             step="0.01"
             value={amount}
             onChange={(e) => {

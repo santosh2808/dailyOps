@@ -372,6 +372,10 @@ export class ProformaInvoicesService {
       );
     }
 
+    // An advance can never exceed the invoice's Grand Total (Receivable
+    // would go negative). 1 paisa tolerance for rounding.
+    this.assertAdvanceWithinGrandTotal(dto.advanceReceived, existing.grandTotal);
+
     const requiredAdvance =
       existing.salesOrder.grandTotal > 0 ? (existing.salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
 
@@ -401,6 +405,14 @@ export class ProformaInvoicesService {
     // advanceReceived >= requiredAdvance: proceed normally.
 
     return this.performAdvanceUpdate(id, existing, dto.advanceReceived, actorName, null);
+  }
+
+  private assertAdvanceWithinGrandTotal(advanceReceived: number, grandTotal: number) {
+    if (advanceReceived > grandTotal + 0.01) {
+      throw new BadRequestException(
+        `Advance amount (₹${advanceReceived.toLocaleString('en-IN')}) cannot exceed the invoice Grand Total (₹${grandTotal.toLocaleString('en-IN')}).`,
+      );
+    }
   }
 
   // Shared write path for the advance figure itself — used both by
@@ -463,6 +475,7 @@ export class ProformaInvoicesService {
         'The linked Sales Order is cancelled — advance payment can no longer be recorded against it.',
       );
     }
+    this.assertAdvanceWithinGrandTotal(advanceReceived, existing.grandTotal);
     return this.performAdvanceUpdate(request.proformaInvoiceId, existing, advanceReceived, request.requestedByName ?? undefined, {
       approvedBy: request.decidedApprover ?? '',
       by: request.requestedByName ?? null,
