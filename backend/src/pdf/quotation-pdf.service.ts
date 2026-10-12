@@ -983,7 +983,11 @@ export class QuotationPdfService {
     // include tax, matching the GST row's own wording. Not appended when
     // prices already include everything (grandTotal is genuinely final
     // there — nothing left to add).
-    const grandTotalValue = includesCharges
+    // QA fix: the Commercial Terms "GST" field is free text; when staff
+    // enter "Included" there, the GST row already reads "Included", so
+    // Grand Total must not still say "+ GST Extra".
+    const gstTermsIncluded = /\bincluded\b/i.test(gstValue);
+    const grandTotalValue = includesCharges || gstTermsIncluded
       ? this.formatCurrency(quotation.grandTotal)
       : `${this.formatCurrency(quotation.grandTotal)} + GST Extra`;
     // Additive: printed as its own row, right above Grand Total, only when a
