@@ -230,9 +230,11 @@ export default function ProformaInvoiceDetails() {
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setRegenerateOpen(true)}>
                       Regenerate from Sales Order
                     </DropdownMenuItem>
-                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
-                      Change Status
-                    </DropdownMenuItem>
+                    {invoice.status !== "CANCELLED" && (
+                      <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                        Change Status
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem icon={Pencil} onSelect={() => setEditOpen(true)}>
                       Edit
                     </DropdownMenuItem>

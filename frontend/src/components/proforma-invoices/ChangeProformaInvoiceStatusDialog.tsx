@@ -75,7 +75,7 @@ export default function ChangeProformaInvoiceStatusDialog({
             value={status}
             onChange={(e) => setStatus(e.target.value as ProformaInvoiceStatus)}
           >
-            {STATUS_OPTIONS.map((s) => (
+            {STATUS_OPTIONS.filter((s) => invoice.status !== "CANCELLED" || s.value === "CANCELLED").map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>
@@ -83,7 +83,13 @@ export default function ChangeProformaInvoiceStatusDialog({
           </Select>
         </div>
 
-        {status === "CANCELLED" && (
+        {invoice.status === "CANCELLED" && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            A cancelled invoice is final — its status can no longer be changed.
+          </p>
+        )}
+
+        {status === "CANCELLED" && invoice.status !== "CANCELLED" && (
           <p className="mt-2 text-xs text-muted-foreground">
             Cancelling this invoice will allow a new Proforma Invoice to be generated for the same
             Sales Order.
@@ -101,7 +107,7 @@ export default function ChangeProformaInvoiceStatusDialog({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={submitting}>
+          <Button type="button" onClick={handleConfirm} disabled={submitting || invoice.status === "CANCELLED"}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Updating..." : "Update Status"}
           </Button>
