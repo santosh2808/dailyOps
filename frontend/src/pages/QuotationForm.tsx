@@ -199,6 +199,8 @@ function buildCommercialTermsPayload(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+const MAX_DISCOUNT_PERCENT = 10;
+
 export default function QuotationForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
@@ -404,6 +406,8 @@ export default function QuotationForm() {
       const parsed = Number(form.discount);
       if (Number.isNaN(parsed) || parsed < 0) {
         next.discount = "Discount must be a positive number";
+      } else if (parsed > discountLimit + 0.01) {
+        next.discount = `Discount cannot exceed ${MAX_DISCOUNT_PERCENT}% of the total (max ${formatCurrency(discountLimit)})`;
       }
     }
     // A quotation can't be valid until a date that's already passed.
@@ -500,6 +504,8 @@ export default function QuotationForm() {
   const discountNum = form.discount.trim()
     ? Math.min(Math.max(0, Number(form.discount) || 0), preDiscountTotal)
     : 0;
+  const discountLimit = (preDiscountTotal * MAX_DISCOUNT_PERCENT) / 100;
+  const discountExceedsLimit = !!form.discount.trim() && Number(form.discount) > discountLimit + 0.01;
   const grandTotal = preDiscountTotal - discountNum;
 
   return (
@@ -744,8 +750,14 @@ export default function QuotationForm() {
                       <p className="text-xs text-muted-foreground">
                         Flat amount taken off the grand total (GST is quoted separately as Extra) —
                         shown to the customer as its own Discount line on the quotation. Leave blank
-                        for no discount.
+                        for no discount. Maximum {MAX_DISCOUNT_PERCENT}% of the total
+                        ({formatCurrency(discountLimit)}).
                       </p>
+                      {!errors.discount && discountExceedsLimit && (
+                        <p className="text-xs text-destructive">
+                          Discount cannot exceed {MAX_DISCOUNT_PERCENT}% of the total.
+                        </p>
+                      )}
                       {errors.discount && <p className="text-xs text-destructive">{errors.discount}</p>}
                     </div>
                   </div>

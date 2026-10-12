@@ -48,6 +48,18 @@ export interface QuotationActor {
 // January. Existing quotation numbers already issued keep their old format
 // forever; nothing renumbers them retroactively.
 const MAX_QUOTATION_NUMBER_ATTEMPTS = 5;
+// Business rule: a discount can never exceed this % of the pre-discount total.
+export const MAX_DISCOUNT_PERCENT = 10;
+
+function assertDiscountWithinLimit(discount: number, base: number) {
+  const requested = Math.max(0, discount || 0);
+  // 1 paisa tolerance for rounding.
+  if (requested > (base * MAX_DISCOUNT_PERCENT) / 100 + 0.01) {
+    throw new BadRequestException(
+      `Discount cannot exceed ${MAX_DISCOUNT_PERCENT}% of the total (max Rs.${((base * MAX_DISCOUNT_PERCENT) / 100).toFixed(2)}).`,
+    );
+  }
+}
 const DEFAULT_GST_PERCENT = 18;
 // Installation is Rs.8,000 per fan, auto-computed from the quantity of
 // fan-type items only (products with a technical spec sheet) — spare parts
@@ -1768,6 +1780,7 @@ export class QuotationsService {
       // are recorded as 0 (not double-charged), and GST is shown as the
       // amount already embedded in the subtotal (back-calculated), not an
       // additional line.
+      assertDiscountWithinLimit(discount, subtotal);
       const effectiveDiscount = Math.min(Math.max(0, discount), subtotal);
       const grandTotal = Math.round((subtotal - effectiveDiscount) * 100) / 100;
       const gstAmount = Math.round((subtotal - subtotal / (1 + effectiveGstPercent / 100)) * 100) / 100;
@@ -1813,6 +1826,7 @@ export class QuotationsService {
     // make grandTotal negative. Note "post-tax" here is about ordering
     // relative to how GST is computed on the untouched subtotal, not about
     // GST being part of this grandTotal (it no longer is).
+    assertDiscountWithinLimit(discount, preDiscountTotal);
     const effectiveDiscount = Math.round(Math.min(Math.max(0, discount), preDiscountTotal) * 100) / 100;
     const grandTotal = Math.round((preDiscountTotal - effectiveDiscount) * 100) / 100;
 
