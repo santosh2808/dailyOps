@@ -480,9 +480,16 @@ export default function QuotationDetails() {
                         >
                           {quotation.customer.companyName}
                         </button>
-                      ) : (
-                        quotation.lead?.companyName
-                      )
+                      ) : quotation.lead ? (
+                        // No Customer record yet — link to the originating Lead.
+                        <button
+                          type="button"
+                          className="underline underline-offset-2"
+                          onClick={() => navigate(`/leads/${quotation.lead!.id}`)}
+                        >
+                          {quotation.lead.companyName}
+                        </button>
+                      ) : undefined
                     }
                   />
                   <Field
