@@ -628,7 +628,16 @@ export class ProformaInvoicesService {
     // column is meant to read, rather than adding a new schema field for a
     // value that's always mechanically recomputable from what's already
     // stored.
-    const taxableAmount = invoice.subtotal - invoice.discount;
+    //
+    // Bug fix ("GST % exceeds 18% in Proforma Invoice"): the base used to be
+    // subtotal - discount, but GST is calculated on subtotal + installation
+    // + transportation (before the discount comes off — see
+    // QuotationsService.computeTotals()), so dividing the tax by that
+    // smaller base inflated the shown percentage above the real 18%. The
+    // invoice doesn't store the charges separately, but grandTotal already
+    // reflects them: grandTotal = taxableBase - discount + tax, so the
+    // actual GST base is grandTotal + discount - tax.
+    const taxableAmount = invoice.grandTotal + invoice.discount - invoice.tax;
     const taxPercent = taxableAmount > 0 ? Math.round((invoice.tax / taxableAmount) * 10000) / 100 : 0;
 
     return {

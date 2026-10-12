@@ -472,7 +472,9 @@ export class SalesOrdersService {
   ) {
     // taxPercent isn't a stored column (only the tax *amount* is snapshotted)
     // — derived the same way ProformaInvoicesService.toPdfInput() does.
-    const taxableAmount = salesOrder.subtotal - salesOrder.installationCharge - salesOrder.transportationCharge;
+    // Same fix as ProformaInvoicesService.toPdfInput(): the real GST base is
+    // grandTotal + discount - tax (subtotal + charges), not subtotal - charges.
+    const taxableAmount = salesOrder.grandTotal + salesOrder.discount - salesOrder.tax;
     const taxPercent = taxableAmount > 0 ? Math.round((salesOrder.tax / taxableAmount) * 10000) / 100 : 0;
 
     return {
