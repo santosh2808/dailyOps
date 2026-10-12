@@ -82,6 +82,21 @@ export default function GenerateProformaInvoiceDialog({
       return;
     }
 
+    const missing = (
+      [
+        ["Bank Name", form.bankName],
+        ["Account Number", form.accountNumber],
+        ["IFSC Code", form.ifscCode],
+        ["Branch", form.branch],
+      ] as const
+    )
+      .filter(([, v]) => !v.trim())
+      .map(([l]) => l);
+    if (missing.length > 0) {
+      setError(`Please fill in the required bank details: ${missing.join(", ")}.`);
+      return;
+    }
+
     const advanceReceivedValue = form.advanceReceived.trim() ? Number(form.advanceReceived) : undefined;
     if (advanceReceivedValue !== undefined && (Number.isNaN(advanceReceivedValue) || advanceReceivedValue < 0)) {
       setError("Advance Received must be a non-negative number.");
@@ -144,7 +159,7 @@ export default function GenerateProformaInvoiceDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="bankName">Bank Name</Label>
+            <Label htmlFor="bankName">Bank Name *</Label>
             <Input
               id="bankName"
               value={form.bankName}
@@ -152,7 +167,7 @@ export default function GenerateProformaInvoiceDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="accountNumber">Account Number</Label>
+            <Label htmlFor="accountNumber">Account Number *</Label>
             <Input
               id="accountNumber"
               value={form.accountNumber}
@@ -160,7 +175,7 @@ export default function GenerateProformaInvoiceDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ifscCode">IFSC Code</Label>
+            <Label htmlFor="ifscCode">IFSC Code *</Label>
             <Input
               id="ifscCode"
               value={form.ifscCode}
@@ -168,7 +183,7 @@ export default function GenerateProformaInvoiceDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="branch">Branch</Label>
+            <Label htmlFor="branch">Branch *</Label>
             <Input id="branch" value={form.branch} onChange={(e) => update("branch", e.target.value)} />
           </div>
           <div className="space-y-2">
