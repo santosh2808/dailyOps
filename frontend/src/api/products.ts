@@ -6,6 +6,7 @@ export interface ProductListParams {
   limit?: number;
   search?: string;
   category?: string;
+  status?: "ACTIVE" | "INACTIVE" | "ALL";
 }
 
 export interface ProductPayload {
@@ -54,5 +55,10 @@ export async function updateProduct(id: string, payload: Partial<ProductPayload>
 
 export async function deactivateProduct(id: string) {
   const res = await api.delete<Product>(`/api/v1/products/${id}`);
+  return res.data;
+}
+
+export async function reactivateProduct(id: string) {
+  const res = await api.patch<Product>(`/api/v1/products/${id}/reactivate`);
   return res.data;
 }

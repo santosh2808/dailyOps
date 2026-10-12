@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Plus, Eye, Pencil, Ban } from "lucide-react";
+import { Search, Plus, Eye, Pencil, Ban, RotateCcw } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
   deactivateProduct,
   getProductCategories,
   listProducts,
+  reactivateProduct,
   updateProduct,
   type ProductPayload,
 } from "@/api/products";
@@ -57,6 +58,7 @@ export default function Products() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ACTIVE");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -83,6 +85,7 @@ export default function Products() {
         limit: PAGE_SIZE,
         search: search || undefined,
         category: categoryFilter || undefined,
+        status: statusFilter,
       });
       setProducts(res.data);
       setTotal(res.total);
@@ -94,7 +97,7 @@ export default function Products() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, categoryFilter]);
+  }, [page, search, categoryFilter, statusFilter]);
 
   useEffect(() => {
     fetchProducts();
@@ -142,6 +145,16 @@ export default function Products() {
     await Promise.all([fetchProducts(), fetchCategories()]);
   }
 
+  async function handleReactivate(product: Product) {
+    try {
+      await reactivateProduct(product.id);
+      toast.success(`Product "${product.name}" reactivated.`);
+      await Promise.all([fetchProducts(), fetchCategories()]);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not reactivate the product. Please try again."));
+    }
+  }
+
   async function handleDeactivateConfirm() {
     if (!selectedProduct) return;
     await deactivateProduct(selectedProduct.id);
@@ -182,6 +195,18 @@ export default function Products() {
                     {c}
                   </option>
                 ))}
+              </Select>
+              <Select
+                className="w-full sm:w-40"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as "ACTIVE" | "INACTIVE" | "ALL");
+                  setPage(1);
+                }}
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="ALL">All</option>
               </Select>
             </div>
             {hasPermission("Product", "Create") && (
@@ -224,6 +249,11 @@ export default function Products() {
                   <TableRow key={product.id}>
                     <TableCell className="font-medium text-slate-900">
                       <TruncatedText text={product.name} />
+                      {!product.isActive && (
+                        <Badge variant="muted" className="ml-2">
+                          Inactive
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="orange">{product.category}</Badge>
@@ -240,7 +270,17 @@ export default function Products() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {hasPermission("Product", "Edit") && (
+                        {!product.isActive && hasPermission("Product", "Edit") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Reactivate product"
+                            onClick={() => handleReactivate(product)}
+                          >
+                            <RotateCcw className="h-4 w-4 text-srm-green" />
+                          </Button>
+                        )}
+                        {product.isActive && hasPermission("Product", "Edit") && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -250,7 +290,7 @@ export default function Products() {
                             <Pencil className="h-4 w-4" />
                           </Button>
                         )}
-                        {hasPermission("Product", "Delete") && (
+                        {product.isActive && hasPermission("Product", "Delete") && (
                           <Button
                             variant="ghost"
                             size="icon"
