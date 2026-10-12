@@ -1022,6 +1022,18 @@ export default function Dashboard() {
                   onClick={() => navigate("/leads?followUp=TODAY")}
                 />
                 <NotificationRow
+                  label="Overdue Follow-ups"
+                  count={stats?.overdueFollowUpsCount ?? 0}
+                  icon={Clock3}
+                  onClick={() => navigate("/leads?followUp=OVERDUE")}
+                />
+                <NotificationRow
+                  label="Upcoming Follow-ups (7 days)"
+                  count={stats?.upcomingFollowUpsCount ?? 0}
+                  icon={CalendarClock}
+                  onClick={() => navigate("/leads?followUp=UPCOMING")}
+                />
+                <NotificationRow
                   label="Pending Quotations"
                   count={stats?.pendingQuotationsCount ?? 0}
                   icon={Hourglass}
