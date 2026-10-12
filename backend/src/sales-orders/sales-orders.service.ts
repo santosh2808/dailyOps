@@ -639,7 +639,7 @@ export class SalesOrdersService {
         }
       }
 
-      return tx.salesOrder.update({
+      const updatedSalesOrder = await tx.salesOrder.update({
         where: { id },
         data: {
           orderDate: dto.orderDate ? new Date(dto.orderDate) : undefined,
@@ -687,6 +687,26 @@ export class SalesOrdersService {
         },
         include: SALES_ORDER_DETAIL_INCLUDE,
       });
+
+      // QA bug fix ("Proforma Invoice totals and PDF not updated after Sales
+      // Order edit"): a Proforma Invoice stores its own copy of the totals
+      // (and its PDF/email render from that copy), so an edit here left
+      // every existing, non-cancelled invoice showing the previous
+      // subtotal/grand total. Keep them in sync in the same transaction.
+      // advanceReceived is untouched, so Receivable recomputes correctly.
+      if (aggregate) {
+        await tx.proformaInvoice.updateMany({
+          where: { salesOrderId: id, status: { not: 'CANCELLED' } },
+          data: {
+            subtotal: updatedSalesOrder.subtotal,
+            discount: updatedSalesOrder.discount,
+            tax: updatedSalesOrder.tax,
+            grandTotal: updatedSalesOrder.grandTotal,
+          },
+        });
+      }
+
+      return updatedSalesOrder;
     });
   }
 
