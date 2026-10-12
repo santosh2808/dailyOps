@@ -758,7 +758,7 @@ export class DashboardService {
           isActive: true,
           roles: { some: { role: { name: { in: ['Sales Executive', 'Sales Manager'] } } } },
         },
-        select: { id: true, name: true },
+        select: { id: true, name: true, roles: { select: { role: { select: { name: true } } } } },
       }),
     ]);
 
@@ -792,6 +792,16 @@ export class DashboardService {
       entry.revenue += order.grandTotal;
       entry.orders += 1;
       byName.set(key, entry);
+    }
+
+    // QA fix: only people who had already created a Sales Order appeared, so
+    // active Sales Executives with no orders in the selected period were
+    // missing. List every active Sales Executive (zero revenue/orders when
+    // they have none). When the Executive filter is set, only that person.
+    for (const user of executiveUsers) {
+      if (!user.roles.some((r) => r.role.name === 'Sales Executive')) continue;
+      if (filters.executive && filters.executive !== user.name) continue;
+      if (!byName.has(user.name)) byName.set(user.name, { revenue: 0, orders: 0 });
     }
 
     return Array.from(byName.entries())
