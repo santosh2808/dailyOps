@@ -11,6 +11,7 @@ export interface SalesOrderListParams {
   customerState?: string;
   createdBy?: string;
   productId?: string;
+  delayed?: boolean;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;

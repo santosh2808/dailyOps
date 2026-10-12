@@ -20,9 +20,13 @@ export class DashboardController {
   // master data, not tied to any customer) are deliberately left unfiltered
   // even when a state is selected; see getStats()'s own comments for which
   // fields those are.
+  private toScope(query: QueryDashboardFiltersDto) {
+    return { state: query.state, month: query.month, year: query.year, leadSource: query.leadSource };
+  }
+
   @Get('stats')
   getStats(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getStats(query.state);
+    return this.dashboardService.getStats(this.toScope(query));
   }
 
   // Additive: Dashboard Redesign endpoints below — all read-only reporting,
@@ -49,7 +53,7 @@ export class DashboardController {
 
   @Get('charts')
   getCharts(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getCharts(query.state);
+    return this.dashboardService.getCharts(this.toScope(query));
   }
 
   // Additive: Dashboard Redesign v2 endpoints below.
@@ -71,6 +75,6 @@ export class DashboardController {
 
   @Get('todays-followups')
   getTodaysFollowUps(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getTodaysFollowUps(query.state);
+    return this.dashboardService.getTodaysFollowUps(this.toScope(query));
   }
 }

@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class QueryProductDto {
   @ApiPropertyOptional({ example: 1, default: 1 })
@@ -29,4 +29,13 @@ export class QueryProductDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({
+    enum: ['ACTIVE', 'INACTIVE', 'ALL'],
+    default: 'ACTIVE',
+    description: 'Which products to list. Defaults to active ones only.',
+  })
+  @IsOptional()
+  @IsIn(['ACTIVE', 'INACTIVE', 'ALL'])
+  status?: 'ACTIVE' | 'INACTIVE' | 'ALL';
 }

@@ -61,6 +61,7 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): SalesOrd
     customerState: searchParams.get("customerState") ?? emptySalesOrderFilters.customerState,
     createdBy: searchParams.get("createdBy") ?? emptySalesOrderFilters.createdBy,
     productId: searchParams.get("productId") ?? emptySalesOrderFilters.productId,
+    delayed: searchParams.get("delayed") === "true",
   };
 }
 
@@ -86,7 +87,8 @@ export default function SalesOrderList() {
     searchParams.has("dateTo") ||
     searchParams.has("customerState") ||
     searchParams.has("createdBy") ||
-    searchParams.has("productId");
+    searchParams.has("productId") ||
+    searchParams.has("delayed");
   const [filters, setFilters] = useSessionFilters<SalesOrderFilters>(
     "dailyops.filters.salesOrders",
     hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
@@ -118,6 +120,7 @@ export default function SalesOrderList() {
         customerState: debouncedFilters.customerState || undefined,
         createdBy: debouncedFilters.createdBy || undefined,
         productId: debouncedFilters.productId || undefined,
+        delayed: debouncedFilters.delayed || undefined,
         sortBy,
         sortOrder,
       });
@@ -226,8 +229,21 @@ export default function SalesOrderList() {
             <SalesOrderFiltersBar filters={filters} onChange={setFilters} />
           </div>
 
-          {(filters.customerState || filters.createdBy || filters.productId) && (
+          {(filters.customerState || filters.createdBy || filters.productId || filters.delayed) && (
             <div className="mb-3 flex flex-wrap gap-2">
+              {filters.delayed && (
+                <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
+                  Delayed orders only
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, delayed: false })}
+                    aria-label="Clear delayed filter"
+                    className="text-srm-green/70 hover:text-srm-green"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               {filters.customerState && (
                 <div className="flex items-center gap-2 rounded-md bg-srm-green/10 px-3 py-1.5 text-sm font-medium text-srm-green">
                   State: {filters.customerState}

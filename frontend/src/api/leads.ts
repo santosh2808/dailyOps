@@ -32,6 +32,7 @@ export interface LeadListParams {
   state?: string;
   dateFrom?: string;
   dateTo?: string;
+  followUp?: "TODAY" | "OVERDUE" | "UPCOMING";
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }

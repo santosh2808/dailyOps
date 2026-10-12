@@ -200,13 +200,14 @@ const WARRANTY_CONDITIONS =
 const EXCLUSIONS = [
   'Scaffolding / Scissor Lift / Boom Lift / Hydra / Forklift required for installation.',
   'If the ceiling is RCC, the required structure other than above given scope shall be to your account.',
-  'If there is any hanging pipe structure arrangement is required, the same shall be provided by client.',
+  'If there is any hanging pipe structure arrangement is required, if the hanging pipe is required more than above mentioned ft the same shall be provided by client.',
   'Input Main Power Supply with proper earthing at floor level.',
-  'Power Cable to the regulator (input power cable).',
+  'Power cable from Main Supply to control box and Fan to control box will be in your scope.',
+  'Power supply for installation and labor accommodation to be provided by you.',
+  'Transportation from Ex. Work-Hyderabad to your Site',
   'Unloading of Fan from Transport, Plant internal movement and storage, preservation.',
   'Preparing site ready for installing Fan with Wiring, open floor.',
   'Any specific paint shall be charged extra @ Rs.10,000.00',
-  'Power supply for installation and labor accommodation to be provided by you.',
 ];
 
 interface SpecRow {
@@ -305,7 +306,13 @@ export class QuotationPdfService {
         doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Standard Scope of Supply Includes:', contentLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.3);
 
-        const scope = this.getTechnicalSpec(item)?.scopeOfSupply ?? [];
+        // QA fix: "Power Cable" must not appear in the quotation's Standard
+        // Scope of Supply. Filtered at render time (not just in the seed)
+        // because every already-saved Product row carries it in its stored
+        // technicalSpec.scopeOfSupply. JEO PDF is intentionally untouched.
+        const scope = (this.getTechnicalSpec(item)?.scopeOfSupply ?? []).filter(
+          (row) => row.item.trim().toLowerCase() !== 'power cable',
+        );
         if (scope.length === 0) {
           ensureSpace(16);
           doc.font('Helvetica-Oblique').fontSize(9).fillColor('#64748b').text('(No scope-of-supply items configured for this product yet.)', contentLeft, doc.y, { width: contentWidth });
@@ -976,7 +983,11 @@ export class QuotationPdfService {
     // include tax, matching the GST row's own wording. Not appended when
     // prices already include everything (grandTotal is genuinely final
     // there — nothing left to add).
-    const grandTotalValue = includesCharges
+    // QA fix: the Commercial Terms "GST" field is free text; when staff
+    // enter "Included" there, the GST row already reads "Included", so
+    // Grand Total must not still say "+ GST Extra".
+    const gstTermsIncluded = /\bincluded\b/i.test(gstValue);
+    const grandTotalValue = includesCharges || gstTermsIncluded
       ? this.formatCurrency(quotation.grandTotal)
       : `${this.formatCurrency(quotation.grandTotal)} + GST Extra`;
     // Additive: printed as its own row, right above Grand Total, only when a

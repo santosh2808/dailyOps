@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ExternalLink, MoreVertical, Pencil, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, MoreVertical, Pencil, RefreshCw, Send, Wallet } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import ProformaInvoiceStatusBadge from "@/components/proforma-invoices/ProformaI
 import ChangeProformaInvoiceStatusDialog from "@/components/proforma-invoices/ChangeProformaInvoiceStatusDialog";
 import EditProformaInvoiceDialog from "@/components/proforma-invoices/EditProformaInvoiceDialog";
 import SendProformaInvoiceDialog from "@/components/proforma-invoices/SendProformaInvoiceDialog";
+import RecordAdvancePaymentDialog from "@/components/proforma-invoices/RecordAdvancePaymentDialog";
 import ConfirmRegenerateProformaInvoiceDialog from "@/components/proforma-invoices/ConfirmRegenerateProformaInvoiceDialog";
 import EmailHistoryCard from "@/components/EmailHistoryCard";
 import { Spinner } from "@/components/ui/spinner";
@@ -21,6 +22,7 @@ import {
   getProformaInvoiceEmailHistory,
   openProformaInvoicePdf,
   sendProformaInvoiceWhatsApp,
+  updateProformaInvoiceAdvance,
   updateProformaInvoiceStatus,
 } from "@/api/proforma-invoices";
 import type { EmailHistoryEntry, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
@@ -58,6 +60,7 @@ export default function ProformaInvoiceDetails() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [recordAdvanceOpen, setRecordAdvanceOpen] = useState(false);
   const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
@@ -230,9 +233,20 @@ export default function ProformaInvoiceDetails() {
                     <DropdownMenuItem icon={RefreshCw} onSelect={() => setRegenerateOpen(true)}>
                       Regenerate from Sales Order
                     </DropdownMenuItem>
-                    <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
-                      Change Status
+                    {/* QA: Record Advance directly from the Proforma Invoice
+                        (same dialog/validation as the Sales Order page). */}
+                    <DropdownMenuItem
+                      icon={Wallet}
+                      disabled={invoice.status === "CANCELLED" || invoice.salesOrder?.status === "CANCELLED"}
+                      onSelect={() => setRecordAdvanceOpen(true)}
+                    >
+                      Record Advance Payment
                     </DropdownMenuItem>
+                    {invoice.status !== "CANCELLED" && (
+                      <DropdownMenuItem icon={RefreshCw} onSelect={() => setStatusOpen(true)}>
+                        Change Status
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem icon={Pencil} onSelect={() => setEditOpen(true)}>
                       Edit
                     </DropdownMenuItem>
@@ -382,6 +396,18 @@ export default function ProformaInvoiceDetails() {
         }}
       />
 
+      <RecordAdvancePaymentDialog
+        open={recordAdvanceOpen}
+        onOpenChange={setRecordAdvanceOpen}
+        invoice={invoice}
+        salesOrderGrandTotal={invoice?.salesOrder?.grandTotal ?? invoice?.grandTotal ?? 0}
+        onConfirm={async (advanceReceived) => {
+          if (!invoice) return;
+          const updated = await updateProformaInvoiceAdvance(invoice.id, { advanceReceived });
+          setInvoice(updated);
+          toast.success("Advance payment recorded.");
+        }}
+      />
       <ConfirmRegenerateProformaInvoiceDialog
         open={regenerateOpen}
         onOpenChange={setRegenerateOpen}

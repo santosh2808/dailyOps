@@ -311,6 +311,10 @@ export class TaxInvoicesService {
 
   async updateStatus(id: string, dto: UpdateTaxInvoiceStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+    // Cancelled is a final status — it can't be moved back to Draft/Sent/etc.
+    if (existing.status === 'CANCELLED' && dto.status !== 'CANCELLED') {
+      throw new BadRequestException('A cancelled Tax Invoice is final and its status cannot be changed.');
+    }
     const updated = await this.prisma.taxInvoice.update({
       where: { id },
       data: { status: dto.status },

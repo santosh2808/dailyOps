@@ -90,14 +90,11 @@ import type {
 //   drops v1's Lead Status donut from view. That data is still fetched
 //   (getDashboardCharts().leadStatus) in case something else needs it
 //   later; it's just not rendered here anymore, per v2's own explicit list.
-// - Global Filters (Month/State/Sales Executive/Lead Source/Product) only
-//   apply to the SalesOrder-derived widgets: India Map, Top Products,
-//   Executive Performance, and the non-date dimensions of Revenue Trend
-//   (state/executive/leadSource/product — its own Week/Month/Quarter/Year
-//   buttons remain the date control). The 4 donuts and Today's Follow-ups
-//   are operational/pipeline snapshots, not sales figures, so they're
-//   intentionally left unfiltered — matching how the backend endpoints
-//   were built (see dashboard.service.ts).
+// - Global Filters: State/Month/Year/Lead Source now reach every widget
+//   except Inventory (materials have no state, date or source). Executive
+//   and Product still apply only to the SalesOrder-derived widgets (Map,
+//   Top Products, Executive Performance, Revenue Trend). Follow-up counts
+//   and the Today's Follow-ups list ignore Month/Year (they mean "today").
 // - Recent Activities (the audit-log timeline) was tried in an earlier
 //   pass and dropped at the user's request — it didn't carry enough
 //   signal to be worth the space.
@@ -470,13 +467,19 @@ export default function Dashboard() {
   // state narrows the KPI cards, funnel-derived charts, and Today's
   // Follow-ups too, not just the map/executives/top-products/revenue.
   const fetchDashboard = useCallback(async () => {
+    const scopeParams = {
+      state: filters.state,
+      month: filters.month,
+      year: filters.year,
+      leadSource: filters.leadSource,
+    };
     setLoading(true);
     setError("");
     try {
       const [statsData, chartsData, followUps] = await Promise.all([
-        getDashboardStats(filters.state),
-        getDashboardCharts(filters.state),
-        getDashboardTodaysFollowUps(filters.state),
+        getDashboardStats(scopeParams),
+        getDashboardCharts(scopeParams),
+        getDashboardTodaysFollowUps(scopeParams),
       ]);
       setStats(statsData);
       setCharts(chartsData);
@@ -488,7 +491,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [filters.state]);
+  }, [filters.state, filters.month, filters.year, filters.leadSource]);
 
   useEffect(() => {
     fetchDashboard();
@@ -552,6 +555,15 @@ export default function Dashboard() {
     () => (stats?.salesByExecutive ?? []).map((e) => e.executive),
     [stats],
   );
+
+  // QA fix: the global Year/Month filters now also drive the Revenue Trend
+  // card (it previously only used its own local selectors). The local
+  // selectors still work afterwards; this just seeds them from the global
+  // filter whenever that changes.
+  useEffect(() => {
+    if (filters.year) setRevenueYear(filters.year);
+    if (filters.month) setRevenueMonth(filters.month);
+  }, [filters.year, filters.month]);
 
   const fetchRevenue = useCallback(async () => {
     setRevenueLoading(true);
@@ -1007,9 +1019,19 @@ export default function Dashboard() {
                   label="Today's Follow-ups"
                   count={stats?.todaysFollowUpsCount ?? 0}
                   icon={CalendarClock}
-                  // Lead's list filters don't include nextFollowUp — opens
-                  // the Leads list unfiltered.
-                  onClick={() => navigate("/leads")}
+                  onClick={() => navigate("/leads?followUp=TODAY")}
+                />
+                <NotificationRow
+                  label="Overdue Follow-ups"
+                  count={stats?.overdueFollowUpsCount ?? 0}
+                  icon={Clock3}
+                  onClick={() => navigate("/leads?followUp=OVERDUE")}
+                />
+                <NotificationRow
+                  label="Upcoming Follow-ups (7 days)"
+                  count={stats?.upcomingFollowUpsCount ?? 0}
+                  icon={CalendarClock}
+                  onClick={() => navigate("/leads?followUp=UPCOMING")}
                 />
                 <NotificationRow
                   label="Pending Quotations"
@@ -1030,9 +1052,8 @@ export default function Dashboard() {
                   label="Delayed Orders"
                   count={stats?.delayedOrdersCount ?? 0}
                   icon={Clock3}
-                  // No "overdue" filter exists on the Sales Orders list —
-                  // opens the list unfiltered.
-                  onClick={() => navigate("/sales-orders")}
+                  // Same rule as the count: open, delivery date before today.
+                  onClick={() => navigate("/sales-orders?delayed=true")}
                 />
               </CardContent>
             </Card>

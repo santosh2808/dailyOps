@@ -212,6 +212,12 @@ export class SalesOrdersService {
 
     const where: Prisma.SalesOrderWhereInput = {
       deletedAt: null,
+      ...(query.delayed
+        ? {
+            status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
+            deliveryDate: { lt: new Date(new Date().setHours(0, 0, 0, 0)) },
+          }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.quotationId ? { quotationId: query.quotationId } : {}),
@@ -466,7 +472,9 @@ export class SalesOrdersService {
   ) {
     // taxPercent isn't a stored column (only the tax *amount* is snapshotted)
     // — derived the same way ProformaInvoicesService.toPdfInput() does.
-    const taxableAmount = salesOrder.subtotal - salesOrder.installationCharge - salesOrder.transportationCharge;
+    // Same fix as ProformaInvoicesService.toPdfInput(): the real GST base is
+    // grandTotal + discount - tax (subtotal + charges), not subtotal - charges.
+    const taxableAmount = salesOrder.grandTotal + salesOrder.discount - salesOrder.tax;
     const taxPercent = taxableAmount > 0 ? Math.round((salesOrder.tax / taxableAmount) * 10000) / 100 : 0;
 
     return {
@@ -633,7 +641,7 @@ export class SalesOrdersService {
         }
       }
 
-      return tx.salesOrder.update({
+      const updatedSalesOrder = await tx.salesOrder.update({
         where: { id },
         data: {
           orderDate: dto.orderDate ? new Date(dto.orderDate) : undefined,
@@ -681,6 +689,26 @@ export class SalesOrdersService {
         },
         include: SALES_ORDER_DETAIL_INCLUDE,
       });
+
+      // QA bug fix ("Proforma Invoice totals and PDF not updated after Sales
+      // Order edit"): a Proforma Invoice stores its own copy of the totals
+      // (and its PDF/email render from that copy), so an edit here left
+      // every existing, non-cancelled invoice showing the previous
+      // subtotal/grand total. Keep them in sync in the same transaction.
+      // advanceReceived is untouched, so Receivable recomputes correctly.
+      if (aggregate) {
+        await tx.proformaInvoice.updateMany({
+          where: { salesOrderId: id, status: { not: 'CANCELLED' } },
+          data: {
+            subtotal: updatedSalesOrder.subtotal,
+            discount: updatedSalesOrder.discount,
+            tax: updatedSalesOrder.tax,
+            grandTotal: updatedSalesOrder.grandTotal,
+          },
+        });
+      }
+
+      return updatedSalesOrder;
     });
   }
 

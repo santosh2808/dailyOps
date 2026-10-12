@@ -518,16 +518,17 @@ export default function SalesOrderDetails() {
                   <Field label="Order Date" value={formatDate(salesOrder.orderDate)} />
                   <Field label="Delivery Date" value={formatDate(salesOrder.deliveryDate)} />
                   <Field label="Payment Terms" value={salesOrder.paymentTerms} />
-                  {/* QA bug fix (SC-016): this used to also show a live-computed
-                      "Advance %" field (Advance Received ÷ Grand Total × 100)
-                      here. QA flagged it for the same reason the old manually-
-                      typed SalesOrder.advancePercentage field was removed
-                      entirely (see create-sales-order.dto.ts) — advance
-                      payment information belongs solely to the Record Advance
-                      Payment functionality (and the Proforma Invoice it's
-                      recorded against), not duplicated here. "Advance
-                      Received" alone (a plain fact, not a derived percentage)
-                      stays. */}
+                  {/* Advance % = Advance Received ÷ Grand Total × 100, computed
+                      from the active Proforma Invoice's recorded advance.
+                      (Re-added per latest QA; supersedes SC-016's removal.) */}
+                  <Field
+                    label="Advance %"
+                    value={
+                      activeInvoice && salesOrder.grandTotal
+                        ? `${((activeInvoice.advanceReceived / salesOrder.grandTotal) * 100).toFixed(1)}%`
+                        : null
+                    }
+                  />
                   <Field
                     label="Advance Received"
                     value={activeInvoice ? formatCurrency(activeInvoice.advanceReceived) : null}

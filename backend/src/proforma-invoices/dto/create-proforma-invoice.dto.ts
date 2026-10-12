@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateProformaInvoiceDto {
   @ApiProperty({ description: 'Id (uuid) of the existing Sales Order to generate this invoice from' })
@@ -24,24 +25,40 @@ export class CreateProformaInvoiceDto {
   @IsString()
   paymentTerms?: string;
 
-  @ApiPropertyOptional({ example: 'HDFC Bank' })
-  @IsOptional()
+  @ApiProperty({ example: 'HDFC Bank' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'Bank Name is required' })
+  // Typed optional so the automatic quotation-acceptance cascade
+  // (createFromSalesOrder) can still call create() without them; the
+  // manual Generate flow is enforced by the HTTP validation above.
   bankName?: string;
 
-  @ApiPropertyOptional({ example: '50200012345678' })
-  @IsOptional()
+  @ApiProperty({ example: '50200012345678' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'Account Number is required' })
+  // Typed optional so the automatic quotation-acceptance cascade
+  // (createFromSalesOrder) can still call create() without them; the
+  // manual Generate flow is enforced by the HTTP validation above.
   accountNumber?: string;
 
-  @ApiPropertyOptional({ example: 'HDFC0001234' })
-  @IsOptional()
+  @ApiProperty({ example: 'HDFC0001234' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'IFSC Code is required' })
+  // Typed optional so the automatic quotation-acceptance cascade
+  // (createFromSalesOrder) can still call create() without them; the
+  // manual Generate flow is enforced by the HTTP validation above.
   ifscCode?: string;
 
-  @ApiPropertyOptional({ example: 'Pune - Baner Road' })
-  @IsOptional()
+  @ApiProperty({ example: 'Pune - Baner Road' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'Branch is required' })
+  // Typed optional so the automatic quotation-acceptance cascade
+  // (createFromSalesOrder) can still call create() without them; the
+  // manual Generate flow is enforced by the HTTP validation above.
   branch?: string;
 
   @ApiPropertyOptional({ example: 'Goods once sold will not be taken back.' })

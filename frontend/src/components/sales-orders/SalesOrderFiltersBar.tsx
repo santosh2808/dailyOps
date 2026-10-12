@@ -17,6 +17,8 @@ export interface SalesOrderFilters {
   createdBy: string;
   // Additive: Dashboard Redesign v2 — Top Products widget link.
   productId: string;
+  // Dashboard "Delayed Orders" notification link.
+  delayed: boolean;
 }
 
 interface SalesOrderFiltersBarProps {
@@ -32,6 +34,7 @@ export const emptySalesOrderFilters: SalesOrderFilters = {
   customerState: "",
   createdBy: "",
   productId: "",
+  delayed: false,
 };
 
 export default function SalesOrderFiltersBar({ filters, onChange }: SalesOrderFiltersBarProps) {
@@ -41,7 +44,8 @@ export default function SalesOrderFiltersBar({ filters, onChange }: SalesOrderFi
     !!filters.dateTo ||
     !!filters.customerState ||
     !!filters.createdBy ||
-    !!filters.productId;
+    !!filters.productId ||
+    filters.delayed;
 
   function update<K extends keyof SalesOrderFilters>(key: K, value: SalesOrderFilters[K]) {
     onChange({ ...filters, [key]: value });

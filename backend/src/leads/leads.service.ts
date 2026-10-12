@@ -376,6 +376,24 @@ export class LeadsService {
     return { preferredLanguage: stateDefault, languageSource: LanguageSource.STATE_DEFAULT };
   }
 
+  // Same definitions as DashboardService.getStats() follow-up counts.
+  private followUpWhere(followUp?: 'TODAY' | 'OVERDUE' | 'UPCOMING'): Prisma.LeadWhereInput {
+    if (!followUp) return {};
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const windowEnd = new Date(startOfTomorrow);
+    windowEnd.setDate(windowEnd.getDate() + 7);
+    const nextFollowUp =
+      followUp === 'TODAY'
+        ? { gte: startOfToday, lt: startOfTomorrow }
+        : followUp === 'OVERDUE'
+          ? { lt: startOfToday }
+          : { gte: startOfTomorrow, lt: windowEnd };
+    return { status: { notIn: ['WON', 'LOST'] }, nextFollowUp };
+  }
+
   async findAll(query: QueryLeadDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -383,6 +401,9 @@ export class LeadsService {
 
     const where: Prisma.LeadWhereInput = {
       deletedAt: null,
+      // Before `status` so an explicit status filter still wins over the
+      // follow-up window's open-leads rule.
+      ...this.followUpWhere(query.followUp),
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.source ? { source: query.source } : {}),
@@ -459,6 +480,25 @@ export class LeadsService {
     // avoid a migration, so default to '' here — same fallback
     // createFromPublicForm() already uses for the public lead-capture path.
     const { products, expectedCloseDate, nextFollowUp, companyName, preferredLanguage, ...leadData } = dto;
+
+    // QA fix: the same contact could be entered twice. A lead is a duplicate
+    // when a non-deleted lead already has this phone number. LOST leads are
+    // deliberately excluded — a lost contact may come back as a fresh lead
+    // (see previousLeadId re-engagement below). Lead Import keeps its own
+    // Company + Email rule.
+    if (leadData.phone) {
+      const duplicate = await this.prisma.lead.findFirst({
+        where: { deletedAt: null, status: { not: 'LOST' }, phone: leadData.phone },
+        select: { leadNumber: true, companyName: true, contactPerson: true },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          `A lead with this phone number already exists (${duplicate.leadNumber}` +
+            `${duplicate.companyName || duplicate.contactPerson ? ` - ${duplicate.companyName || duplicate.contactPerson}` : ''}). ` +
+            'Open that lead instead of creating a duplicate.',
+        );
+      }
+    }
 
     // D.O.T. AI Lead Assistant Phase 1: derive a default language from
     // state whenever the caller didn't already supply one — see

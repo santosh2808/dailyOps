@@ -317,6 +317,10 @@ export class ProformaInvoicesService {
 
   async updateStatus(id: string, dto: UpdateProformaInvoiceStatusDto, actorName?: string) {
     const existing = await this.findOne(id);
+    // Cancelled is a final status — it can't be moved back to Draft/Sent/etc.
+    if (existing.status === 'CANCELLED' && dto.status !== 'CANCELLED') {
+      throw new BadRequestException('A cancelled Proforma Invoice is final and its status cannot be changed.');
+    }
     const updated = await this.prisma.proformaInvoice.update({
       where: { id },
       data: { status: dto.status },
@@ -372,6 +376,10 @@ export class ProformaInvoicesService {
       );
     }
 
+    // An advance can never exceed the invoice's Grand Total (Receivable
+    // would go negative). 1 paisa tolerance for rounding.
+    this.assertAdvanceWithinGrandTotal(dto.advanceReceived, existing.grandTotal);
+
     const requiredAdvance =
       existing.salesOrder.grandTotal > 0 ? (existing.salesOrder.grandTotal * MINIMUM_ADVANCE_PERCENT) / 100 : 0;
 
@@ -401,6 +409,14 @@ export class ProformaInvoicesService {
     // advanceReceived >= requiredAdvance: proceed normally.
 
     return this.performAdvanceUpdate(id, existing, dto.advanceReceived, actorName, null);
+  }
+
+  private assertAdvanceWithinGrandTotal(advanceReceived: number, grandTotal: number) {
+    if (advanceReceived > grandTotal + 0.01) {
+      throw new BadRequestException(
+        `Advance amount (₹${advanceReceived.toLocaleString('en-IN')}) cannot exceed the invoice Grand Total (₹${grandTotal.toLocaleString('en-IN')}).`,
+      );
+    }
   }
 
   // Shared write path for the advance figure itself — used both by
@@ -463,6 +479,7 @@ export class ProformaInvoicesService {
         'The linked Sales Order is cancelled — advance payment can no longer be recorded against it.',
       );
     }
+    this.assertAdvanceWithinGrandTotal(advanceReceived, existing.grandTotal);
     return this.performAdvanceUpdate(request.proformaInvoiceId, existing, advanceReceived, request.requestedByName ?? undefined, {
       approvedBy: request.decidedApprover ?? '',
       by: request.requestedByName ?? null,
@@ -611,7 +628,16 @@ export class ProformaInvoicesService {
     // column is meant to read, rather than adding a new schema field for a
     // value that's always mechanically recomputable from what's already
     // stored.
-    const taxableAmount = invoice.subtotal - invoice.discount;
+    //
+    // Bug fix ("GST % exceeds 18% in Proforma Invoice"): the base used to be
+    // subtotal - discount, but GST is calculated on subtotal + installation
+    // + transportation (before the discount comes off — see
+    // QuotationsService.computeTotals()), so dividing the tax by that
+    // smaller base inflated the shown percentage above the real 18%. The
+    // invoice doesn't store the charges separately, but grandTotal already
+    // reflects them: grandTotal = taxableBase - discount + tax, so the
+    // actual GST base is grandTotal + discount - tax.
+    const taxableAmount = invoice.grandTotal + invoice.discount - invoice.tax;
     const taxPercent = taxableAmount > 0 ? Math.round((invoice.tax / taxableAmount) * 10000) / 100 : 0;
 
     return {

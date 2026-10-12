@@ -55,6 +55,12 @@ export class ProductsController {
     return this.productsService.update(id, dto);
   }
 
+  @Patch(':id/reactivate')
+  @RequirePermission('Product', 'Edit')
+  reactivate(@Param('id') id: string) {
+    return this.productsService.reactivate(id);
+  }
+
   @Delete(':id')
   @RequirePermission('Product', 'Delete')
   deactivate(@Param('id') id: string) {

@@ -38,7 +38,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { deleteLead, downloadLeadData, downloadLeadImportTemplate, listLeads } from "@/api/leads";
-import type { Lead, LeadStatus } from "@/types";
+import type { Lead, LeadSource, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 20;
@@ -58,8 +58,15 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
   const status = searchParams.get("status");
   const assignedToUserId = searchParams.get("assignedToUserId");
   const state = searchParams.get("state");
+  // QA fix: the Dashboard's Lead Sources donut links to /leads?source=META
+  // etc., but this page never read `source`, so the click landed on the
+  // unfiltered list.
+  const source = searchParams.get("source");
+  const followUp = searchParams.get("followUp");
   return {
+    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     ...emptyLeadFilters,
+    source: (source as LeadSource | null) ?? emptyLeadFilters.source,
     status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
     assignedToUserId: assignedToUserId ?? emptyLeadFilters.assignedToUserId,
     state: state ?? emptyLeadFilters.state,
@@ -81,7 +88,11 @@ export default function LeadList() {
   // explicit incoming URL filter (e.g. a Dashboard card linking to
   // /leads?status=QUALIFIED) always takes precedence over a remembered one.
   const hasUrlFilterParams =
-    searchParams.has("status") || searchParams.has("assignedToUserId") || searchParams.has("state");
+    searchParams.has("status") ||
+    searchParams.has("assignedToUserId") ||
+    searchParams.has("state") ||
+    searchParams.has("source") ||
+    searchParams.has("followUp");
   const [filters, setFilters] = useSessionFilters<LeadFilters>(
     "dailyops.filters.leads",
     hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
@@ -125,6 +136,7 @@ export default function LeadList() {
         status: debouncedFilters.status || undefined,
         priority: debouncedFilters.priority || undefined,
         source: debouncedFilters.source || undefined,
+        followUp: debouncedFilters.followUp || undefined,
         assignedToUserId: debouncedFilters.assignedToUserId || undefined,
         state: debouncedFilters.state || undefined,
         dateFrom: debouncedFilters.dateFrom || undefined,

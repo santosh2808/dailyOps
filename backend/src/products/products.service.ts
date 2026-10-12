@@ -23,8 +23,9 @@ export class ProductsService {
     const search = query.search?.trim();
     const category = query.category?.trim();
 
+    const status = query.status ?? 'ACTIVE';
     const where: Prisma.ProductWhereInput = {
-      isActive: true,
+      ...(status === 'ACTIVE' ? { isActive: true } : status === 'INACTIVE' ? { isActive: false } : {}),
       ...(category ? { category } : {}),
       ...(search
         ? {
@@ -113,6 +114,14 @@ export class ProductsService {
     return this.prisma.product.update({
       where: { id },
       data: { ...dto, technicalSpec: dto.technicalSpec as Prisma.InputJsonValue | undefined },
+    });
+  }
+
+  async reactivate(id: string) {
+    await this.findOne(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { isActive: true },
     });
   }
 
