@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { SalesOrderStatus } from '@prisma/client';
-import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class QuerySalesOrderDto {
   @ApiPropertyOptional({ example: 1, default: 1 })
@@ -30,6 +30,15 @@ export class QuerySalesOrderDto {
   @IsOptional()
   @IsEnum(SalesOrderStatus)
   status?: SalesOrderStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Only delayed orders: not dispatched/completed/cancelled and delivery date before today (same rule as the Dashboard Delayed Orders count)',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  delayed?: boolean;
 
   @ApiPropertyOptional({ description: 'Filter by customer id (uuid)' })
   @IsOptional()

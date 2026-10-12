@@ -1052,9 +1052,8 @@ export default function Dashboard() {
                   label="Delayed Orders"
                   count={stats?.delayedOrdersCount ?? 0}
                   icon={Clock3}
-                  // No "overdue" filter exists on the Sales Orders list —
-                  // opens the list unfiltered.
-                  onClick={() => navigate("/sales-orders")}
+                  // Same rule as the count: open, delivery date before today.
+                  onClick={() => navigate("/sales-orders?delayed=true")}
                 />
               </CardContent>
             </Card>

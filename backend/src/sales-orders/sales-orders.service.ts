@@ -212,6 +212,12 @@ export class SalesOrdersService {
 
     const where: Prisma.SalesOrderWhereInput = {
       deletedAt: null,
+      ...(query.delayed
+        ? {
+            status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
+            deliveryDate: { lt: new Date(new Date().setHours(0, 0, 0, 0)) },
+          }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.quotationId ? { quotationId: query.quotationId } : {}),
