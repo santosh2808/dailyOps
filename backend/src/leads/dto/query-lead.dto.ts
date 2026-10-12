@@ -73,6 +73,14 @@ export class QueryLeadDto {
   @IsDateString()
   dateTo?: string;
 
+  // QA fix: lets the Dashboard's follow-up notifications open the Leads
+  // list already narrowed to the matching open leads. Same windows as the
+  // Dashboard counts (open = not WON/LOST; today / overdue / next 7 days).
+  @ApiPropertyOptional({ enum: ['TODAY', 'OVERDUE', 'UPCOMING'], description: 'Follow-up window on nextFollowUp (open leads only)' })
+  @IsOptional()
+  @IsIn(['TODAY', 'OVERDUE', 'UPCOMING'])
+  followUp?: 'TODAY' | 'OVERDUE' | 'UPCOMING';
+
   @ApiPropertyOptional({
     example: 'createdAt',
     enum: [

@@ -62,7 +62,9 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
   // etc., but this page never read `source`, so the click landed on the
   // unfiltered list.
   const source = searchParams.get("source");
+  const followUp = searchParams.get("followUp");
   return {
+    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     ...emptyLeadFilters,
     source: (source as LeadSource | null) ?? emptyLeadFilters.source,
     status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
@@ -89,7 +91,8 @@ export default function LeadList() {
     searchParams.has("status") ||
     searchParams.has("assignedToUserId") ||
     searchParams.has("state") ||
-    searchParams.has("source");
+    searchParams.has("source") ||
+    searchParams.has("followUp");
   const [filters, setFilters] = useSessionFilters<LeadFilters>(
     "dailyops.filters.leads",
     hasUrlFilterParams ? initialFiltersFromSearchParams(searchParams) : null,
@@ -133,6 +136,7 @@ export default function LeadList() {
         status: debouncedFilters.status || undefined,
         priority: debouncedFilters.priority || undefined,
         source: debouncedFilters.source || undefined,
+        followUp: debouncedFilters.followUp || undefined,
         assignedToUserId: debouncedFilters.assignedToUserId || undefined,
         state: debouncedFilters.state || undefined,
         dateFrom: debouncedFilters.dateFrom || undefined,

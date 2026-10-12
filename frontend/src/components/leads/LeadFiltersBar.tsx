@@ -18,6 +18,8 @@ export interface LeadFilters {
   state: string;
   dateFrom: string;
   dateTo: string;
+  // Set by the Dashboard's follow-up notification link; "" = no filter.
+  followUp?: "" | "TODAY" | "OVERDUE" | "UPCOMING";
 }
 
 interface LeadFiltersBarProps {
@@ -34,6 +36,7 @@ export const emptyLeadFilters: LeadFilters = {
   state: "",
   dateFrom: "",
   dateTo: "",
+  followUp: "",
 };
 
 export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProps) {
@@ -56,7 +59,8 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
     !!filters.assignedToUserId ||
     !!filters.state ||
     !!filters.dateFrom ||
-    !!filters.dateTo;
+    !!filters.dateTo ||
+    !!filters.followUp;
 
   function update<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     onChange({ ...filters, [key]: value });
@@ -138,6 +142,17 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
               {s}
             </option>
           ))}
+        </Select>
+
+        <Select
+          className="w-44"
+          value={filters.followUp ?? ""}
+          onChange={(e) => update("followUp", e.target.value as LeadFilters["followUp"])}
+        >
+          <option value="">All follow-ups</option>
+          <option value="TODAY">Follow-up today</option>
+          <option value="OVERDUE">Follow-up overdue</option>
+          <option value="UPCOMING">Follow-up next 7 days</option>
         </Select>
 
         <DateRangePicker

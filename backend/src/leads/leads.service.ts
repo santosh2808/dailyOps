@@ -376,6 +376,24 @@ export class LeadsService {
     return { preferredLanguage: stateDefault, languageSource: LanguageSource.STATE_DEFAULT };
   }
 
+  // Same definitions as DashboardService.getStats() follow-up counts.
+  private followUpWhere(followUp?: 'TODAY' | 'OVERDUE' | 'UPCOMING'): Prisma.LeadWhereInput {
+    if (!followUp) return {};
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const windowEnd = new Date(startOfTomorrow);
+    windowEnd.setDate(windowEnd.getDate() + 7);
+    const nextFollowUp =
+      followUp === 'TODAY'
+        ? { gte: startOfToday, lt: startOfTomorrow }
+        : followUp === 'OVERDUE'
+          ? { lt: startOfToday }
+          : { gte: startOfTomorrow, lt: windowEnd };
+    return { status: { notIn: ['WON', 'LOST'] }, nextFollowUp };
+  }
+
   async findAll(query: QueryLeadDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -383,6 +401,9 @@ export class LeadsService {
 
     const where: Prisma.LeadWhereInput = {
       deletedAt: null,
+      // Before `status` so an explicit status filter still wins over the
+      // follow-up window's open-leads rule.
+      ...this.followUpWhere(query.followUp),
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.source ? { source: query.source } : {}),

@@ -1019,9 +1019,7 @@ export default function Dashboard() {
                   label="Today's Follow-ups"
                   count={stats?.todaysFollowUpsCount ?? 0}
                   icon={CalendarClock}
-                  // Lead's list filters don't include nextFollowUp — opens
-                  // the Leads list unfiltered.
-                  onClick={() => navigate("/leads")}
+                  onClick={() => navigate("/leads?followUp=TODAY")}
                 />
                 <NotificationRow
                   label="Pending Quotations"
