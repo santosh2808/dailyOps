@@ -1,0 +1,242 @@
+name: Deploy to TEST
+
+on:
+  push:
+    branches: [test-deploy]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend -> TEST ECR -> TEST ECS
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Safety Guard - Verify branch is test-deploy
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/test-deploy" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "ERROR: This workflow must run on test-deploy branch only"
+            exit 1
+          fi
+          echo "✓ Branch safety check passed"
+
+      - name: Safety Guard - Verify TEST variables
+        env:
+          TEST_AWS_REGION: ${{ vars.TEST_AWS_REGION }}
+          TEST_AWS_ROLE_ARN: ${{ vars.TEST_AWS_ROLE_ARN }}
+          TEST_ECR_REPOSITORY: ${{ vars.TEST_ECR_REPOSITORY }}
+          TEST_ECS_CLUSTER: ${{ vars.TEST_ECS_CLUSTER }}
+          TEST_ECS_SERVICE_NAME: ${{ vars.TEST_ECS_SERVICE_NAME }}
+          TEST_ECS_SERVICE_ARN: ${{ vars.TEST_ECS_SERVICE_ARN }}
+          TEST_API_URL: ${{ vars.TEST_API_URL }}
+          TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+          TEST_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}
+          TEST_FRONTEND_URL: ${{ vars.TEST_FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          for name in TEST_AWS_REGION TEST_AWS_ROLE_ARN TEST_ECR_REPOSITORY TEST_ECS_CLUSTER \
+                      TEST_ECS_SERVICE_NAME TEST_ECS_SERVICE_ARN TEST_API_URL TEST_S3_BUCKET \
+                      TEST_CLOUDFRONT_DISTRIBUTION_ID TEST_FRONTEND_URL; do
+            [ -n "${!name}" ] || err "$name is not set"
+          done
+
+          # Only resources named as TEST resources may be targeted
+          for name in TEST_AWS_ROLE_ARN TEST_ECR_REPOSITORY TEST_ECS_SERVICE_NAME TEST_ECS_SERVICE_ARN TEST_S3_BUCKET; do
+            case "${!name}" in
+              *test*) ;;
+              *) err "$name ('${!name}') is not a TEST resource" ;;
+            esac
+          done
+
+          # The service ARN must be exactly the configured cluster/service
+          case "$TEST_ECS_SERVICE_ARN" in
+            *":service/$TEST_ECS_CLUSTER/$TEST_ECS_SERVICE_NAME") ;;
+            *) err "TEST_ECS_SERVICE_ARN does not match TEST_ECS_CLUSTER/TEST_ECS_SERVICE_NAME" ;;
+          esac
+
+          for name in TEST_API_URL TEST_FRONTEND_URL; do
+            case "${!name}" in
+              https://*) ;;
+              *) err "$name must start with https://" ;;
+            esac
+          done
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "✓ All TEST variables verified"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Typecheck
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx tsc --noEmit -p tsconfig.json
+
+      - name: Assume AWS role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.TEST_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.TEST_AWS_REGION }}
+          role-session-name: gha-dailyops-test-${{ github.run_id }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push TEST image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.TEST_ECR_REPOSITORY }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="$REGISTRY/$REPOSITORY:$SHA"
+          docker build --platform linux/amd64 -t "$IMAGE" ./backend
+          docker push "$IMAGE"
+          # Test task definition runs :latest; keep it pointed at this build
+          docker tag "$IMAGE" "$REGISTRY/$REPOSITORY:latest"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+
+      - name: Update TEST ECS service
+        env:
+          SERVICE_ARN: ${{ vars.TEST_ECS_SERVICE_ARN }}
+          CLUSTER: ${{ vars.TEST_ECS_CLUSTER }}
+          SERVICE: ${{ vars.TEST_ECS_SERVICE_NAME }}
+          REGION: ${{ vars.TEST_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --force-new-deployment \
+            --region "$REGION"
+
+          for i in $(seq 1 60); do
+            STATE=$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --region "$REGION" \
+              --query 'services[0].deployments[0].rolloutState' --output text)
+            echo "[$i/60] rollout: $STATE"
+            [ "$STATE" = "COMPLETED" ] && exit 0
+            [ "$STATE" = "FAILED" ] && exit 1
+            sleep 20
+          done
+          exit 1
+
+      - name: Verify TEST API
+        env:
+          API_URL: ${{ vars.TEST_API_URL }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /tmp/ready.json -w "%{http_code}" "$API_URL/health/ready" || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 10
+          done
+          exit 1
+
+  frontend:
+    name: Frontend -> TEST S3 -> TEST CloudFront
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Safety Guard - Verify frontend variables
+        env:
+          TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+          TEST_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}
+          TEST_FRONTEND_URL: ${{ vars.TEST_FRONTEND_URL }}
+          TEST_API_URL: ${{ vars.TEST_API_URL }}
+        run: |
+          set -euo pipefail
+          case "$TEST_S3_BUCKET" in *test*) ;; *) echo "::error::TEST_S3_BUCKET is not a TEST bucket"; exit 1 ;; esac
+          [ -n "$TEST_CLOUDFRONT_DISTRIBUTION_ID" ] || { echo "::error::TEST_CLOUDFRONT_DISTRIBUTION_ID is not set"; exit 1; }
+          case "$TEST_FRONTEND_URL" in https://*) ;; *) echo "::error::TEST_FRONTEND_URL must start with https://"; exit 1 ;; esac
+          case "$TEST_API_URL" in https://*) ;; *) echo "::error::TEST_API_URL must start with https://"; exit 1 ;; esac
+          echo "✓ Frontend variables verified"
+
+      - name: Build frontend with TEST API URL
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ vars.TEST_API_URL }}
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+          if ! grep -q "$VITE_API_URL" dist/index.html dist/**/*.js 2>/dev/null; then
+            echo "::error::VITE_API_URL was not applied - the bundle still targets localhost:4000."
+            exit 1
+          fi
+          echo "✓ Frontend built with TEST_API_URL: $VITE_API_URL"
+
+      - name: Assume AWS role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.TEST_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.TEST_AWS_REGION }}
+          role-session-name: gha-dailyops-test-frontend-${{ github.run_id }}
+
+      - name: Upload to TEST S3
+        working-directory: frontend
+        env:
+          BUCKET: ${{ vars.TEST_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          aws s3 sync dist "s3://$BUCKET" --delete
+          aws s3 cp dist/index.html "s3://$BUCKET/index.html" --content-type "text/html; charset=utf-8"
+          echo "✓ Frontend uploaded to s3://$BUCKET"
+
+      - name: Invalidate TEST CloudFront cache
+        env:
+          DIST_ID: ${{ vars.TEST_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          ID=$(aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" | jq -r '.Invalidation.Id')
+          echo "Invalidation ID: $ID"
+          echo "✓ CloudFront cache invalidated"
+
+      - name: Verify TEST frontend is live
+        env:
+          FRONTEND_URL: ${{ vars.TEST_FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 10
+          done
+          exit 1
