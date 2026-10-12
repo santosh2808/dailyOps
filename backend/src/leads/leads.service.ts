@@ -481,6 +481,25 @@ export class LeadsService {
     // createFromPublicForm() already uses for the public lead-capture path.
     const { products, expectedCloseDate, nextFollowUp, companyName, preferredLanguage, ...leadData } = dto;
 
+    // QA fix: the same contact could be entered twice. A lead is a duplicate
+    // when a non-deleted lead already has this phone number. LOST leads are
+    // deliberately excluded — a lost contact may come back as a fresh lead
+    // (see previousLeadId re-engagement below). Lead Import keeps its own
+    // Company + Email rule.
+    if (leadData.phone) {
+      const duplicate = await this.prisma.lead.findFirst({
+        where: { deletedAt: null, status: { not: 'LOST' }, phone: leadData.phone },
+        select: { leadNumber: true, companyName: true, contactPerson: true },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          `A lead with this phone number already exists (${duplicate.leadNumber}` +
+            `${duplicate.companyName || duplicate.contactPerson ? ` - ${duplicate.companyName || duplicate.contactPerson}` : ''}). ` +
+            'Open that lead instead of creating a duplicate.',
+        );
+      }
+    }
+
     // D.O.T. AI Lead Assistant Phase 1: derive a default language from
     // state whenever the caller didn't already supply one — see
     // resolveLanguageOnCreate() below. Never guesses for states with no
