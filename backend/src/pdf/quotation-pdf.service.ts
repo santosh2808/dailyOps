@@ -200,13 +200,14 @@ const WARRANTY_CONDITIONS =
 const EXCLUSIONS = [
   'Scaffolding / Scissor Lift / Boom Lift / Hydra / Forklift required for installation.',
   'If the ceiling is RCC, the required structure other than above given scope shall be to your account.',
-  'If there is any hanging pipe structure arrangement is required, the same shall be provided by client.',
+  'If there is any hanging pipe structure arrangement is required, if the hanging pipe is required more than above mentioned ft the same shall be provided by client.',
   'Input Main Power Supply with proper earthing at floor level.',
-  'Power Cable to the regulator (input power cable).',
+  'Power cable from Main Supply to control box and Fan to control box will be in your scope.',
+  'Power supply for installation and labor accommodation to be provided by you.',
+  'Transportation from Ex. Work-Hyderabad to your Site',
   'Unloading of Fan from Transport, Plant internal movement and storage, preservation.',
   'Preparing site ready for installing Fan with Wiring, open floor.',
   'Any specific paint shall be charged extra @ Rs.10,000.00',
-  'Power supply for installation and labor accommodation to be provided by you.',
 ];
 
 interface SpecRow {
