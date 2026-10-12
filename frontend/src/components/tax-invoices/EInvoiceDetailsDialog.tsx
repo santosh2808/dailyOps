@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
+import jsQR from "jsqr";
 import { updateTaxInvoiceEInvoice } from "@/api/tax-invoices";
 import type { TaxInvoice } from "@/types";
 
@@ -36,6 +37,45 @@ function toDateInputValue(value?: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+const IRN_PATTERN = /^[a-fA-F0-9]{64}$/;
+const MAX_QR_BYTES = 1024 * 1024;
+
+// GST e-invoice QR codes encode a signed JWT whose payload carries the IRN
+// (payload.data is a JSON string with an "Irn" field). Returns that IRN when
+// the decoded text looks like one, otherwise null (an unrelated QR/plain text).
+function irnFromQrText(text: string): string | null {
+  const parts = text.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const json = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const data = typeof json.data === "string" ? JSON.parse(json.data) : json.data;
+    const irn = data?.Irn ?? json.Irn;
+    return typeof irn === "string" ? irn : null;
+  } catch {
+    return null;
+  }
+}
+
+// Decodes the uploaded image in a canvas and reads the QR inside it; rejects
+// when no QR is found. Resolves with the decoded text.
+function decodeQr(dataUrl: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(null);
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      resolve(jsQR(data.data, data.width, data.height)?.data ?? null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
 export default function EInvoiceDetailsDialog({
   open,
   onOpenChange,
@@ -46,6 +86,8 @@ export default function EInvoiceDetailsDialog({
   const [ackNumber, setAckNumber] = useState("");
   const [ackDate, setAckDate] = useState("");
   const [qrCodeImage, setQrCodeImage] = useState<string | undefined>(undefined);
+  // IRN embedded in the uploaded QR (only known for a freshly uploaded image).
+  const [qrIrn, setQrIrn] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +98,7 @@ export default function EInvoiceDetailsDialog({
       setAckNumber(invoice.ackNumber ?? "");
       setAckDate(toDateInputValue(invoice.ackDate));
       setQrCodeImage(invoice.qrCodeImage ?? undefined);
+      setQrIrn(null);
       setError("");
     }
   }, [open, invoice]);
@@ -63,23 +106,53 @@ export default function EInvoiceDetailsDialog({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file (PNG or JPG) of the QR code.");
+    const input = e.target;
+    const reject = (message: string) => {
+      setError(message);
+      input.value = "";
+    };
+    if (file.type !== "image/png" && file.type !== "image/jpeg") {
+      reject("Please upload a PNG or JPG image of the QR code.");
+      return;
+    }
+    if (file.size > MAX_QR_BYTES) {
+      reject("The QR image is too large (maximum 1 MB).");
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      setQrCodeImage(typeof reader.result === "string" ? reader.result : undefined);
+    reader.onload = async () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : undefined;
+      if (!dataUrl) return reject("Could not read that image file. Please try again.");
+      const text = await decodeQr(dataUrl);
+      if (!text) {
+        return reject("No valid QR code was found in that image. Upload the QR code issued by the e-invoice portal.");
+      }
+      const embeddedIrn = irnFromQrText(text);
+      if (!embeddedIrn) {
+        return reject("This QR code is not a GST e-invoice QR code (no IRN found in it).");
+      }
+      setQrCodeImage(dataUrl);
+      setQrIrn(embeddedIrn);
+      if (!irn.trim()) setIrn(embeddedIrn);
       setError("");
     };
-    reader.onerror = () => setError("Could not read that image file. Please try again.");
+    reader.onerror = () => reject("Could not read that image file. Please try again.");
     reader.readAsDataURL(file);
   }
 
   async function handleConfirm() {
     if (!invoice) return;
-    setSubmitting(true);
     setError("");
+    const irnValue = irn.trim();
+    if (irnValue && !IRN_PATTERN.test(irnValue)) {
+      setError("IRN must be a 64-character hexadecimal code (letters a-f and digits 0-9).");
+      return;
+    }
+    if (qrIrn && irnValue && qrIrn.toLowerCase() !== irnValue.toLowerCase()) {
+      setError("The IRN entered does not match the IRN inside the uploaded QR code.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const updated = await updateTaxInvoiceEInvoice(invoice.id, {
         irn: irn.trim() || undefined,
@@ -165,6 +238,7 @@ export default function EInvoiceDetailsDialog({
                   size="sm"
                   onClick={() => {
                     setQrCodeImage(undefined);
+                    setQrIrn(null);
                     if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
                 >
