@@ -17,8 +17,12 @@ import type {
 // endpoints below (DashboardFilters). Pass-through via `params` — a missing/
 // undefined value is simply omitted from the query string, matching every
 // other optional filter in this file.
-export async function getDashboardStats(state?: string) {
-  const res = await api.get<DashboardStats>("/api/v1/dashboard/stats", { params: { state } });
+// QA fix: also accepts month/year/leadSource (the other Global Filters) so
+// the KPI cards, donuts and follow-ups respond to them, not just the map.
+export type DashboardScopeParams = Pick<DashboardFilters, "state" | "month" | "year" | "leadSource">;
+
+export async function getDashboardStats(scope: DashboardScopeParams = {}) {
+  const res = await api.get<DashboardStats>("/api/v1/dashboard/stats", { params: scope });
   return res.data;
 }
 
@@ -49,8 +53,8 @@ export async function getDashboardExecutives(filters: DashboardFilters = {}) {
   return res.data;
 }
 
-export async function getDashboardCharts(state?: string) {
-  const res = await api.get<DashboardCharts>("/api/v1/dashboard/charts", { params: { state } });
+export async function getDashboardCharts(scope: DashboardScopeParams = {}) {
+  const res = await api.get<DashboardCharts>("/api/v1/dashboard/charts", { params: scope });
   return res.data;
 }
 
@@ -75,7 +79,7 @@ export async function getDashboardRecentActivities(state?: string) {
   return res.data;
 }
 
-export async function getDashboardTodaysFollowUps(state?: string) {
-  const res = await api.get<TodaysFollowUpEntry[]>("/api/v1/dashboard/todays-followups", { params: { state } });
+export async function getDashboardTodaysFollowUps(scope: DashboardScopeParams = {}) {
+  const res = await api.get<TodaysFollowUpEntry[]>("/api/v1/dashboard/todays-followups", { params: scope });
   return res.data;
 }
