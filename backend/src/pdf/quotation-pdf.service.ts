@@ -305,7 +305,13 @@ export class QuotationPdfService {
         doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text('Standard Scope of Supply Includes:', contentLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.3);
 
-        const scope = this.getTechnicalSpec(item)?.scopeOfSupply ?? [];
+        // QA fix: "Power Cable" must not appear in the quotation's Standard
+        // Scope of Supply. Filtered at render time (not just in the seed)
+        // because every already-saved Product row carries it in its stored
+        // technicalSpec.scopeOfSupply. JEO PDF is intentionally untouched.
+        const scope = (this.getTechnicalSpec(item)?.scopeOfSupply ?? []).filter(
+          (row) => row.item.trim().toLowerCase() !== 'power cable',
+        );
         if (scope.length === 0) {
           ensureSpace(16);
           doc.font('Helvetica-Oblique').fontSize(9).fillColor('#64748b').text('(No scope-of-supply items configured for this product yet.)', contentLeft, doc.y, { width: contentWidth });
