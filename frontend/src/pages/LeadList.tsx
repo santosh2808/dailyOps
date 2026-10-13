@@ -264,12 +264,22 @@ export default function LeadList() {
   // real data).
   async function handleDownloadData() {
     setDownloadingData(true);
+
     try {
-      await downloadLeadData();
+      await downloadLeadData({
+        search: debouncedFilters.search || undefined,
+        status: debouncedFilters.status || undefined,
+        priority: debouncedFilters.priority || undefined,
+        source: debouncedFilters.source || undefined,
+        assignedToUserId: debouncedFilters.assignedToUserId || undefined,
+        state: debouncedFilters.state || undefined,
+        dateFrom: debouncedFilters.dateFrom || undefined,
+        dateTo: debouncedFilters.dateTo || undefined,
+        sortBy,
+        sortOrder,
+      });
     } catch (err) {
-      const message = getErrorMessage(err, "Failed to download lead data.");
-      setError(message);
-      toast.error(message);
+      toast.error(getErrorMessage(err, "Failed to export leads."));
     } finally {
       setDownloadingData(false);
     }

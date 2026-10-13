@@ -451,6 +451,39 @@ export default function Dashboard() {
 
   // v2: Global Filters (requirement #13).
   const [filters, setFilters] = useState<DashboardFilters>({});
+  const navigateToLeads = (extraParams: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+
+    if (filters.state) {
+      params.set("state", filters.state);
+    }
+
+    if (filters.leadSource) {
+      params.set("source", filters.leadSource);
+    }
+
+    if (filters.executive) {
+      params.set("assignedToUserId", filters.executive);
+    }
+
+    if (filters.month && filters.year) {
+      const dateFrom = isoDate(filters.year, filters.month, 1);
+      const lastDay = new Date(filters.year, filters.month, 0).getDate();
+      const dateTo = isoDate(filters.year, filters.month, lastDay);
+
+      params.set("dateFrom", dateFrom);
+      params.set("dateTo", dateTo);
+    } else if (filters.year) {
+      params.set("dateFrom", isoDate(filters.year, 1, 1));
+      params.set("dateTo", isoDate(filters.year, 12, 31));
+    }
+
+    Object.entries(extraParams).forEach(([key, value]) => {
+      params.set(key, value);
+    });
+
+    navigate(`/leads?${params.toString()}`);
+  };
   const [executives, setExecutives] = useState<ExecutivePerformanceEntry[]>([]);
   const [salesByState, setSalesByState] = useState<StateSalesEntry[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductEntry[]>([]);
@@ -640,7 +673,7 @@ export default function Dashboard() {
               value={stats?.leads ?? 0}
               icon={UserPlus}
               loading={loading}
-              onClick={() => navigate("/leads")}
+              onClick={() => navigateToLeads()}
             />
             <KpiCard
               label="Quotations"
@@ -848,7 +881,9 @@ export default function Dashboard() {
               emptyLabel="No leads yet."
               onSliceClick={(name) => {
                 const entry = leadSourceData.find((d) => d.name === name);
-                if (entry) navigate(`/leads?source=${entry.source}`);
+                if (entry) {
+                  navigateToLeads({ source: entry.source });
+                }
               }}
             />
             <DonutCard
