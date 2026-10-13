@@ -83,10 +83,16 @@ export class LeadsController {
   // for a lead id.
   @Get('export')
   @RequirePermission('Lead', 'View')
-  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
   @Header('Content-Disposition', 'attachment; filename="leads-export.xlsx"')
-  async exportLeads(@Res() res: Response) {
-    const buffer = await this.leadsService.exportLeadsToExcel();
+  async exportLeads(
+    @Query() query: QueryLeadDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.leadsService.exportLeadsToExcel(query);
     res.send(buffer);
   }
 

@@ -211,8 +211,11 @@ export async function downloadLeadImportTemplate() {
 // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
 // records, distinct from downloadLeadImportTemplate() above (which only
 // ever produces a blank header row for uploading).
-export async function downloadLeadData() {
-  const res = await api.get("/api/v1/leads/export", { responseType: "blob" });
+export async function downloadLeadData(params?: Record<string, unknown>) {
+  const res = await api.get("/api/v1/leads/export", {
+    params,
+    responseType: "blob",
+  });
   const url = window.URL.createObjectURL(new Blob([res.data]));
   const link = document.createElement("a");
   link.href = url;

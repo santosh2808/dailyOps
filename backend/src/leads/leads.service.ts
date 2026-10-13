@@ -1955,43 +1955,140 @@ export class LeadsService {
   // capability, mirroring MaterialsService.exportToExcel()'s existing
   // export pattern — same isActive-equivalent scope (deletedAt: null, same
   // soft-delete convention as findAll() above), same xlsx library, same
-  // "all matching records, not paginated" shape.
-  async exportLeadsToExcel(): Promise<Buffer> {
-    const leads = await this.prisma.lead.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      include: { assignedToUser: { select: ASSIGNED_TO_USER_SELECT } },
-    });
+  // downloading leads data based on filters
+  async exportLeadsToExcel(query: QueryLeadDto): Promise<Buffer> {
+  const search = query.search?.trim();
 
-    const rows = leads.map((lead) => ({
-      'Lead Number': lead.leadNumber,
-      'Company Name': lead.companyName,
-      'Contact Person': lead.contactPerson,
-      Designation: lead.designation ?? '',
-      Email: lead.email ?? '',
-      Phone: lead.phone,
-      'Alternate Phone': lead.alternatePhone ?? '',
-      City: lead.city ?? '',
-      State: lead.state ?? '',
-      Industry: lead.industry ?? '',
-      'Lead Source': lead.source,
-      Status: lead.status,
-      Priority: lead.priority,
-      'Estimated Value': lead.estimatedValue ?? '',
-      'Next Follow-up': lead.nextFollowUp ? lead.nextFollowUp.toISOString().slice(0, 10) : '',
-      'Expected Close Date': lead.expectedCloseDate
-        ? lead.expectedCloseDate.toISOString().slice(0, 10)
-        : '',
-      'Assigned To': lead.assignedToUser?.name ?? '',
-      Remarks: lead.remarks ?? '',
-      'Created At': lead.createdAt.toISOString().slice(0, 10),
-    }));
+  const where: Prisma.LeadWhereInput = {
+    deletedAt: null,
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-  }
+    ...(query.status ? { status: query.status } : {}),
+
+    ...(query.priority ? { priority: query.priority } : {}),
+
+    ...(query.source ? { source: query.source } : {}),
+
+    ...(query.assignedToUserId
+      ? { assignedToUserId: query.assignedToUserId }
+      : {}),
+
+    ...(query.state ? { state: query.state } : {}),
+
+    ...(query.dateFrom || query.dateTo
+      ? {
+          createdAt: {
+            ...(query.dateFrom
+              ? { gte: new Date(query.dateFrom) }
+              : {}),
+            ...(query.dateTo
+              ? { lte: new Date(query.dateTo) }
+              : {}),
+          },
+        }
+      : {}),
+
+    ...(search
+      ? {
+          OR: [
+            {
+              leadNumber: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              companyName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              contactPerson: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              phone: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              title: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const sortBy = SORTABLE_FIELDS.includes(
+    query.sortBy as (typeof SORTABLE_FIELDS)[number],
+  )
+    ? (query.sortBy as (typeof SORTABLE_FIELDS)[number])
+    : 'createdAt';
+
+  const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
+
+  const leads = await this.prisma.lead.findMany({
+    where,
+    orderBy: {
+      [sortBy]: sortOrder,
+    },
+    include: {
+      assignedToUser: {
+        select: ASSIGNED_TO_USER_SELECT,
+      },
+    },
+  });
+
+  // Keep Function 1's Excel column structure and formatting
+  const rows = leads.map((lead) => ({
+    'Lead Number': lead.leadNumber,
+    'Company Name': lead.companyName,
+    'Contact Person': lead.contactPerson,
+    Designation: lead.designation ?? '',
+    Email: lead.email ?? '',
+    Phone: lead.phone,
+    'Alternate Phone': lead.alternatePhone ?? '',
+    City: lead.city ?? '',
+    State: lead.state ?? '',
+    Industry: lead.industry ?? '',
+    'Lead Source': lead.source,
+    Status: lead.status,
+    Priority: lead.priority,
+    'Estimated Value': lead.estimatedValue ?? '',
+    'Next Follow-up': lead.nextFollowUp
+      ? lead.nextFollowUp.toISOString().slice(0, 10)
+      : '',
+    'Expected Close Date': lead.expectedCloseDate
+      ? lead.expectedCloseDate.toISOString().slice(0, 10)
+      : '',
+    'Assigned To': lead.assignedToUser?.name ?? '',
+    Remarks: lead.remarks ?? '',
+    'Created At': lead.createdAt.toISOString().slice(0, 10),
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+
+  return XLSX.write(workbook, {
+    type: 'buffer',
+    bookType: 'xlsx',
+  }) as Buffer;
+}
 
   async previewLeadImport(fileBuffer: Buffer) {
     const rawRows = this.parseImportFile(fileBuffer);
