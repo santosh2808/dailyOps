@@ -90,6 +90,8 @@ export default function LeadForm() {
   const [products, setProducts] = useState<LeadProductPayload[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(isEdit);
+  // True when the lead being edited already has an owner (see validate()).
+  const [wasAssigned, setWasAssigned] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -102,6 +104,7 @@ export default function LeadForm() {
       try {
         const lead = await getLead(leadId);
         if (cancelled) return;
+        setWasAssigned(!!lead.assignedToUserId);
         setForm({
           companyName: lead.companyName,
           contactPerson: lead.contactPerson,
@@ -172,7 +175,13 @@ export default function LeadForm() {
     // Dashboard's India Sales Map, and needs an owner so nothing sits
     // unassigned.
     if (!form.state.trim()) next.state = "State is required";
-    if (!form.assignedToUserId) next.assignedToUserId = "Assigning this lead to a user is required";
+    // Required when creating, and when editing a lead that already has an
+    // owner (so an edit can't silently un-assign it). A still-unassigned lead
+    // (e.g. just imported, being worked by a telecaller) must stay editable so
+    // remarks/description can be saved before it reaches a sales person.
+    if (!form.assignedToUserId && (!isEdit || wasAssigned)) {
+      next.assignedToUserId = "Assigning this lead to a user is required";
+    }
     // QA bug-fix pass, Group B (TC-083/097): normalize before validating,
     // so "+91 98765 43210" / "+91-9876543210" typed the way a staff member
     // would naturally read it off a card is accepted instead of rejected —
@@ -509,7 +518,7 @@ export default function LeadForm() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Assigned To *</Label>
+                    <Label>Assigned To{!isEdit || wasAssigned ? " *" : ""}</Label>
                     <AssignedToPicker
                       value={form.assignedToUserId || null}
                       onChange={(userId) => update("assignedToUserId", userId ?? "")}
