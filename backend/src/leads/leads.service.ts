@@ -907,9 +907,23 @@ export class LeadsService {
       // This endpoint only ever updates the status field. Setting status to
       // WON does not create a Customer — that only happens when the user
       // explicitly calls convertToCustomer() via POST /:id/convert below.
+      // A remark entered with a status change (e.g. a telecaller moving a
+      // lead to Contacted) must also show in the Overview's "Description &
+      // Remarks" card, which reads Lead.remarks. Append (dated, with the
+      // author) rather than overwrite so earlier remarks are never lost; the
+      // full history still lives in the Timeline.
+      const remark = dto.remarks?.trim();
+      const stampedRemark = remark
+        ? `[${new Date().toISOString().slice(0, 10)}${actorName ? ` ${actorName}` : ''}] ${remark}`
+        : undefined;
       const updated = await tx.lead.update({
         where: { id },
-        data: { status: dto.status },
+        data: {
+          status: dto.status,
+          ...(stampedRemark
+            ? { remarks: existing.remarks?.trim() ? `${existing.remarks.trim()}\n${stampedRemark}` : stampedRemark }
+            : {}),
+        },
         include: LEAD_DETAIL_INCLUDE,
       });
 
