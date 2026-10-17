@@ -15,6 +15,7 @@ import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
+  isFanProduct,
 } from "@/components/quotations/QuotationItemsEditor";
 import ConfirmPriceIncludesChargesDialog from "@/components/quotations/ConfirmPriceIncludesChargesDialog";
 import { Select } from "@/components/ui/select";
@@ -468,8 +469,13 @@ export default function QuotationForm() {
   }
 
   const subtotal = computeSubtotal(items);
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const autoInstallationCharge = INSTALLATION_RATE_PER_FAN * totalQuantity;
+  // Matches the backend: only fan-type items (populated technicalSpec) earn
+  // the per-fan installation charge; spare parts don't.
+  const fanQuantity = items.reduce(
+    (sum, item) => (isFanProduct(catalog.find((p) => p.id === item.productId)) ? sum + item.quantity : sum),
+    0,
+  );
+  const autoInstallationCharge = INSTALLATION_RATE_PER_FAN * fanQuantity;
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
   // Mirrors QuotationsService.computeTotals(): once staff confirm item
   // prices already include installation/transportation/GST, those charges
@@ -706,7 +712,7 @@ export default function QuotationForm() {
                           inputMode="decimal"
                           value={form.installationCharge}
                           onChange={(e) => update("installationCharge", e.target.value)}
-                          placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${totalQuantity} fan${totalQuantity === 1 ? "" : "s"})`}
+                          placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${fanQuantity} fan${fanQuantity === 1 ? "" : "s"})`}
                         />
                         <p className="text-xs text-muted-foreground">
                           Leave blank to auto-calculate at ₹8,000 per fan. Only fill this in to
