@@ -283,6 +283,17 @@ export class DashboardService {
     return state ? { salesOrder: { customer: { state } } } : {};
   }
 
+  private scopedComplaintWhere(scope: DashboardScope): Prisma.ComplaintWhereInput {
+    const range = this.scopeDateRange(scope);
+    return {
+      ...this.complaintStateWhere(scope.state),
+      ...(range ? { createdAt: range } : {}),
+      ...(scope.leadSource
+        ? { salesOrder: { ...(scope.state ? { customer: { state: scope.state } } : {}), quotation: { lead: { source: scope.leadSource } } } }
+        : {}),
+    };
+  }
+
   private quotationApprovalStateWhere(state?: string): Prisma.QuotationApprovalRequestWhereInput {
     return state ? { quotation: this.quotationStateWhere(state) } : {};
   }
@@ -528,7 +539,7 @@ export class DashboardService {
       }),
       // Additive: Complaints module — see DashboardStats.openComplaintsCount.
       this.prisma.complaint.count({
-        where: { deletedAt: null, status: { in: [...OPEN_COMPLAINT_STATUSES] }, ...this.complaintStateWhere(state) },
+        where: { deletedAt: null, status: { in: [...OPEN_COMPLAINT_STATUSES] }, ...this.scopedComplaintWhere(scope) },
       }),
     ]);
 
@@ -767,6 +778,9 @@ export class DashboardService {
         deletedAt: null,
         assignedToUserId: { in: executiveUsers.map((u) => u.id) },
         status: { in: ['WON', 'LOST'] },
+        // Won % follows the same Year/Month/Source filters as the rest of the
+        // widget (lead created in the period, from the chosen source).
+        ...this.scopedLeadWhere({ month: filters.month, year: filters.year, leadSource: filters.leadSource }),
       },
       select: { assignedToUserId: true, status: true },
     });
