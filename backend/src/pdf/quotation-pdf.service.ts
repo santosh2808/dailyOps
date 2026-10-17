@@ -693,6 +693,18 @@ export class QuotationPdfService {
     return quotation.items.reduce((sum, item) => sum + item.quantity, 0) > 1;
   }
 
+  // Installation is a quotation-level total (Rs.8,000 per fan across ALL fan
+  // items). Printing that same total under every product's Annexure made a
+  // 5 x 8ft + 1 x 24ft quotation read as Rs.48,000 for each fan size. Each
+  // item's Annexure now shows only its own share (proportional to its fan
+  // quantity), so the shares add up to the quotation's installation total.
+  private installationShareForItem(item: QuotationPdfItem, quotation: QuotationPdfInput): { share: number; qty: number } | null {
+    const isFan = (i: QuotationPdfItem) => Object.keys(this.getTechnicalSpec(i) ?? {}).length > 0;
+    const fanQty = quotation.items.reduce((sum, i) => (isFan(i) ? sum + i.quantity : sum), 0);
+    if (!isFan(item) || fanQty <= 0 || fanQty === item.quantity) return null;
+    return { share: Math.round(((quotation.installationCharge * item.quantity) / fanQty) * 100) / 100, qty: item.quantity };
+  }
+
   private resolveCommercialTerms(quotation: QuotationPdfInput): QuotationCommercialTerms {
     const raw = quotation.commercialTerms;
     const given = raw && typeof raw === 'object' ? (raw as QuotationCommercialTerms) : {};
@@ -946,7 +958,12 @@ export class QuotationPdfService {
         value: includesCharges
           ? 'Included'
           : quotation.installationCharge > 0
-            ? `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
+            ? (() => {
+                const part = this.installationShareForItem(item, quotation);
+                return part
+                  ? `${this.formatCurrency(part.share)} (for ${part.qty} fan${part.qty === 1 ? '' : 's'}; quotation total ${this.formatCurrency(quotation.installationCharge)})`
+                  : `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`;
+              })()
             : quotation.installationCharge === 0
               ? 'Included'
               : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
@@ -963,7 +980,7 @@ export class QuotationPdfService {
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
-              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
+              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (one charge for the whole order)' : ''}`
               : quotation.transportationCharge === 0
                 ? 'Included'
                 : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
