@@ -64,8 +64,9 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
   const source = searchParams.get("source");
   const followUp = searchParams.get("followUp");
   return {
-    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     ...emptyLeadFilters,
+    // Must come after the emptyLeadFilters spread, which resets followUp to "".
+    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     source: (source as LeadSource | null) ?? emptyLeadFilters.source,
     status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
     assignedToUserId: assignedToUserId ?? emptyLeadFilters.assignedToUserId,
