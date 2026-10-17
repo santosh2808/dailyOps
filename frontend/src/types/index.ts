@@ -435,6 +435,9 @@ export interface Lead {
   updatedAt: string;
   deletedAt?: string | null;
   products?: LeadProduct[];
+  installationCharge?: number | null;
+  transportationCharge?: number | null;
+  customerTransport?: boolean;
   _count?: { products: number };
   // Lead Management Phase 1 (requirement #12) — lets Lead Details show
   // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once

@@ -359,6 +359,12 @@ model Lead {
   priority          LeadPriority  @default(MEDIUM)
   source            LeadSource    @default(OTHER)
   estimatedValue    Float?
+  // Installation / transportation quoted at the lead stage; carried into the
+  // quotation generated from this lead. Null = use the quotation defaults
+  // (installation auto at Rs.8,000 per fan, transportation 0).
+  installationCharge   Float?
+  transportationCharge Float?
+  customerTransport    Boolean @default(false)
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
   // Lead Management Phase 1 (requirement #5) — a short free-text reminder

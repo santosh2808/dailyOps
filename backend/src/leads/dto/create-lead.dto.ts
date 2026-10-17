@@ -4,6 +4,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -110,6 +111,25 @@ export class CreateLeadDto {
   @ValidateNested({ each: true })
   @Type(() => LeadProductInputDto)
   products?: LeadProductInputDto[];
+
+  @ApiPropertyOptional({ example: 48000, description: 'Installation charge (Rs.); omit to auto-compute per fan' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0, { message: 'Installation charge must be 0 or more' })
+  installationCharge?: number;
+
+  @ApiPropertyOptional({ example: 15000, description: 'Transportation charge (Rs.)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0, { message: 'Transportation charge must be 0 or more' })
+  transportationCharge?: number;
+
+  @ApiPropertyOptional({ description: 'Transportation is arranged by the customer' })
+  @IsOptional()
+  @IsBoolean()
+  customerTransport?: boolean;
 
   @ApiPropertyOptional({ example: 250000 })
   @IsOptional()

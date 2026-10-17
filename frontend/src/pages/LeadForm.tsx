@@ -9,6 +9,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
+import GenerateChargesFields, {
+  emptyGenerateCharges,
+  validateGenerateCharges,
+  type GenerateCharges,
+} from "@/components/quotations/GenerateChargesFields";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import PreviousLeadSelect from "@/components/leads/PreviousLeadSelect";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
@@ -88,6 +93,7 @@ export default function LeadForm() {
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [products, setProducts] = useState<LeadProductPayload[]>([]);
+  const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(isEdit);
   // True when the lead being edited already has an owner (see validate()).
@@ -130,6 +136,11 @@ export default function LeadForm() {
           // the loaded lead to populate here (the field isn't even shown in
           // edit mode). Kept at "" just to satisfy FormState.
           previousLeadId: "",
+        });
+        setCharges({
+          installationCharge: lead.installationCharge != null ? String(lead.installationCharge) : "",
+          transportationCharge: lead.transportationCharge != null ? String(lead.transportationCharge) : "",
+          customerTransport: !!lead.customerTransport,
         });
         setProducts(
           (lead.products ?? []).map((p) => ({
@@ -225,6 +236,11 @@ export default function LeadForm() {
     e.preventDefault();
     setSubmitError("");
     if (!validate()) return;
+    const chargeError = validateGenerateCharges(charges);
+    if (chargeError) {
+      setSubmitError(chargeError);
+      return;
+    }
 
     const payload: LeadPayload = {
       companyName: form.companyName.trim(),
@@ -242,6 +258,14 @@ export default function LeadForm() {
       title: form.title.trim(),
       description: form.description.trim() || undefined,
       products: products.length > 0 ? products : undefined,
+      installationCharge: charges.installationCharge.trim() ? Number(charges.installationCharge) : isEdit ? null : undefined,
+      transportationCharge:
+        !charges.customerTransport && charges.transportationCharge.trim()
+          ? Number(charges.transportationCharge)
+          : isEdit
+            ? null
+            : undefined,
+      customerTransport: charges.customerTransport,
       estimatedValue: form.estimatedValue.trim() ? Number(form.estimatedValue) : undefined,
       priority: form.priority,
       source: form.source,
@@ -431,6 +455,10 @@ export default function LeadForm() {
                   </div>
 
                   <LeadProductsSelector value={products} onChange={setProducts} />
+
+                  {products.length > 0 && (
+                    <GenerateChargesFields value={charges} onChange={setCharges} idPrefix="lead-charges" />
+                  )}
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="space-y-2">

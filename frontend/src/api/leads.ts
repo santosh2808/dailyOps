@@ -64,6 +64,10 @@ export interface LeadPayload {
   title: string;
   description?: string;
   products?: LeadProductPayload[];
+  // null clears a previously saved value (lead update only).
+  installationCharge?: number | null;
+  transportationCharge?: number | null;
+  customerTransport?: boolean;
   estimatedValue?: number;
   priority?: LeadPriority;
   source?: LeadSource;
