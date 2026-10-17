@@ -294,12 +294,12 @@ export default function LeadDetails() {
   // Quotation, only reachable while Qualified and only shown once (see
   // nextActionFor: once lead.quotations has an entry, the button becomes
   // "View Quotation" instead of generating a second one).
-  async function handleGenerateQuotation() {
+  async function handleGenerateQuotation(charges: Parameters<typeof generateQuotationFromLead>[1] = {}) {
     if (!id) return;
     setGeneratingQuotation(true);
     setGenerateError("");
     try {
-      const quotation = await generateQuotationFromLead(id);
+      const quotation = await generateQuotationFromLead(id, charges);
       toast.success("Quotation generated.");
       goToQuotation(quotation.id);
     } catch (err: any) {

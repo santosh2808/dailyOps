@@ -14,6 +14,12 @@ import LeadSelect from "@/components/quotations/LeadSelect";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { generateQuotationFromLead } from "@/api/quotations";
+import GenerateChargesFields, {
+  emptyGenerateCharges,
+  generateChargesPayload,
+  validateGenerateCharges,
+  type GenerateCharges,
+} from "@/components/quotations/GenerateChargesFields";
 
 interface GenerateQuotationFromLeadDialogProps {
   open: boolean;
@@ -35,6 +41,7 @@ export default function GenerateQuotationFromLeadDialog({
   onGenerated,
 }: GenerateQuotationFromLeadDialogProps) {
   const [leadId, setLeadId] = useState("");
+  const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,6 +49,7 @@ export default function GenerateQuotationFromLeadDialog({
     if (!submitting) {
       if (!next) {
         setLeadId("");
+        setCharges(emptyGenerateCharges);
         setError("");
       }
       onOpenChange(next);
@@ -50,12 +58,18 @@ export default function GenerateQuotationFromLeadDialog({
 
   async function handleGenerate() {
     if (!leadId) return;
+    const chargeError = validateGenerateCharges(charges);
+    if (chargeError) {
+      setError(chargeError);
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      const quotation = await generateQuotationFromLead(leadId);
+      const quotation = await generateQuotationFromLead(leadId, generateChargesPayload(charges));
       toast.success("Quotation generated.");
       setLeadId("");
+      setCharges(emptyGenerateCharges);
       onOpenChange(false);
       onGenerated(quotation.id);
     } catch (err) {
@@ -69,7 +83,7 @@ export default function GenerateQuotationFromLeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent onClose={() => handleOpenChange(false)} size="sm">
+      <DialogContent onClose={() => handleOpenChange(false)} size="md">
         <DialogHeader>
           <DialogTitle>Generate Quotation from Lead</DialogTitle>
           <DialogDescription>
@@ -85,6 +99,8 @@ export default function GenerateQuotationFromLeadDialog({
           <Label htmlFor="generate-quotation-lead">Lead</Label>
           <LeadSelect id="generate-quotation-lead" value={leadId} onChange={setLeadId} />
         </div>
+
+        <GenerateChargesFields value={charges} onChange={setCharges} idPrefix="generate-quotation" />
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

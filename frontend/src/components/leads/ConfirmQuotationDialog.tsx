@@ -9,13 +9,20 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import GenerateChargesFields, {
+  emptyGenerateCharges,
+  generateChargesPayload,
+  validateGenerateCharges,
+  type GenerateCharges,
+} from "@/components/quotations/GenerateChargesFields";
 import type { Lead } from "@/types";
+import type { QuotationPayload } from "@/api/quotations";
 
 interface ConfirmQuotationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead: Lead | null;
-  onConfirm: () => Promise<void>;
+  onConfirm: (charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope">) => Promise<void>;
 }
 
 // Soft, non-blocking reminder shown before generating a quotation. A lead
@@ -35,13 +42,22 @@ export default function ConfirmQuotationDialog({
   onConfirm,
 }: ConfirmQuotationDialogProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
+  const [error, setError] = useState("");
 
   async function handleConfirm() {
+    const chargeError = validateGenerateCharges(charges);
+    if (chargeError) {
+      setError(chargeError);
+      return;
+    }
+    setError("");
     setSubmitting(true);
     try {
-      await onConfirm();
+      await onConfirm(generateChargesPayload(charges));
     } finally {
       setSubmitting(false);
+      setCharges(emptyGenerateCharges);
       onOpenChange(false);
     }
   }
@@ -50,7 +66,7 @@ export default function ConfirmQuotationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} size="sm">
+      <DialogContent onClose={() => onOpenChange(false)} size="md">
         <DialogHeader>
           <DialogTitle>Confirm Before Quoting</DialogTitle>
           <DialogDescription>
@@ -61,6 +77,9 @@ export default function ConfirmQuotationDialog({
             gather that first so the quotation doesn't need reworking later.
           </DialogDescription>
         </DialogHeader>
+
+        <GenerateChargesFields value={charges} onChange={setCharges} idPrefix="confirm-quotation" />
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button
