@@ -643,7 +643,10 @@ export default function QuotationForm() {
                         min="0.01"
                         step="0.01"
                         value={form.gstPercent}
-                        onChange={(e) => update("gstPercent", e.target.value)}
+                        readOnly
+                        disabled
+                        title="GST is fixed and cannot be edited"
+                        className="bg-muted"
                       />
                       {errors.gstPercent && (
                         <p className="text-xs text-destructive">{errors.gstPercent}</p>

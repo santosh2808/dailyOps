@@ -486,7 +486,10 @@ export default function SalesOrderForm() {
                         id="gstPercent"
                         inputMode="decimal"
                         value={form.gstPercent}
-                        onChange={(e) => update("gstPercent", e.target.value)}
+                        readOnly
+                        disabled
+                        title="GST is fixed and cannot be edited"
+                        className="bg-muted"
                       />
                       {errors.gstPercent && (
                         <p className="text-xs text-destructive">{errors.gstPercent}</p>
