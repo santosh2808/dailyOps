@@ -22,7 +22,7 @@ interface ConfirmQuotationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead: Lead | null;
-  onConfirm: (charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope" | "pricesIncludeChargesAndGst">) => Promise<void>;
+  onConfirm: (charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope" | "pricesIncludeChargesAndGst" | "gstIncludedInPrices">) => Promise<void>;
 }
 
 // Soft, non-blocking reminder shown before generating a quotation. A lead

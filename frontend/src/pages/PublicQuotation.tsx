@@ -351,13 +351,21 @@ export default function PublicQuotation() {
                   GST ({quotation.gstPercent}%){quotation.pricesIncludeChargesAndGst ? " — Included" : ""}
                 </span>
                 <span>
-                  {quotation.pricesIncludeChargesAndGst ? "Included" : "Extra"}
+                  {quotation.pricesIncludeChargesAndGst
+                    ? "Included"
+                    : quotation.gstIncludedInPrices
+                      ? quotation.installationCharge + quotation.transportationCharge > 0
+                        ? "Included in price; Extra on charges"
+                        : "Included"
+                      : "Extra"}
                 </span>
               </div>
               <div className="flex justify-between border-t pt-1 text-base font-semibold text-slate-900">
                 <span>Grand Total</span>
                 <span>
-                  {quotation.pricesIncludeChargesAndGst
+                  {quotation.pricesIncludeChargesAndGst ||
+                  (quotation.gstIncludedInPrices &&
+                    quotation.installationCharge + quotation.transportationCharge === 0)
                     ? formatCurrency(quotation.grandTotal)
                     : `${formatCurrency(quotation.grandTotal)} + GST Extra`}
                 </span>

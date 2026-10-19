@@ -76,3 +76,29 @@ describe('Quotation discount limit', () => {
     expect((await compute(items(), 18, 0, 0, undefined, false, 0)).discount).toBe(0);
   });
 });
+
+describe('Quotation: GST included in item price, installation extra', () => {
+  it('charges GST only on installation/transportation, not on the items', async () => {
+    const { compute } = makeService();
+    // items 100000 (GST already inside) + installation 10000 + transport 0
+    const t = await compute(items(), 18, 10000, 0, undefined, false, 0, true);
+    expect(t.gstIncludedInPrices).toBe(true);
+    expect(t.subtotal).toBe(100000);
+    expect(t.installationCharge).toBe(10000);
+    expect(t.gstAmount).toBe(1800); // 18% of 10000 only
+    expect(t.grandTotal).toBe(110000); // GST on extras is added later, at Sales Order
+  });
+
+  it('with installation included (0) there is no extra GST at all', async () => {
+    const { compute } = makeService();
+    const t = await compute(items(), 18, 0, 0, undefined, false, 0, true);
+    expect(t.gstAmount).toBe(0);
+    expect(t.grandTotal).toBe(100000);
+  });
+
+  it('is unchanged when the flag is off', async () => {
+    const { compute } = makeService();
+    const t = await compute(items(), 18, 10000, 0, undefined, false, 0, false);
+    expect(t.gstAmount).toBe(19800);
+  });
+});

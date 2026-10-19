@@ -136,6 +136,11 @@ export class CreateLeadDto {
   @IsBoolean()
   pricesIncludeChargesAndGst?: boolean;
 
+  @ApiPropertyOptional({ description: 'Unit prices include GST but installation/transportation are extra' })
+  @IsOptional()
+  @IsBoolean()
+  gstIncludedInPrices?: boolean;
+
   @ApiPropertyOptional({ example: 250000 })
   @IsOptional()
   @Type(() => Number)

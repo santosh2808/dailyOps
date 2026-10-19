@@ -439,6 +439,7 @@ export interface Lead {
   transportationCharge?: number | null;
   customerTransport?: boolean;
   pricesIncludeChargesAndGst?: boolean;
+  gstIncludedInPrices?: boolean;
   _count?: { products: number };
   // Lead Management Phase 1 (requirement #12) — lets Lead Details show
   // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once
@@ -738,6 +739,7 @@ export interface Quotation {
   // product's base price). See QuotationsService.computeTotals().
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   gstAmount: number;
   // Additive: flat, order-level discount — mirrors SalesOrder.discount.
   // Applied as a post-tax rebate (subtracted from grandTotal, doesn't change

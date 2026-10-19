@@ -367,6 +367,7 @@ model Lead {
   customerTransport    Boolean @default(false)
   // Unit prices already include GST, installation and transportation.
   pricesIncludeChargesAndGst Boolean @default(false)
+  gstIncludedInPrices Boolean @default(false)
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
   // Lead Management Phase 1 (requirement #5) — a short free-text reminder
@@ -855,6 +856,9 @@ model Quotation {
   // computeTotals()'s inclusive-GST branch). Defaults to false, i.e. today's
   // additive behavior, for every existing quotation.
   pricesIncludeChargesAndGst Boolean    @default(false)
+  // Item prices include GST, but installation/transportation are quoted
+  // separately (GST is then charged only on those extra amounts).
+  gstIncludedInPrices Boolean @default(false)
   // Additive: a flat, order-level discount amount staff can enter on the
   // quotation (separate from any per-item pricing) — mirrors
   // SalesOrder.discount exactly, including how it's applied: subtracted

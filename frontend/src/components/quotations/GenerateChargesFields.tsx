@@ -8,6 +8,8 @@ export interface GenerateCharges {
   customerTransport: boolean;
   // Unit prices already include GST, installation and transportation.
   pricesInclude?: boolean;
+  // Unit price includes GST only; installation/transportation are extra.
+  gstIncluded?: boolean;
 }
 
 export const emptyGenerateCharges: GenerateCharges = {
@@ -15,6 +17,7 @@ export const emptyGenerateCharges: GenerateCharges = {
   transportationCharge: "",
   customerTransport: false,
   pricesInclude: false,
+  gstIncluded: false,
 };
 
 // Returns an error message, or "" when valid.
@@ -36,6 +39,7 @@ export function validateGenerateCharges(c: GenerateCharges): string {
 export function generateChargesPayload(c: GenerateCharges) {
   if (c.pricesInclude) return { pricesIncludeChargesAndGst: true };
   return {
+    ...(c.gstIncluded ? { gstIncludedInPrices: true } : {}),
     ...(c.installationCharge.trim() ? { installationCharge: Number(c.installationCharge) } : {}),
     ...(c.customerTransport
       ? { transportScope: "CUSTOMER_SCOPE" as TransportScope }
@@ -61,11 +65,26 @@ export default function GenerateChargesFields({ value, onChange, idPrefix }: Pro
         <input
           type="checkbox"
           className="mt-1"
+          checked={!!value.gstIncluded && !value.pricesInclude}
+          disabled={!!value.pricesInclude}
+          onChange={(e) => onChange({ ...value, gstIncluded: e.target.checked })}
+        />
+        <span>
+          Unit price includes GST (installation &amp; transportation extra)
+          <span className="block text-xs text-muted-foreground">
+            GST is already in the unit price; it is charged again only on installation / transportation.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
           checked={!!value.pricesInclude}
           onChange={(e) => onChange({ ...value, pricesInclude: e.target.checked })}
         />
         <span>
-          Unit price already includes GST, installation and transportation
+          Unit price includes everything: GST, installation and transportation
           <span className="block text-xs text-muted-foreground">
             Tick this when the price you entered is all-inclusive, so nothing extra is added on top.
           </span>

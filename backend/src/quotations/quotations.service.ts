@@ -111,6 +111,7 @@ export interface PublicQuotationView {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   // Additive: flat, order-level discount — see Quotation.discount's schema
   // comment. 0 for any quotation sent before this field existed.
   discount: number;
@@ -170,6 +171,7 @@ interface QuotationSentSnapshot {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   // Additive: flat, order-level discount — see Quotation.discount's schema
   // comment. Optional so a snapshot written before this field existed
   // still type-checks; resolveOfferContent() below falls back to 0 for it.
@@ -256,6 +258,7 @@ interface ComputedTotals {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   gstAmount: number;
   // Additive: flat, order-level discount actually applied — echoes back
   // whatever was passed into computeTotals() (already clamped so it can
@@ -379,12 +382,14 @@ export class QuotationsService {
     let leadTransportation: number | undefined;
     let leadCustomerTransport = false;
     let leadPricesInclude: boolean | undefined;
+    let leadGstIncluded: boolean | undefined;
     if (dto.leadId) {
       const lead = await this.leadsService.getLeadForQuotationGeneration(dto.leadId);
       leadInstallation = lead.installationCharge ?? undefined;
       leadTransportation = lead.transportationCharge ?? undefined;
       leadCustomerTransport = !!lead.customerTransport;
       leadPricesInclude = lead.pricesIncludeChargesAndGst || undefined;
+      leadGstIncluded = lead.gstIncludedInPrices || undefined;
       itemsInput = lead.products.map((p) => ({
         productId: p.productId,
         description: p.remarks ?? undefined,
@@ -414,6 +419,7 @@ export class QuotationsService {
       dto.transportScope ?? (leadCustomerTransport ? 'CUSTOMER_SCOPE' : undefined),
       dto.pricesIncludeChargesAndGst ?? leadPricesInclude,
       dto.discount,
+      dto.gstIncludedInPrices ?? leadGstIncluded,
     );
 
     for (let attempt = 1; attempt <= MAX_QUOTATION_NUMBER_ATTEMPTS; attempt++) {
@@ -431,6 +437,7 @@ export class QuotationsService {
             transportationCharge: totals.transportationCharge,
             transportScope: totals.transportScope,
             pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
+            gstIncludedInPrices: totals.gstIncludedInPrices ?? false,
             gstAmount: totals.gstAmount,
             discount: totals.discount,
             grandTotal: totals.grandTotal,
@@ -504,6 +511,7 @@ export class QuotationsService {
       dto.transportationCharge !== undefined ||
       dto.transportScope !== undefined ||
       dto.pricesIncludeChargesAndGst !== undefined ||
+      dto.gstIncludedInPrices !== undefined ||
       dto.discount !== undefined;
     // installationCharge: only carry forward the existing stored amount as
     // an explicit override when items AREN'T changing (quantity is the same,
@@ -527,6 +535,7 @@ export class QuotationsService {
           dto.transportScope ?? existing.transportScope,
           dto.pricesIncludeChargesAndGst ?? existing.pricesIncludeChargesAndGst,
           dto.discount ?? existing.discount,
+          dto.gstIncludedInPrices ?? existing.gstIncludedInPrices,
         )
       : null;
 
@@ -559,6 +568,7 @@ export class QuotationsService {
                 transportationCharge: totals.transportationCharge,
                 transportScope: totals.transportScope,
                 pricesIncludeChargesAndGst: totals.pricesIncludeChargesAndGst,
+                gstIncludedInPrices: totals.gstIncludedInPrices ?? false,
                 gstAmount: totals.gstAmount,
                 discount: totals.discount,
                 grandTotal: totals.grandTotal,
@@ -1270,6 +1280,7 @@ export class QuotationsService {
       transportationCharge: quotation.transportationCharge,
       transportScope: quotation.transportScope,
       pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst,
+      gstIncludedInPrices: quotation.gstIncludedInPrices,
       discount: quotation.discount,
       grandTotal: quotation.grandTotal,
       notes: quotation.notes,
@@ -1293,6 +1304,7 @@ export class QuotationsService {
       transportationCharge: content.transportationCharge,
       transportScope: content.transportScope,
       pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
+      gstIncludedInPrices: content.gstIncludedInPrices ?? false,
       discount: content.discount ?? 0,
       grandTotal: content.grandTotal,
       notes: content.notes,
@@ -1361,6 +1373,7 @@ export class QuotationsService {
       transportationCharge: content.transportationCharge,
       transportScope: content.transportScope,
       pricesIncludeChargesAndGst: content.pricesIncludeChargesAndGst,
+      gstIncludedInPrices: content.gstIncludedInPrices ?? false,
       discount: content.discount ?? 0,
       grandTotal: content.grandTotal,
       paymentTerms: (content.commercialTerms as Prisma.JsonObject | null)?.payment as string | null ?? null,
@@ -1713,6 +1726,9 @@ export class QuotationsService {
     // invoicing practice here). Clamped below so it can never push
     // grandTotal negative.
     discount = 0,
+    // Item prices include GST, but installation/transportation are extra:
+    // GST is then charged only on those extras (see below).
+    gstIncludedInPrices = false,
   ): Promise<ComputedTotals> {
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
@@ -1802,6 +1818,7 @@ export class QuotationsService {
         transportationCharge: 0,
         transportScope,
         pricesIncludeChargesAndGst: true,
+        gstIncludedInPrices: false,
         gstAmount,
         discount: effectiveDiscount,
         grandTotal,
@@ -1826,9 +1843,13 @@ export class QuotationsService {
     // computed and stored here (informational — and it's exactly the
     // figure the Sales Order re-adds), it's just no longer summed into
     // this Quotation's own grandTotal.
-    const gstAmount =
-      Math.round((subtotal + effectiveInstallationCharge + effectiveTransportationCharge) * (effectiveGstPercent / 100) * 100) /
-      100;
+    // gstIncludedInPrices: item prices already carry their GST, so only the
+    // separately-quoted installation/transportation attract GST on top. The
+    // Sales Order re-adds exactly this gstAmount, so it stays consistent.
+    const gstBase = gstIncludedInPrices
+      ? effectiveInstallationCharge + effectiveTransportationCharge
+      : subtotal + effectiveInstallationCharge + effectiveTransportationCharge;
+    const gstAmount = Math.round(gstBase * (effectiveGstPercent / 100) * 100) / 100;
     const preDiscountTotal = subtotal + effectiveInstallationCharge + effectiveTransportationCharge;
     // Discount is a post-tax rebate — it doesn't reduce the taxable base
     // above (gstAmount is already computed on the undiscounted amount),
@@ -1848,6 +1869,7 @@ export class QuotationsService {
       transportationCharge: effectiveTransportationCharge,
       transportScope,
       pricesIncludeChargesAndGst: false,
+      gstIncludedInPrices,
       gstAmount,
       discount: effectiveDiscount,
       grandTotal,

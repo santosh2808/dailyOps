@@ -98,6 +98,11 @@ export class CreateQuotationDto {
   @IsBoolean()
   pricesIncludeChargesAndGst?: boolean;
 
+  @ApiPropertyOptional({ default: false, description: 'Item prices include GST; installation/transportation are extra (GST charged on those only)' })
+  @IsOptional()
+  @IsBoolean()
+  gstIncludedInPrices?: boolean;
+
   // Additive: a flat, order-level discount amount — mirrors SalesOrder's
   // own discount field/convention exactly. Applied as a post-tax rebate in
   // QuotationsService.computeTotals() (subtracted from grandTotal, doesn't

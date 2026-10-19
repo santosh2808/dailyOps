@@ -41,6 +41,7 @@ export interface PublicQuotationView {
   transportationCharge: number;
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   grandTotal: number;
   paymentTerms?: string | null;
   deliveryTerms?: string | null;

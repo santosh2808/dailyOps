@@ -142,6 +142,7 @@ export default function LeadForm() {
           transportationCharge: lead.transportationCharge != null ? String(lead.transportationCharge) : "",
           customerTransport: !!lead.customerTransport,
           pricesInclude: !!lead.pricesIncludeChargesAndGst,
+          gstIncluded: !!lead.gstIncludedInPrices,
         });
         setProducts(
           (lead.products ?? []).map((p) => ({
@@ -268,6 +269,7 @@ export default function LeadForm() {
             : undefined,
       customerTransport: charges.customerTransport && !charges.pricesInclude,
       pricesIncludeChargesAndGst: !!charges.pricesInclude,
+      gstIncludedInPrices: !!charges.gstIncluded && !charges.pricesInclude,
       estimatedValue: form.estimatedValue.trim() ? Number(form.estimatedValue) : undefined,
       priority: form.priority,
       source: form.source,
