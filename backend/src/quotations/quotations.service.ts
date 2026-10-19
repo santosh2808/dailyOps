@@ -378,11 +378,13 @@ export class QuotationsService {
     let leadInstallation: number | undefined;
     let leadTransportation: number | undefined;
     let leadCustomerTransport = false;
+    let leadPricesInclude: boolean | undefined;
     if (dto.leadId) {
       const lead = await this.leadsService.getLeadForQuotationGeneration(dto.leadId);
       leadInstallation = lead.installationCharge ?? undefined;
       leadTransportation = lead.transportationCharge ?? undefined;
       leadCustomerTransport = !!lead.customerTransport;
+      leadPricesInclude = lead.pricesIncludeChargesAndGst || undefined;
       itemsInput = lead.products.map((p) => ({
         productId: p.productId,
         description: p.remarks ?? undefined,
@@ -410,7 +412,7 @@ export class QuotationsService {
       dto.installationCharge ?? leadInstallation,
       dto.transportationCharge ?? leadTransportation,
       dto.transportScope ?? (leadCustomerTransport ? 'CUSTOMER_SCOPE' : undefined),
-      dto.pricesIncludeChargesAndGst,
+      dto.pricesIncludeChargesAndGst ?? leadPricesInclude,
       dto.discount,
     );
 

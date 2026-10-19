@@ -438,6 +438,7 @@ export interface Lead {
   installationCharge?: number | null;
   transportationCharge?: number | null;
   customerTransport?: boolean;
+  pricesIncludeChargesAndGst?: boolean;
   _count?: { products: number };
   // Lead Management Phase 1 (requirement #12) — lets Lead Details show
   // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once

@@ -68,6 +68,7 @@ export interface LeadPayload {
   installationCharge?: number | null;
   transportationCharge?: number | null;
   customerTransport?: boolean;
+  pricesIncludeChargesAndGst?: boolean;
   estimatedValue?: number;
   priority?: LeadPriority;
   source?: LeadSource;

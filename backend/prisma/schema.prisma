@@ -365,6 +365,8 @@ model Lead {
   installationCharge   Float?
   transportationCharge Float?
   customerTransport    Boolean @default(false)
+  // Unit prices already include GST, installation and transportation.
+  pricesIncludeChargesAndGst Boolean @default(false)
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
   // Lead Management Phase 1 (requirement #5) — a short free-text reminder

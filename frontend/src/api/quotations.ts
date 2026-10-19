@@ -92,7 +92,7 @@ export async function createQuotation(payload: QuotationPayload) {
 // backend derives everything from the Lead's own linked products.
 export async function generateQuotationFromLead(
   leadId: string,
-  charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope"> = {},
+  charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope" | "pricesIncludeChargesAndGst"> = {},
 ) {
   const res = await api.post<Quotation>("/api/v1/quotations", { leadId, ...charges });
   return res.data;

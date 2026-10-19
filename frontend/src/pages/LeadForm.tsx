@@ -141,6 +141,7 @@ export default function LeadForm() {
           installationCharge: lead.installationCharge != null ? String(lead.installationCharge) : "",
           transportationCharge: lead.transportationCharge != null ? String(lead.transportationCharge) : "",
           customerTransport: !!lead.customerTransport,
+          pricesInclude: !!lead.pricesIncludeChargesAndGst,
         });
         setProducts(
           (lead.products ?? []).map((p) => ({
@@ -265,7 +266,8 @@ export default function LeadForm() {
           : isEdit
             ? null
             : undefined,
-      customerTransport: charges.customerTransport,
+      customerTransport: charges.customerTransport && !charges.pricesInclude,
+      pricesIncludeChargesAndGst: !!charges.pricesInclude,
       estimatedValue: form.estimatedValue.trim() ? Number(form.estimatedValue) : undefined,
       priority: form.priority,
       source: form.source,
