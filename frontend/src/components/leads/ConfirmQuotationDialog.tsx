@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import GenerateChargesFields, {
+  chargesFromLead,
   emptyGenerateCharges,
   generateChargesPayload,
   validateGenerateCharges,
@@ -45,6 +46,11 @@ export default function ConfirmQuotationDialog({
   const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
   const [error, setError] = useState("");
 
+  // Start from what was saved on the lead so nothing is silently overridden.
+  useEffect(() => {
+    if (open) setCharges(chargesFromLead(lead));
+  }, [open, lead]);
+
   async function handleConfirm() {
     const chargeError = validateGenerateCharges(charges);
     if (chargeError) {
@@ -57,7 +63,6 @@ export default function ConfirmQuotationDialog({
       await onConfirm(generateChargesPayload(charges));
     } finally {
       setSubmitting(false);
-      setCharges(emptyGenerateCharges);
       onOpenChange(false);
     }
   }

@@ -42,6 +42,8 @@ export default function GenerateQuotationFromLeadDialog({
 }: GenerateQuotationFromLeadDialogProps) {
   const [leadId, setLeadId] = useState("");
   const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
+  // Only send charge overrides if the user touched them; otherwise the lead's saved values apply.
+  const [chargesTouched, setChargesTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -50,6 +52,7 @@ export default function GenerateQuotationFromLeadDialog({
       if (!next) {
         setLeadId("");
         setCharges(emptyGenerateCharges);
+        setChargesTouched(false);
         setError("");
       }
       onOpenChange(next);
@@ -66,10 +69,11 @@ export default function GenerateQuotationFromLeadDialog({
     setSubmitting(true);
     setError("");
     try {
-      const quotation = await generateQuotationFromLead(leadId, generateChargesPayload(charges));
+      const quotation = await generateQuotationFromLead(leadId, chargesTouched ? generateChargesPayload(charges) : {});
       toast.success("Quotation generated.");
       setLeadId("");
       setCharges(emptyGenerateCharges);
+      setChargesTouched(false);
       onOpenChange(false);
       onGenerated(quotation.id);
     } catch (err) {
@@ -100,7 +104,14 @@ export default function GenerateQuotationFromLeadDialog({
           <LeadSelect id="generate-quotation-lead" value={leadId} onChange={setLeadId} />
         </div>
 
-        <GenerateChargesFields value={charges} onChange={setCharges} idPrefix="generate-quotation" />
+        <GenerateChargesFields
+          value={charges}
+          onChange={(next) => {
+            setCharges(next);
+            setChargesTouched(true);
+          }}
+          idPrefix="generate-quotation"
+        />
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

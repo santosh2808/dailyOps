@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
 import GenerateChargesFields, {
+  chargesFromLead,
   emptyGenerateCharges,
   validateGenerateCharges,
   type GenerateCharges,
@@ -137,13 +138,7 @@ export default function LeadForm() {
           // edit mode). Kept at "" just to satisfy FormState.
           previousLeadId: "",
         });
-        setCharges({
-          installationCharge: lead.installationCharge != null ? String(lead.installationCharge) : "",
-          transportationCharge: lead.transportationCharge != null ? String(lead.transportationCharge) : "",
-          customerTransport: !!lead.customerTransport,
-          pricesInclude: !!lead.pricesIncludeChargesAndGst,
-          gstIncluded: !!lead.gstIncludedInPrices,
-        });
+        setCharges(chargesFromLead(lead));
         setProducts(
           (lead.products ?? []).map((p) => ({
             productId: p.productId,
@@ -260,16 +255,23 @@ export default function LeadForm() {
       title: form.title.trim(),
       description: form.description.trim() || undefined,
       products: products.length > 0 ? products : undefined,
-      installationCharge: charges.installationCharge.trim() ? Number(charges.installationCharge) : isEdit ? null : undefined,
+      // Installation unticked => 0 (not charged); ticked & blank => auto per fan.
+      installationCharge: !charges.installationOn
+        ? 0
+        : charges.installationCharge.trim()
+          ? Number(charges.installationCharge)
+          : isEdit
+            ? null
+            : undefined,
       transportationCharge:
-        !charges.customerTransport && charges.transportationCharge.trim()
+        charges.transportOn && charges.transportationCharge.trim()
           ? Number(charges.transportationCharge)
           : isEdit
             ? null
             : undefined,
-      customerTransport: charges.customerTransport && !charges.pricesInclude,
-      pricesIncludeChargesAndGst: !!charges.pricesInclude,
-      gstIncludedInPrices: !!charges.gstIncluded && !charges.pricesInclude,
+      customerTransport: !charges.transportOn,
+      pricesIncludeChargesAndGst: false,
+      gstIncludedInPrices: !charges.gstExtra,
       estimatedValue: form.estimatedValue.trim() ? Number(form.estimatedValue) : undefined,
       priority: form.priority,
       source: form.source,
