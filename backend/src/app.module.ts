@@ -30,6 +30,7 @@ import { ComplaintsModule } from './complaints/complaints.module';
 import { StateSeriesCodesModule } from './state-series-codes/state-series-codes.module';
 import { FormConfigurationModule } from './form-configuration/form-configuration.module';
 import { PublicFormsModule } from './public-forms/public-forms.module';
+import { InboundLeadsModule } from './inbound-leads/inbound-leads.module';
 import { AiSettingsModule } from './ai-settings/ai-settings.module';
 import { TelephonyModule } from './telephony/telephony.module';
 import { PlacesModule } from './places/places.module';
@@ -75,6 +76,7 @@ import { ApprovalDecisionsModule } from './approval-requests/approval-decisions.
     // Website Enquiries -> Lead/Complaint refactor — additive.
     FormConfigurationModule,
     PublicFormsModule,
+    InboundLeadsModule,
     // D.O.T. AI Lead Assistant Phase 1 — foundation only, no telephony
     // integration. See ai-settings/ai-settings.module.ts.
     AiSettingsModule,

@@ -335,6 +335,7 @@ export const LEAD_SOURCES = [
   "EMAIL",
   "PHONE",
   "META",
+  "GOOGLE_ADS",
   "OTHER",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];

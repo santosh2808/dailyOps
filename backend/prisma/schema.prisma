@@ -274,6 +274,7 @@ enum LeadSource {
   EMAIL
   PHONE
   META
+  GOOGLE_ADS
   OTHER
 }
 
@@ -2410,4 +2411,29 @@ model LeadReassignmentRequest {
 
   @@index([leadId])
   @@index([status])
+}
+
+// Leads that arrive on their own from ad platforms (Meta lead ads, Google Ads
+// lead forms) through the webhooks in src/inbound-leads. One row per
+// (provider, externalId) makes delivery idempotent — the platforms retry — and
+// keeps a record of what was received, what it became, and why it failed.
+enum InboundLeadStatus {
+  CREATED
+  DUPLICATE
+  FAILED
+}
+
+model InboundLeadEvent {
+  id         String            @id @default(uuid())
+  provider   String
+  externalId String
+  status     InboundLeadStatus
+  leadId     String?
+  error      String?
+  payload    Json?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([createdAt])
 }

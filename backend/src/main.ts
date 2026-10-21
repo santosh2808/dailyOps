@@ -33,7 +33,11 @@ function corsOptionsDelegate(req: Request, callback: (err: Error | null, options
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Meta signs its webhook payloads; the signature is checked against the
+    // exact raw bytes (see src/inbound-leads).
+    rawBody: true,
+  });
 
   // Bulk imports exceed the 100 KB default
   app.useBodyParser('json', { limit: '10mb' });

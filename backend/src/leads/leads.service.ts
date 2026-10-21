@@ -1321,6 +1321,75 @@ export class LeadsService {
     return lead;
   }
 
+  // Leads delivered automatically by an ad platform (see src/inbound-leads).
+  // Always created unassigned at NEW, for a manager/telecaller to hand out —
+  // never defaulted to any user. A phone number that already belongs to an
+  // open lead is not created again: the existing lead gets a timeline note and
+  // is returned as `duplicateOf` instead.
+  async createFromAdLead(input: {
+    source: 'META' | 'GOOGLE_ADS';
+    platformLabel: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    company?: string | null;
+    city?: string | null;
+    state?: string | null;
+    details?: string | null;
+  }): Promise<{ lead: { id: string; leadNumber: string }; duplicateOf?: boolean }> {
+    const phone = normalizePhone(input.phone) ?? (input.phone ?? '').replace(/\D/g, '');
+    const contactPerson = input.name?.trim() || 'Ad lead';
+
+    if (phone) {
+      const existing = await this.prisma.lead.findFirst({
+        where: { deletedAt: null, status: { not: 'LOST' }, phone },
+        select: { id: true, leadNumber: true },
+      });
+      if (existing) {
+        await this.prisma.leadHistory.create({
+          data: {
+            leadId: existing.id,
+            action: 'EDITED',
+            description: `Same contact came in again from ${input.platformLabel} — no duplicate lead created`,
+          },
+        });
+        return { lead: existing, duplicateOf: true };
+      }
+    }
+
+    for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
+      const leadNumber = await this.generateLeadNumber();
+      try {
+        const lead = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.lead.create({
+            data: {
+              leadNumber,
+              companyName: input.company?.trim() || '',
+              contactPerson,
+              email: input.email?.trim() || undefined,
+              phone,
+              city: input.city?.trim() || undefined,
+              state: input.state ? this.matchIndiaState(input.state) : undefined,
+              title: `${input.platformLabel} - ${contactPerson}`,
+              description: input.details || undefined,
+              remarks: input.details || undefined,
+              source: input.source as LeadSource,
+              priority: LeadPriority.MEDIUM,
+            },
+            select: { id: true, leadNumber: true },
+          });
+          await this.logHistory(tx, created.id, 'CREATED', `Lead ${created.leadNumber} received from ${input.platformLabel}`);
+          return created;
+        });
+        return { lead };
+      } catch (error) {
+        if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) continue;
+        throw error;
+      }
+    }
+    throw new Error('Failed to generate a unique lead number');
+  }
+
   // Additive: Lead <-> Complaint conversion (Website Enquiries -> Lead/Complaint
   // refactor). Requires the caller to hold BOTH Lead.Edit and Complaint.Create
   // (see LeadsController — @RequireAllPermissions). Idempotent guard mirrors
