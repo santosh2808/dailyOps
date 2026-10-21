@@ -35,6 +35,8 @@ import { TelephonyModule } from './telephony/telephony.module';
 import { PlacesModule } from './places/places.module';
 import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 import { ApprovalDecisionsModule } from './approval-requests/approval-decisions.module';
+import { ContentModule } from './content/content.module';
+import { PublicContentModule } from './public-content/public-content.module';
 
 @Module({
   imports: [
@@ -92,6 +94,9 @@ import { ApprovalDecisionsModule } from './approval-requests/approval-decisions.
     // By" dropdown. See approval-requests/approval-requests.service.ts.
     ApprovalRequestsModule,
     ApprovalDecisionsModule,
+    // Website content
+    ContentModule,
+    PublicContentModule,
   ],
 })
 export class AppModule {}

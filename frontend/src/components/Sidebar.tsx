@@ -24,6 +24,8 @@ import {
   Globe,
   X,
   Bot,
+  Newspaper,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
@@ -140,6 +142,21 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Materials", to: "/materials", icon: Boxes, permission: { module: "Material", action: "View" } },
       { label: "Suppliers", to: "/suppliers", icon: Truck, permission: { module: "Supplier", action: "View" } },
+    ],
+  },
+  // Content management
+  {
+    key: "content",
+    label: "Content Management",
+    icon: Globe,
+    items: [
+      { label: "Blogs", to: "/content/blogs", icon: Newspaper, permission: { module: "Content", action: "View" } },
+      {
+        label: "Case Studies",
+        to: "/content/case-studies",
+        icon: BriefcaseBusiness,
+        permission: { module: "Content", action: "View" },
+      },
     ],
   },
   {

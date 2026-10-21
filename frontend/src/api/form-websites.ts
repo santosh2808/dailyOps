@@ -22,6 +22,7 @@ export interface FormWebsitePayload {
   name: string;
   supportEmail?: string;
   allowedOrigins?: string[];
+  siteUrl?: string;
   configuration?: Record<string, unknown>;
 }
 

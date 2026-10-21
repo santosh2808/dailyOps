@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ChevronDown, Copy, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronDown, Copy, ExternalLink, Globe, Plus, RefreshCw, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -220,6 +220,7 @@ function NewWebsiteDialog({
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
+  const [siteUrl, setSiteUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -228,6 +229,7 @@ function NewWebsiteDialog({
       setCode("");
       setName("");
       setSupportEmail("");
+      setSiteUrl("");
       setError("");
     }
   }, [open]);
@@ -236,7 +238,12 @@ function NewWebsiteDialog({
     setSubmitting(true);
     setError("");
     try {
-      await createFormWebsite({ code: code.trim(), name: name.trim(), supportEmail: supportEmail.trim() || undefined });
+      await createFormWebsite({
+        code: code.trim(),
+        name: name.trim(),
+        supportEmail: supportEmail.trim() || undefined,
+        siteUrl: siteUrl.trim() || undefined,
+      });
       toast.success("Website created.");
       onOpenChange(false);
       onCreated();
@@ -272,6 +279,16 @@ function NewWebsiteDialog({
               onChange={(e) => setSupportEmail(e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="website-site-url">Site Address</Label>
+            <Input
+              id="website-site-url"
+              placeholder="https://www.spyrofans.com"
+              value={siteUrl}
+              onChange={(e) => setSiteUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Optional. Used for "View on website" links.</p>
+          </div>
         </div>
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         <DialogFooter>
@@ -281,6 +298,77 @@ function NewWebsiteDialog({
           <Button onClick={handleSubmit} disabled={submitting || !code.trim() || !name.trim()}>
             {submitting && <Spinner className="mr-2 h-4 w-4" />}
             {submitting ? "Creating..." : "Create Website"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Edit site address
+function EditSiteUrlDialog({
+  website,
+  onOpenChange,
+  onSaved,
+}: {
+  website: FormWebsite | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [siteUrl, setSiteUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (website) {
+      setSiteUrl(website.siteUrl ?? "");
+      setError("");
+    }
+  }, [website]);
+
+  async function handleSubmit() {
+    if (!website) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await updateFormWebsite(website.id, { siteUrl: siteUrl.trim() });
+      toast.success(siteUrl.trim() ? "Site address saved." : "Site address removed.");
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not save the site address."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!website} onOpenChange={onOpenChange}>
+      <DialogContent onClose={() => onOpenChange(false)}>
+        <DialogHeader>
+          <DialogTitle>Site Address — {website?.name}</DialogTitle>
+          <DialogDescription>
+            The website's public address, used for "View on website" links on blogs and case studies.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="edit-site-url">Site Address</Label>
+          <Input
+            id="edit-site-url"
+            placeholder="https://www.spyrofans.com"
+            value={siteUrl}
+            onChange={(e) => setSiteUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">https:// without a trailing slash. Leave empty to remove it.</p>
+        </div>
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting && <Spinner className="mr-2 h-4 w-4" />}
+            {submitting ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -548,6 +636,7 @@ function WebsitesFormsPanel({ websites, loading, error, onRefresh }: {
   onRefresh: () => void;
 }) {
   const [newWebsiteOpen, setNewWebsiteOpen] = useState(false);
+  const [siteUrlWebsite, setSiteUrlWebsite] = useState<FormWebsite | null>(null);
   const [newFormWebsiteId, setNewFormWebsiteId] = useState<string | null>(null);
   const [versionTarget, setVersionTarget] = useState<{
     websiteId: string;
@@ -619,8 +708,25 @@ function WebsitesFormsPanel({ websites, loading, error, onRefresh }: {
                 <div>
                   <CardTitle className="text-base">{website.name}</CardTitle>
                   <p className="text-xs text-muted-foreground">{website.code}</p>
+                  {website.siteUrl ? (
+                    <a
+                      href={website.siteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      {website.siteUrl}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No site address</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="sm" onClick={() => setSiteUrlWebsite(website)}>
+                    <Globe className="mr-1 h-3.5 w-3.5" />
+                    Edit address
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => setNewFormWebsiteId(website.id)}>
                     <Plus className="mr-1 h-3.5 w-3.5" />
                     Add Form
@@ -652,6 +758,7 @@ function WebsitesFormsPanel({ websites, loading, error, onRefresh }: {
       )}
 
       <NewWebsiteDialog open={newWebsiteOpen} onOpenChange={setNewWebsiteOpen} onCreated={onRefresh} />
+      <EditSiteUrlDialog website={siteUrlWebsite} onOpenChange={(open) => !open && setSiteUrlWebsite(null)} onSaved={onRefresh} />
       <NewFormDialog
         open={!!newFormWebsiteId}
         onOpenChange={(open) => !open && setNewFormWebsiteId(null)}
