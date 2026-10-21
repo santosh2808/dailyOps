@@ -1,3 +1,4 @@
+import { createdAtRange } from '../common/date-range.util';
 import {
   BadRequestException,
   ConflictException,
@@ -432,10 +433,7 @@ export class LeadsService {
       ...(query.state ? { state: query.state } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
-            createdAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
+            createdAt: createdAtRange(query.dateFrom, query.dateTo),
           }
         : {}),
       ...(search
