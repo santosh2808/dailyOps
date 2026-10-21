@@ -27,6 +27,7 @@ import AiStatusBadge from "@/components/leads/AiStatusBadge";
 import AiQualificationBadge from "@/components/leads/AiQualificationBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
+import { useLeadCopyAudit } from "@/hooks/useLeadCopyAudit";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
@@ -75,6 +76,8 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
 }
 
 export default function LeadList() {
+  // Copy / print on the leads list is recorded in the lead-access audit log.
+  useLeadCopyAudit("Leads list");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized

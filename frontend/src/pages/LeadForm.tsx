@@ -291,8 +291,14 @@ export default function LeadForm() {
     setSubmitting(true);
     try {
       if (isEdit && id) {
-        await updateLead(id, payload);
-        toast.success("Lead updated successfully.");
+        const saved = await updateLead(id, payload);
+        if (saved.reassignmentRequested) {
+          toast.info(
+            "Changes saved. The reassignment was sent to a manager for approval — the lead stays with you until it is approved.",
+          );
+        } else {
+          toast.success("Lead updated successfully.");
+        }
         navigate(`/leads/${id}`);
       } else {
         const created = await createLead(payload);

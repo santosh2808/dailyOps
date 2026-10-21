@@ -486,6 +486,45 @@ export interface Lead {
   // actual bytes are fetched per-photo via getSiteVisitPhotoBlobUrl() in
   // api/leads.ts, never embedded here.
   siteVisitPhotos?: LeadSiteVisitPhoto[];
+  // A reassignment of this lead awaiting manager approval (at most one).
+  reassignmentRequests?: {
+    id: string;
+    toUserId: string | null;
+    toUserName: string | null;
+    requestedBy: string | null;
+    createdAt: string;
+  }[];
+  // Only present on the PATCH response when this edit's assignee change was
+  // turned into an approval request instead of being applied.
+  reassignmentRequested?: boolean;
+}
+
+export type LeadReassignmentStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface LeadReassignmentRequest {
+  id: string;
+  leadId: string;
+  fromUserName: string | null;
+  toUserName: string | null;
+  requestedBy: string | null;
+  status: LeadReassignmentStatus;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  createdAt: string;
+  lead: { id: string; leadNumber: string; companyName: string; contactPerson: string; state: string | null };
+}
+
+export interface LeadAccessSummaryRow {
+  actorName: string;
+  viewed: number;
+  distinctLeadsViewed: number;
+  exported: number;
+  leadsExported: number;
+  copied: number;
+  printed: number;
+  lastActivity: string;
+  flags: string[];
 }
 
 export interface LeadSiteVisitPhoto {

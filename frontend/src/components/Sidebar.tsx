@@ -75,6 +75,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Leads", to: "/leads", icon: UserPlus, permission: { module: "Lead", action: "View" } },
       {
+        label: "Lead Reassignments",
+        to: "/leads/reassignments",
+        icon: CheckSquare,
+        permission: { module: "Lead", action: "Approve" },
+      },
+      {
         label: "Sales Orders",
         to: "/sales-orders",
         icon: ClipboardList,
@@ -178,6 +184,12 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/administration/web-form-config",
         icon: Globe,
         permission: { module: "FormConfiguration", action: "View" },
+      },
+      {
+        label: "Lead Access Audit",
+        to: "/admin/lead-access-audit",
+        icon: ShieldCheck,
+        permission: { module: "AuditLog", action: "View" },
       },
       // D.O.T. AI Lead Assistant Phase 1 — foundation-only settings.
       {

@@ -44,6 +44,8 @@ import Departments from "@/pages/Departments";
 import StateSeriesCodes from "@/pages/StateSeriesCodes";
 import AiSettings from "@/pages/AiSettings";
 import TelephonyTest from "@/pages/TelephonyTest";
+import LeadReassignments from "@/pages/LeadReassignments";
+import LeadAccessAudit from "@/pages/LeadAccessAudit";
 import PublicQuotation from "@/pages/PublicQuotation";
 import PublicApproval from "@/pages/PublicApproval";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
@@ -430,6 +432,23 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <TelephonyTest />
+              </ProtectedRoute>
+            }
+          />
+          {/* Lead visibility: reassignment approvals + lead-access audit. */}
+          <Route
+            path="/leads/reassignments"
+            element={
+              <ProtectedRoute>
+                <LeadReassignments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/lead-access-audit"
+            element={
+              <ProtectedRoute>
+                <LeadAccessAudit />
               </ProtectedRoute>
             }
           />

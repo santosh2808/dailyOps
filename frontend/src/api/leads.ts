@@ -6,6 +6,9 @@ import type {
   EmailHistoryEntry,
   LanguageSource,
   Lead,
+  LeadAccessSummaryRow,
+  LeadReassignmentRequest,
+  LeadReassignmentStatus,
   LeadAiCallLog,
   LeadAssignmentHistory,
   LeadHistoryEntry,
@@ -304,4 +307,40 @@ export async function getSiteVisitPhotoBlobUrl(id: string, photoId: string) {
     responseType: "blob",
   });
   return URL.createObjectURL(res.data as Blob);
+}
+
+// ---- Reassignment approvals ------------------------------------------------
+
+export async function listLeadReassignmentRequests(status: LeadReassignmentStatus = "PENDING") {
+  const res = await api.get<LeadReassignmentRequest[]>("/api/v1/leads/reassignment-requests", {
+    params: { status },
+  });
+  return res.data;
+}
+
+export async function decideLeadReassignment(requestId: string, approve: boolean, note?: string) {
+  const res = await api.post<LeadReassignmentRequest>(
+    `/api/v1/leads/reassignment-requests/${requestId}/${approve ? "approve" : "reject"}`,
+    { note },
+  );
+  return res.data;
+}
+
+// ---- Lead-access audit -----------------------------------------------------
+
+export async function reportLeadAccessEvent(event: {
+  type: "COPY" | "PRINT";
+  leadId?: string;
+  chars?: number;
+  page?: string;
+}) {
+  await api.post("/api/v1/leads/access-events", event);
+}
+
+export async function getLeadAccessSummary(days = 30) {
+  const res = await api.get<{ days: number; truncated: boolean; users: LeadAccessSummaryRow[] }>(
+    "/api/v1/leads/access-audit/summary",
+    { params: { days } },
+  );
+  return res.data;
 }
