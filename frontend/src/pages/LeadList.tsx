@@ -355,7 +355,7 @@ export default function LeadList() {
 
           {/* Lead Management Phase 1 (requirement #7) — exactly these
               columns: Lead No, Company, Contact, Phone, Email, Source,
-              Assigned To, Status, Next Follow-up, Last Updated, Actions.
+              Assigned To, Status, Next Follow-up, Created, Last Updated, Actions.
               Priority/Est. Value/Products still show on Lead Details. */}
           <Table>
             <TableHeader>
@@ -407,6 +407,14 @@ export default function LeadList() {
                     {sortIcon("nextFollowUp")}
                   </button>
                 </TableHead>
+                {/* "Created" is what the date-range filter above works on,
+                    so it's shown (and sortable) right next to it. */}
+                <TableHead className="hidden lg:table-cell">
+                  <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
+                    Created
+                    {sortIcon("createdAt")}
+                  </button>
+                </TableHead>
                 <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
                 {/* D.O.T. AI Lead Assistant Phase 1 (Step 10) — kept behind
                     the widest breakpoint only, per "don't clutter the main
@@ -419,7 +427,7 @@ export default function LeadList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading leads...
                     </span>
@@ -427,7 +435,7 @@ export default function LeadList() {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
                     No leads found. Click "Create Lead" to add one.
                   </TableCell>
                 </TableRow>
@@ -476,6 +484,7 @@ export default function LeadList() {
                       <LeadStatusBadge status={lead.status} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(lead.createdAt)}</TableCell>
                     <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
                     <TableCell className="hidden 2xl:table-cell">
                       <AiStatusBadge status={lead.aiStatus} />
