@@ -213,6 +213,10 @@ export interface DashboardScope {
   month?: number;
   year?: number;
   leadSource?: LeadSource;
+  // Set only for users who may see just their own assigned leads (see
+  // lead-visibility.ts): every Lead-derived count/list below is then limited
+  // to leads assigned to this user.
+  assignedToUserId?: string;
 }
 
 @Injectable()
@@ -321,6 +325,7 @@ export class DashboardService {
       ...this.leadStateWhere(scope.state),
       ...(range ? { createdAt: range } : {}),
       ...(scope.leadSource ? { source: scope.leadSource } : {}),
+      ...(scope.assignedToUserId ? { assignedToUserId: scope.assignedToUserId } : {}),
     };
   }
 
@@ -599,7 +604,8 @@ export class DashboardService {
   }
 
   // Additive: Dashboard Redesign — Sales Funnel (requirement #2).
-  async getFunnel(state?: string): Promise<FunnelStage[]> {
+  async getFunnel(state?: string, assignedToUserId?: string): Promise<FunnelStage[]> {
+    const ownLeads: Prisma.LeadWhereInput = assignedToUserId ? { assignedToUserId } : {};
     // LeadStatus's own declared progression order (WON is the terminal
     // "reached everything" state; LOST is excluded — a lost lead didn't
     // reach Qualified/Quotation/Won just because it's no longer open).
@@ -614,9 +620,9 @@ export class DashboardService {
       productionOnwards,
       dispatchOnwards,
     ] = await Promise.all([
-      this.prisma.lead.count({ where: { deletedAt: null, ...this.leadStateWhere(state) } }),
+      this.prisma.lead.count({ where: { deletedAt: null, ...this.leadStateWhere(state), ...ownLeads } }),
       this.prisma.lead.count({
-        where: { deletedAt: null, status: { in: qualifiedOnwards }, ...this.leadStateWhere(state) },
+        where: { deletedAt: null, status: { in: qualifiedOnwards }, ...this.leadStateWhere(state), ...ownLeads },
       }),
       this.prisma.quotation.count({ where: { deletedAt: null, ...this.quotationStateWhere(state) } }),
       // "Won" sits between Quotation and Sales Order in this funnel — a

@@ -18,6 +18,7 @@ import { mergeCc } from '../mailer/default-cc-emails';
 import { QuotationPdfService, type QuotationPdfInput } from '../pdf/quotation-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LeadsService } from '../leads/leads.service';
+import { quotationVisibilityWhere, type LeadViewer } from '../leads/lead-visibility';
 import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
@@ -292,13 +293,17 @@ export class QuotationsService {
     private whatsAppService: WhatsAppService,
   ) {}
 
-  async findAll(query: QueryQuotationDto) {
+  async findAll(query: QueryQuotationDto, viewer?: LeadViewer) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
     const where: Prisma.QuotationWhereInput = {
       deletedAt: null,
+      // Restricted users only see quotations of leads assigned to them (or
+      // lead-less manual quotations) — see lead-visibility.ts. AND so it
+      // can't collide with the search OR below.
+      AND: [quotationVisibilityWhere(viewer)],
       ...(query.status ? { status: query.status } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.dateFrom || query.dateTo
@@ -367,7 +372,7 @@ export class QuotationsService {
   // already defaults a product's unitPrice when the lead itself was
   // created. This also means Generate Quotation is a true one-click
   // action: nothing to fill in, nothing to get wrong.
-  async create(dto: CreateQuotationDto, actorName?: string) {
+  async create(dto: CreateQuotationDto, actorName?: string, viewer?: LeadViewer) {
     if (!dto.customerId && !dto.leadId) {
       throw new BadRequestException('Either customerId or leadId is required to create a quotation');
     }
@@ -384,7 +389,7 @@ export class QuotationsService {
     let leadPricesInclude: boolean | undefined;
     let leadGstIncluded: boolean | undefined;
     if (dto.leadId) {
-      const lead = await this.leadsService.getLeadForQuotationGeneration(dto.leadId);
+      const lead = await this.leadsService.getLeadForQuotationGeneration(dto.leadId, viewer);
       leadInstallation = lead.installationCharge ?? undefined;
       leadTransportation = lead.transportationCharge ?? undefined;
       leadCustomerTransport = !!lead.customerTransport;

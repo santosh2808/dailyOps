@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
+import { canViewAllLeads, type LeadViewer } from '../leads/lead-visibility';
 import { QueryRevenueDto } from './dto/query-revenue.dto';
 import { QueryDashboardFiltersDto } from './dto/query-dashboard-filters.dto';
 
@@ -20,21 +21,33 @@ export class DashboardController {
   // master data, not tied to any customer) are deliberately left unfiltered
   // even when a state is selected; see getStats()'s own comments for which
   // fields those are.
-  private toScope(query: QueryDashboardFiltersDto) {
-    return { state: query.state, month: query.month, year: query.year, leadSource: query.leadSource };
+  private toScope(query: QueryDashboardFiltersDto, user?: LeadViewer) {
+    return {
+      state: query.state,
+      month: query.month,
+      year: query.year,
+      leadSource: query.leadSource,
+      assignedToUserId: this.ownLeadsOnly(user),
+    };
+  }
+
+  // Users outside the full-visibility roles only see dashboard lead numbers
+  // for leads assigned to them (see lead-visibility.ts).
+  private ownLeadsOnly(user?: LeadViewer): string | undefined {
+    return canViewAllLeads(user) ? undefined : (user?.id ?? '__none__');
   }
 
   @Get('stats')
-  getStats(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getStats(this.toScope(query));
+  getStats(@Query() query: QueryDashboardFiltersDto, @Req() req: any) {
+    return this.dashboardService.getStats(this.toScope(query, req.user));
   }
 
   // Additive: Dashboard Redesign endpoints below — all read-only reporting,
   // no existing endpoint's behavior changed.
 
   @Get('funnel')
-  getFunnel(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getFunnel(query.state);
+  getFunnel(@Query() query: QueryDashboardFiltersDto, @Req() req: any) {
+    return this.dashboardService.getFunnel(query.state, this.ownLeadsOnly(req.user));
   }
 
   // Revenue keeps its own period/month/year (bucketing) separate from the
@@ -52,8 +65,8 @@ export class DashboardController {
   }
 
   @Get('charts')
-  getCharts(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getCharts(this.toScope(query));
+  getCharts(@Query() query: QueryDashboardFiltersDto, @Req() req: any) {
+    return this.dashboardService.getCharts(this.toScope(query, req.user));
   }
 
   // Additive: Dashboard Redesign v2 endpoints below.
@@ -74,7 +87,7 @@ export class DashboardController {
   }
 
   @Get('todays-followups')
-  getTodaysFollowUps(@Query() query: QueryDashboardFiltersDto) {
-    return this.dashboardService.getTodaysFollowUps(this.toScope(query));
+  getTodaysFollowUps(@Query() query: QueryDashboardFiltersDto, @Req() req: any) {
+    return this.dashboardService.getTodaysFollowUps(this.toScope(query, req.user));
   }
 }

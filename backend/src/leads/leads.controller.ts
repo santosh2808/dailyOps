@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequireAllPermissions, RequirePermission } from '../permissions/require-permission.decorator';
 import { LeadsService } from './leads.service';
+import { LeadVisibilityGuard } from './lead-visibility';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
@@ -35,15 +36,18 @@ import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 
 @ApiTags('leads')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+// LeadVisibilityGuard: users outside the full-visibility roles (see
+// lead-visibility.ts) get a 404 on any ':id' route for a lead not assigned to
+// them. List/export are scoped inside LeadsService (they pass req.user).
+@UseGuards(JwtAuthGuard, PermissionsGuard, LeadVisibilityGuard)
 @Controller('api/v1/leads')
 export class LeadsController {
   constructor(private leadsService: LeadsService) {}
 
   @Get()
   @RequirePermission('Lead', 'View')
-  findAll(@Query() query: QueryLeadDto) {
-    return this.leadsService.findAll(query);
+  findAll(@Query() query: QueryLeadDto, @Req() req: any) {
+    return this.leadsService.findAll(query, req.user);
   }
 
   // Lead Import. All three are multi-segment or otherwise structurally
@@ -85,8 +89,8 @@ export class LeadsController {
   @RequirePermission('Lead', 'View')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="leads-export.xlsx"')
-  async exportLeads(@Res() res: Response) {
-    const buffer = await this.leadsService.exportLeadsToExcel();
+  async exportLeads(@Res() res: Response, @Req() req: any) {
+    const buffer = await this.leadsService.exportLeadsToExcel(req.user);
     res.send(buffer);
   }
 

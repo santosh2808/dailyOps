@@ -30,6 +30,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
 import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
+import { canViewAllLeads, leadVisibilityWhere, type LeadViewer } from './lead-visibility';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
@@ -394,13 +395,25 @@ export class LeadsService {
     return { status: { notIn: ['WON', 'LOST'] }, nextFollowUp };
   }
 
-  async findAll(query: QueryLeadDto) {
+  // Throws 404 (same as a missing lead) unless `viewer` may see this lead.
+  // Used by services that reach a lead by id outside LeadsController (whose
+  // own `:id` routes are covered by LeadVisibilityGuard).
+  async assertLeadVisible(id: string, viewer?: LeadViewer) {
+    if (canViewAllLeads(viewer)) return;
+    const visible = await this.prisma.lead.count({ where: { id, ...leadVisibilityWhere(viewer) } });
+    if (!visible) throw new NotFoundException('Lead not found');
+  }
+
+  async findAll(query: QueryLeadDto, viewer?: LeadViewer) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
     const where: Prisma.LeadWhereInput = {
       deletedAt: null,
+      // AND (not a spread) so it can't be overridden by, or collide with, the
+      // optional assignedToUserId / search OR filters below.
+      AND: [leadVisibilityWhere(viewer)],
       // Before `status` so an explicit status filter still wins over the
       // follow-up window's open-leads rule.
       ...this.followUpWhere(query.followUp),
@@ -1273,7 +1286,8 @@ export class LeadsService {
   // it does anything else, so a rejected generation never creates a
   // half-formed Quotation. Returns the lead (with its products already
   // included via findOne()) so the caller doesn't need a second query.
-  async getLeadForQuotationGeneration(leadId: string) {
+  async getLeadForQuotationGeneration(leadId: string, viewer?: LeadViewer) {
+    await this.assertLeadVisible(leadId, viewer);
     const lead = await this.findOne(leadId);
     if (lead.status !== 'QUALIFIED') {
       throw new BadRequestException(
@@ -1970,9 +1984,9 @@ export class LeadsService {
   // export pattern — same isActive-equivalent scope (deletedAt: null, same
   // soft-delete convention as findAll() above), same xlsx library, same
   // "all matching records, not paginated" shape.
-  async exportLeadsToExcel(): Promise<Buffer> {
+  async exportLeadsToExcel(viewer?: LeadViewer): Promise<Buffer> {
     const leads = await this.prisma.lead.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...leadVisibilityWhere(viewer) },
       orderBy: { createdAt: 'desc' },
       include: { assignedToUser: { select: ASSIGNED_TO_USER_SELECT } },
     });

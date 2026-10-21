@@ -24,6 +24,7 @@ import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
 import { MINIMUM_ADVANCE_PERCENT } from './dispatch-override-approvers';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
 import { ApprovalRequestsService } from '../approval-requests/approval-requests.service';
+import { salesOrderVisibilityWhere, type LeadViewer } from '../leads/lead-visibility';
 
 // QA bug-fix pass (TC-080): the linear production sequence a Sales Order
 // moves through. CANCELLED is a side-terminal reachable from any of these
@@ -205,13 +206,16 @@ export class SalesOrdersService {
     private whatsAppService: WhatsAppService,
   ) {}
 
-  async findAll(query: QuerySalesOrderDto) {
+  async findAll(query: QuerySalesOrderDto, viewer?: LeadViewer) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
     const where: Prisma.SalesOrderWhereInput = {
       deletedAt: null,
+      // Restricted users only see orders whose quotation traces to one of
+      // their leads (or has no lead) — see lead-visibility.ts.
+      AND: [salesOrderVisibilityWhere(viewer)],
       ...(query.delayed
         ? {
             status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
