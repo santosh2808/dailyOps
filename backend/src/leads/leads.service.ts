@@ -450,6 +450,15 @@ export class LeadsService {
         : {}),
     };
 
+    // Temporary diagnostic (set LEAD_FILTER_DEBUG=1): prints exactly what the
+    // list query used. Remove once the date-filter question is settled.
+    if (process.env.LEAD_FILTER_DEBUG === '1') {
+      console.log(
+        '[lead-filter-debug]',
+        JSON.stringify({ build: 'date-range-v2', viewer: viewer ? { id: viewer.id, role: viewer.role } : null, query, where }),
+      );
+    }
+
     const sortBy = SORTABLE_FIELDS.includes(query.sortBy as (typeof SORTABLE_FIELDS)[number])
       ? (query.sortBy as (typeof SORTABLE_FIELDS)[number])
       : 'createdAt';
