@@ -16,6 +16,7 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'Lead', action: 'Create', description: 'Create leads, including Excel import' },
   { module: 'Lead', action: 'Edit', description: 'Edit leads, change status, convert to customer' },
   { module: 'Lead', action: 'Delete', description: 'Delete (soft-delete) leads' },
+  { module: 'Lead', action: 'Approve', description: 'Approve or reject lead reassignment requests' },
 
   { module: 'Customer', action: 'View', description: 'View customers' },
   { module: 'Customer', action: 'Create', description: 'Create customers' },
@@ -146,6 +147,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   Administrator: PERMISSIONS.map((p) => code(p.module, p.action)),
   'Sales Manager': [
     ...permissionsForModule('Lead'),
+    // Lead-access audit (who viewed/exported/copied leads) — Administrator
+    // already has every permission; Sales Manager is granted it explicitly.
+    'auditlog.view',
     ...permissionsForModule('Customer'),
     ...permissionsForModule('Quotation'),
     ...permissionsForModule('SalesOrder'),

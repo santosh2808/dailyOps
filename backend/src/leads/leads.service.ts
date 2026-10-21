@@ -217,6 +217,14 @@ const LEAD_DETAIL_INCLUDE = {
     },
     orderBy: { createdAt: 'asc' },
   },
+  // A reassignment awaiting manager approval (see LeadReassignmentRequest) —
+  // lets Lead Details show "reassignment pending" without a second call.
+  reassignmentRequests: {
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { id: true, toUserId: true, toUserName: true, requestedBy: true, createdAt: true },
+  },
 } satisfies Prisma.LeadInclude;
 
 @Injectable()
@@ -638,7 +646,7 @@ export class LeadsService {
     throw new Error('Failed to generate a unique lead number');
   }
 
-  async update(id: string, dto: UpdateLeadDto, actorName?: string) {
+  async update(id: string, dto: UpdateLeadDto, actorName?: string, viewer?: LeadViewer) {
     const existing = await this.findOne(id);
     // previousLeadId is immutable after creation (see create-lead.dto.ts) —
     // destructured out here and intentionally discarded so it can never be
@@ -648,11 +656,32 @@ export class LeadsService {
       products,
       expectedCloseDate,
       nextFollowUp,
-      assignedToUserId,
+      assignedToUserId: requestedAssignee,
       preferredLanguage,
       previousLeadId: _previousLeadId,
       ...leadData
     } = dto;
+
+    // Reassignment needs manager approval for users outside the
+    // full-visibility roles (e.g. a Sales Executive): their change is stored
+    // as a pending LeadReassignmentRequest and the lead stays with its
+    // current owner until a Lead.Approve holder approves it. Everything else
+    // in this PATCH still applies. Full-visibility roles (and internal
+    // callers, e.g. the approval itself) reassign directly.
+    let reassignmentRequest: Awaited<ReturnType<LeadsService['createReassignmentRequest']>> | null = null;
+    if (
+      requestedAssignee !== undefined &&
+      (requestedAssignee || null) !== (existing.assignedToUserId ?? null) &&
+      !canViewAllLeads(viewer)
+    ) {
+      reassignmentRequest = await this.createReassignmentRequest(
+        existing,
+        requestedAssignee || null,
+        viewer,
+        actorName,
+      );
+    }
+    const assignedToUserId = reassignmentRequest ? undefined : requestedAssignee;
 
     // D.O.T. AI Lead Assistant Phase 1: recompute the state-based language
     // default only when appropriate — see resolveLanguageOnUpdate() below.
@@ -852,7 +881,122 @@ export class LeadsService {
       await this.notifyLeadAssigned(assignedToUserId, updated);
     }
 
-    return updated;
+    return reassignmentRequest ? { ...updated, reassignmentRequested: true } : updated;
+  }
+
+  // ---- Reassignment approval -------------------------------------------
+
+  private async createReassignmentRequest(
+    existing: { id: string; assignedToUserId: string | null; assignedToUser?: { name: string } | null },
+    toUserId: string | null,
+    viewer?: LeadViewer,
+    actorName?: string,
+  ) {
+    const pending = await this.prisma.leadReassignmentRequest.count({
+      where: { leadId: existing.id, status: 'PENDING' },
+    });
+    if (pending > 0) {
+      throw new BadRequestException('A reassignment request for this lead is already awaiting approval.');
+    }
+    let toUserName: string | null = null;
+    if (toUserId) {
+      const toUser = await this.prisma.user.findUnique({
+        where: { id: toUserId },
+        select: { name: true, isActive: true },
+      });
+      if (!toUser || !toUser.isActive) {
+        throw new BadRequestException('The selected user is not available for assignment.');
+      }
+      toUserName = toUser.name;
+    }
+    const request = await this.prisma.leadReassignmentRequest.create({
+      data: {
+        leadId: existing.id,
+        fromUserId: existing.assignedToUserId,
+        fromUserName: existing.assignedToUser?.name ?? null,
+        toUserId,
+        toUserName,
+        requestedBy: actorName ?? null,
+        requestedByUserId: viewer?.id ?? null,
+      },
+    });
+    await this.prisma.leadHistory.create({
+      data: {
+        leadId: existing.id,
+        action: 'EDITED',
+        description: `Reassignment to ${toUserName ?? 'Unassigned'} requested by ${actorName ?? 'a user'} — awaiting manager approval`,
+        performedBy: actorName,
+      },
+    });
+    return request;
+  }
+
+  async listReassignmentRequests(status?: 'PENDING' | 'APPROVED' | 'REJECTED') {
+    return this.prisma.leadReassignmentRequest.findMany({
+      where: { status: status ?? 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        lead: {
+          select: { id: true, leadNumber: true, companyName: true, contactPerson: true, state: true },
+        },
+      },
+    });
+  }
+
+  async decideReassignment(
+    requestId: string,
+    approve: boolean,
+    approver: { id?: string; name?: string },
+    note?: string,
+  ) {
+    const request = await this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Reassignment request not found');
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException(`This request was already ${request.status.toLowerCase()}.`);
+    }
+
+    // Claim first so two approvers can't both apply it.
+    const claimed = await this.prisma.leadReassignmentRequest.updateMany({
+      where: { id: requestId, status: 'PENDING' },
+      data: {
+        status: approve ? 'APPROVED' : 'REJECTED',
+        decidedBy: approver.name ?? null,
+        decidedAt: new Date(),
+        decisionNote: note ?? null,
+      },
+    });
+    if (claimed.count === 0) throw new BadRequestException('This request was already decided.');
+
+    if (approve) {
+      try {
+        // No viewer = internal/unrestricted: applies the assignment through the
+        // normal update() path (history, assignment history, notification).
+        await this.update(
+          request.leadId,
+          { assignedToUserId: request.toUserId } as unknown as UpdateLeadDto,
+          approver.name,
+        );
+      } catch (err) {
+        await this.prisma.leadReassignmentRequest.update({
+          where: { id: requestId },
+          data: { status: 'PENDING', decidedBy: null, decidedAt: null, decisionNote: null },
+        });
+        throw err;
+      }
+    } else {
+      await this.prisma.leadHistory.create({
+        data: {
+          leadId: request.leadId,
+          action: 'EDITED',
+          description: `Reassignment to ${request.toUserName ?? 'Unassigned'} rejected by ${approver.name ?? 'a manager'}${
+            note ? ` — ${note}` : ''
+          }`,
+          performedBy: approver.name,
+        },
+      });
+    }
+    return this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
   }
 
   // QA bug-fix pass (TC-080): WON/LOST are terminal — this endpoint must
@@ -1985,6 +2129,11 @@ export class LeadsService {
   // soft-delete convention as findAll() above), same xlsx library, same
   // "all matching records, not paginated" shape.
   async exportLeadsToExcel(viewer?: LeadViewer): Promise<Buffer> {
+    return (await this.exportLeads(viewer)).buffer;
+  }
+
+  // Same export, also returning the row count so the caller can audit-log it.
+  async exportLeads(viewer?: LeadViewer): Promise<{ buffer: Buffer; count: number }> {
     const leads = await this.prisma.lead.findMany({
       where: { deletedAt: null, ...leadVisibilityWhere(viewer) },
       orderBy: { createdAt: 'desc' },
@@ -2018,7 +2167,10 @@ export class LeadsService {
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+      count: rows.length,
+    };
   }
 
   async previewLeadImport(fileBuffer: Buffer) {

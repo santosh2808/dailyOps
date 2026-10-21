@@ -4,6 +4,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { LeadsController } from './leads.controller';
 import { LeadsService } from './leads.service';
 import { LeadFollowUpReminderService } from './lead-followup-reminder.service';
+import { LeadAccessService } from './lead-access.service';
 
 @Module({
   imports: [MailerModule, WhatsAppModule],
@@ -12,7 +13,7 @@ import { LeadFollowUpReminderService } from './lead-followup-reminder.service';
   // exported) — its @Cron job runs on its own once ScheduleModule.forRoot()
   // (app.module.ts) bootstraps it; nothing else in the app calls it
   // directly.
-  providers: [LeadsService, LeadFollowUpReminderService],
+  providers: [LeadsService, LeadFollowUpReminderService, LeadAccessService],
   // Lead Management Phase 1: QuotationsService calls back into
   // LeadsService (Generate Quotation gating, the QUOTATION_SENT status
   // transition on Send Quotation) — see QuotationsModule's import of

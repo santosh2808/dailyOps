@@ -416,6 +416,7 @@ model Lead {
   products          LeadProduct[]
   // Site Visit photo evidence — see LeadSiteVisitPhoto's own comment.
   siteVisitPhotos   LeadSiteVisitPhoto[]
+  reassignmentRequests LeadReassignmentRequest[]
 
   // Additive: web-originated Lead traceability (Website Enquiries ->
   // Lead/Complaint refactor). A Lead created from a public form submission
@@ -2375,4 +2376,38 @@ model AuditLog {
   @@index([module])
   @@index([recordId])
   @@index([createdAt])
+}
+
+// Manager approval for lead reassignment. A user outside the full-visibility
+// roles (see src/leads/lead-visibility.ts, e.g. a Sales Executive) can't
+// reassign a lead directly: PATCH /leads/:id with a different assignedToUserId
+// creates one of these instead, and the lead stays with its current owner
+// until a user holding Lead.Approve (Sales Manager/Administrator) approves it.
+// toUserId null = "unassign". Names are captured at request time (same
+// convention as LeadAssignmentHistory), user ids kept for the apply step.
+enum LeadReassignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeadReassignmentRequest {
+  id                String                 @id @default(uuid())
+  leadId            String
+  lead              Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromUserId        String?
+  fromUserName      String?
+  toUserId          String?
+  toUserName        String?
+  requestedBy       String?
+  requestedByUserId String?
+  reason            String?
+  status            LeadReassignmentStatus @default(PENDING)
+  decidedBy         String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  createdAt         DateTime               @default(now())
+
+  @@index([leadId])
+  @@index([status])
 }
