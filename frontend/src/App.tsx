@@ -49,6 +49,8 @@ import LeadAccessAudit from "@/pages/LeadAccessAudit";
 import PublicQuotation from "@/pages/PublicQuotation";
 import PublicApproval from "@/pages/PublicApproval";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
+import ContentPostList from "@/pages/ContentPostList";
+import ContentPostEditor from "@/pages/ContentPostEditor";
 
 export default function App() {
   return (
@@ -457,6 +459,55 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <FormConfigurationPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Content management routes */}
+          <Route
+            path="/content/blogs"
+            element={
+              <ProtectedRoute>
+                <ContentPostList key="BLOG" type="BLOG" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/content/blogs/new"
+            element={
+              <ProtectedRoute>
+                <ContentPostEditor key="BLOG-new" type="BLOG" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/content/blogs/:id"
+            element={
+              <ProtectedRoute>
+                <ContentPostEditor key="BLOG-edit" type="BLOG" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/content/case-studies"
+            element={
+              <ProtectedRoute>
+                <ContentPostList key="CASE_STUDY" type="CASE_STUDY" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/content/case-studies/new"
+            element={
+              <ProtectedRoute>
+                <ContentPostEditor key="CASE_STUDY-new" type="CASE_STUDY" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/content/case-studies/:id"
+            element={
+              <ProtectedRoute>
+                <ContentPostEditor key="CASE_STUDY-edit" type="CASE_STUDY" />
               </ProtectedRoute>
             }
           />

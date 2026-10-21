@@ -115,6 +115,13 @@ const PERMISSIONS: { module: string; action: string; description: string }[] = [
   { module: 'FormConfiguration', action: 'Edit', description: 'Edit websites/forms, publish form versions, edit product mappings and routing' },
   { module: 'FormConfiguration', action: 'Delete', description: 'Delete product mappings and subject routes' },
 
+  // Website content
+  { module: 'Content', action: 'View', description: 'View blogs and case studies' },
+  { module: 'Content', action: 'Create', description: 'Create blog and case study drafts' },
+  { module: 'Content', action: 'Edit', description: 'Edit drafts, upload images, change the URL name of unpublished posts' },
+  { module: 'Content', action: 'Publish', description: 'Publish, update live, and unpublish blogs and case studies' },
+  { module: 'Content', action: 'Delete', description: 'Archive and restore blogs and case studies' },
+
   // Additive: D.O.T. AI Lead Assistant Phase 1 (Administration -> AI
   // Settings) — foundation-only configuration for the future AI calling
   // engine (enabled flags, attempt limits, calling hours, supported

@@ -21,12 +21,20 @@ const publicFormOrigins = new Set(
     .filter(Boolean),
 );
 const PUBLIC_FORMS_PATH_PREFIX = '/api/v1/public/forms';
+// Public content CORS
+const PUBLIC_CONTENT_PATH_PREFIX = '/api/v1/public/content';
 
 function corsOptionsDelegate(req: Request, callback: (err: Error | null, options: CorsOptions) => void) {
   if (req.url.startsWith(PUBLIC_FORMS_PATH_PREFIX)) {
     const origin = req.headers.origin;
     const allowed = Boolean(origin && publicFormOrigins.has(origin));
     callback(null, { origin: allowed, methods: ['POST', 'OPTIONS'], credentials: false });
+    return;
+  }
+  if (req.url.startsWith(PUBLIC_CONTENT_PATH_PREFIX)) {
+    const origin = req.headers.origin;
+    const allowed = Boolean(origin && publicFormOrigins.has(origin));
+    callback(null, { origin: allowed, methods: ['GET', 'OPTIONS'], credentials: false });
     return;
   }
   callback(null, { origin: true, credentials: true });
@@ -38,6 +46,9 @@ async function bootstrap() {
     // exact raw bytes (see src/inbound-leads).
     rawBody: true,
   });
+
+  // ECS load balancer
+  app.set('trust proxy', 1);
 
   // Bulk imports exceed the 100 KB default
   app.useBodyParser('json', { limit: '10mb' });

@@ -1566,6 +1566,8 @@ export interface FormWebsite {
   supportEmail?: string | null;
   // Per-website CORS allow-list for the public submission endpoint.
   allowedOrigins: string[];
+  // Public site address
+  siteUrl?: string | null;
   configuration?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1656,4 +1658,149 @@ export interface WebFormIntakeSummary {
   subjectLabel: string;
   submittedData: Record<string, unknown>;
   createdAt: string;
+}
+
+// Website content
+export const CONTENT_POST_TYPES = ["BLOG", "CASE_STUDY"] as const;
+export type ContentPostType = (typeof CONTENT_POST_TYPES)[number];
+
+export const CONTENT_POST_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
+export type ContentPostStatus = (typeof CONTENT_POST_STATUSES)[number];
+
+// Stored image
+export interface ContentImage {
+  key: string;
+  alt?: string;
+  url?: string | null;
+}
+
+// Article JSON
+export interface ContentRichTextNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: ContentRichTextNode[];
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+  text?: string;
+}
+
+export interface BlogData {
+  excerpt?: string;
+  coverImage?: ContentImage;
+  category?: string;
+  tags?: string[];
+  byline?: string;
+  body?: ContentRichTextNode;
+  ogImage?: ContentImage;
+  date?: string;
+}
+
+export interface CaseStudyKeyResult {
+  value: string;
+  label: string;
+}
+
+export interface CaseStudyQuote {
+  text: string;
+  name: string;
+  designation?: string;
+}
+
+export interface CaseStudyData {
+  excerpt?: string;
+  coverImage?: ContentImage;
+  clientName?: string;
+  anonymousClientLabel?: string;
+  clientLogo?: ContentImage;
+  industry?: string;
+  // For industry Other
+  industryOther?: string;
+  city?: string;
+  state?: string;
+  areaSqFt?: number;
+  keyResults?: CaseStudyKeyResult[];
+  challenge?: string;
+  solution?: string;
+  results?: string;
+  quote?: CaseStudyQuote;
+  gallery?: ContentImage[];
+  videoUrl?: string;
+  completedAt?: string;
+}
+
+export interface ContentUserRef {
+  id: string;
+  name: string;
+}
+
+export interface ContentWebsiteOption {
+  id: string;
+  code: string;
+  name: string;
+  status: FormWebsiteStatus;
+  siteUrl?: string | null;
+}
+
+export interface ContentProductOption {
+  id: string;
+  publicCode: string;
+  label: string;
+  product: { id: string; name: string };
+}
+
+export interface ContentPostProduct {
+  id: string;
+  formWebsiteProductId: string;
+  quantity: number;
+  displayOrder: number;
+  formWebsiteProduct: {
+    id: string;
+    publicCode: string;
+    label: string;
+    enabled: boolean;
+    product: { id: string; name: string };
+  };
+}
+
+// List row
+export interface ContentPostListItem {
+  id: string;
+  formWebsiteId: string;
+  formWebsite: { id: string; code: string; name: string; siteUrl?: string | null };
+  type: ContentPostType;
+  slug: string;
+  title: string;
+  status: ContentPostStatus;
+  featured: boolean;
+  hasUnpublishedChanges: boolean;
+  version: number;
+  author: ContentUserRef;
+  updatedBy?: ContentUserRef | null;
+  publishedAt?: string | null;
+  lastPublishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  coverImage?: ContentImage | null;
+}
+
+// Status tab counts
+export interface ContentPostCounts {
+  all: number;
+  draft: number;
+  published: number;
+  unpublishedChanges: number;
+  archived: number;
+}
+
+export interface ContentPost extends Omit<ContentPostListItem, "coverImage"> {
+  formWebsite: { id: string; code: string; name: string; status: FormWebsiteStatus; siteUrl?: string | null };
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  data: BlogData & CaseStudyData;
+  products: ContentPostProduct[];
+}
+
+// Field error
+export interface ContentFieldError {
+  field: string;
+  message: string;
 }

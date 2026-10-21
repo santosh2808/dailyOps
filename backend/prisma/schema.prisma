@@ -54,6 +54,10 @@ model User {
   // Back-relation for FormSubjectRoute.assignedUserId below (routing default
   // assignee, optional).
   formSubjectRoutes FormSubjectRoute[]
+
+  // Content posts
+  authoredContentPosts ContentPost[] @relation("ContentPostAuthor")
+  updatedContentPosts  ContentPost[] @relation("ContentPostUpdatedBy")
 }
 
 // Enterprise RBAC — additive models only; nothing above this comment was
@@ -1631,6 +1635,8 @@ model FormWebsite {
   // empty by default so an existing seeded website doesn't suddenly start
   // rejecting requests until an Administrator explicitly configures origins.
   allowedOrigins String[]          @default([])
+  // Public site address
+  siteUrl        String?
   configuration  Json              @default("{}")
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -1643,6 +1649,9 @@ model FormWebsite {
   // or Complaint this website's forms have ever produced.
   leads      Lead[]
   complaints Complaint[]
+
+  // Content posts
+  contentPosts ContentPost[]
 
   @@index([status])
 }
@@ -1720,6 +1729,9 @@ model FormWebsiteProduct {
   fieldConfig   Json?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  // Case study products
+  contentPostProducts ContentPostProduct[]
 
   @@unique([formWebsiteId, productId])
   @@unique([formWebsiteId, publicCode])
@@ -2436,4 +2448,69 @@ model InboundLeadEvent {
 
   @@unique([provider, externalId])
   @@index([createdAt])
+}
+
+// Website content posts
+model ContentPost {
+  id                    String            @id @default(uuid())
+  formWebsiteId         String
+  // Protect content
+  formWebsite           FormWebsite       @relation(fields: [formWebsiteId], references: [id], onDelete: Restrict)
+  type                  ContentPostType
+  // Unique per website
+  slug                  String
+  title                 String
+  status                ContentPostStatus @default(DRAFT)
+  featured              Boolean           @default(false)
+  seoTitle              String?
+  seoDescription        String?
+  data                  Json              @default("{}")
+  // Live snapshot
+  publishedData         Json?
+  hasUnpublishedChanges Boolean           @default(false)
+  version               Int               @default(1)
+  // Accountable user
+  authorId              String
+  author                User              @relation("ContentPostAuthor", fields: [authorId], references: [id])
+  updatedById           String?
+  updatedBy             User?             @relation("ContentPostUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  // First publish date
+  publishedAt           DateTime?
+  lastPublishedAt       DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  products ContentPostProduct[]
+
+  @@unique([formWebsiteId, slug])
+  @@index([formWebsiteId, type, status, publishedAt])
+  @@index([formWebsiteId, type, updatedAt])
+  @@index([authorId])
+  @@index([updatedById])
+}
+
+enum ContentPostType {
+  BLOG
+  CASE_STUDY
+}
+
+enum ContentPostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// Case study products
+model ContentPostProduct {
+  id                   String             @id @default(uuid())
+  contentPostId        String
+  contentPost          ContentPost        @relation(fields: [contentPostId], references: [id], onDelete: Cascade)
+  formWebsiteProductId String
+  formWebsiteProduct   FormWebsiteProduct @relation(fields: [formWebsiteProductId], references: [id], onDelete: Cascade)
+  quantity             Int
+  displayOrder         Int                @default(0)
+  createdAt            DateTime           @default(now())
+
+  @@unique([contentPostId, formWebsiteProductId])
+  @@index([formWebsiteProductId])
 }
