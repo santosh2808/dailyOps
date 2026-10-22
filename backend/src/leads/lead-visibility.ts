@@ -38,9 +38,14 @@ export interface LeadViewer {
 // controller entry point passes req.user.
 export function canViewAllLeads(viewer?: LeadViewer | null): boolean {
   if (!viewer) return true;
-  // Legacy User.role column ('admin') kept by the seeded System Administrator.
-  if (viewer.role && viewer.role.toLowerCase() === 'admin') return true;
-  return (viewer.roles ?? []).some((r) => FULL_VISIBILITY_NORMALISED.has(normaliseRole(r)));
+  const roles = viewer.roles ?? [];
+  // Legacy User.role column. It DEFAULTS to 'admin' for every user (see
+  // schema.prisma), so it says nothing about who is really an admin — a Sales
+  // Executive created from the Users screen carries it too. It is therefore
+  // only a fallback for a user with NO RBAC roles at all (e.g. a legacy
+  // seeded account); any user with an assigned role is judged by that role.
+  if (roles.length === 0) return !!viewer.role && viewer.role.toLowerCase() === 'admin';
+  return roles.some((r) => FULL_VISIBILITY_NORMALISED.has(normaliseRole(r)));
 }
 
 export function leadVisibilityWhere(viewer?: LeadViewer | null): Prisma.LeadWhereInput {

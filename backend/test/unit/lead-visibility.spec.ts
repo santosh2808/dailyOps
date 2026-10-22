@@ -34,6 +34,11 @@ describe('canViewAllLeads', () => {
     expect(canViewAllLeads({ id: 'x', roles: [role] })).toBe(true);
   });
 
+  it('a Sales Executive still carrying the default legacy role "admin" is restricted', () => {
+    expect(canViewAllLeads({ id: 'x', role: 'admin', roles: ['Sales Executive'] })).toBe(false);
+    expect(canViewAllLeads({ id: 'x', role: 'admin', roles: ['Sales Executive', 'Telecaller'] })).toBe(true);
+  });
+
   it('legacy admin user.role sees all leads', () => {
     expect(canViewAllLeads({ id: 'x', role: 'admin', roles: [] })).toBe(true);
   });
