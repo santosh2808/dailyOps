@@ -278,7 +278,11 @@ export default function QuotationForm() {
         // current items — i.e. it was deliberately overridden. Otherwise
         // leave the field blank so it keeps auto-recalculating if items are
         // edited, instead of freezing today's amount as a stale override.
-        const loadedQty = (quotation.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+        // Fan items only, matching the preview and backend
+        const loadedQty = (quotation.items ?? []).reduce(
+          (sum, item) => (isFanProduct(item.product) ? sum + item.quantity : sum),
+          0,
+        );
         const autoInstallation = INSTALLATION_RATE_PER_FAN * loadedQty;
         const installationCharge =
           quotation.installationCharge !== autoInstallation ? String(quotation.installationCharge ?? "") : "";
