@@ -1731,8 +1731,8 @@ export class QuotationsService {
     // invoicing practice here). Clamped below so it can never push
     // grandTotal negative.
     discount = 0,
-    // Item prices include GST, but installation/transportation are extra:
-    // GST is then charged only on those extras (see below).
+    // Item prices and the installation/transportation amounts already
+    // include GST: nothing is added on top (see below).
     gstIncludedInPrices = false,
   ): Promise<ComputedTotals> {
     const productIds = [...new Set(items.map((i) => i.productId))];
@@ -1848,14 +1848,14 @@ export class QuotationsService {
     // computed and stored here (informational — and it's exactly the
     // figure the Sales Order re-adds), it's just no longer summed into
     // this Quotation's own grandTotal.
-    // gstIncludedInPrices: item prices already carry their GST, so only the
-    // separately-quoted installation/transportation attract GST on top. The
-    // Sales Order re-adds exactly this gstAmount, so it stays consistent.
-    const gstBase = gstIncludedInPrices
-      ? effectiveInstallationCharge + effectiveTransportationCharge
-      : subtotal + effectiveInstallationCharge + effectiveTransportationCharge;
-    const gstAmount = Math.round(gstBase * (effectiveGstPercent / 100) * 100) / 100;
+    // gstIncludedInPrices: item prices and installation/transportation
+    // already carry their GST, so gstAmount is the GST embedded in that
+    // total (back-calculated, like the pricesIncludeChargesAndGst branch
+    // above) and the Sales Order does not add it again.
     const preDiscountTotal = subtotal + effectiveInstallationCharge + effectiveTransportationCharge;
+    const gstAmount = gstIncludedInPrices
+      ? Math.round((preDiscountTotal - preDiscountTotal / (1 + effectiveGstPercent / 100)) * 100) / 100
+      : Math.round(preDiscountTotal * (effectiveGstPercent / 100) * 100) / 100;
     // Discount is a post-tax rebate — it doesn't reduce the taxable base
     // above (gstAmount is already computed on the undiscounted amount),
     // it just comes straight off the final total. Clamped so it can never

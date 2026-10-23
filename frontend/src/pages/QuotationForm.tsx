@@ -278,7 +278,11 @@ export default function QuotationForm() {
         // current items — i.e. it was deliberately overridden. Otherwise
         // leave the field blank so it keeps auto-recalculating if items are
         // edited, instead of freezing today's amount as a stale override.
-        const loadedQty = (quotation.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+        // Fan items only, matching the preview and backend
+        const loadedQty = (quotation.items ?? []).reduce(
+          (sum, item) => (isFanProduct(item.product) ? sum + item.quantity : sum),
+          0,
+        );
         const autoInstallation = INSTALLATION_RATE_PER_FAN * loadedQty;
         const installationCharge =
           quotation.installationCharge !== autoInstallation ? String(quotation.installationCharge ?? "") : "";
@@ -498,13 +502,14 @@ export default function QuotationForm() {
       : form.transportationCharge.trim()
         ? Number(form.transportationCharge) || 0
         : 0;
+  const chargedTotal = subtotal + installationChargeNum + transportationChargeNum;
   const gstAmount = form.pricesIncludeChargesAndGst
     ? subtotal - subtotal / (1 + gstPercentNum / 100)
     : form.gstIncludedInPrices
-      ? (installationChargeNum + transportationChargeNum) * (gstPercentNum / 100)
-      : (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
-  // GST is already inside the item prices; only the extra charges attract GST.
-  const gstOnExtrasOnly = form.gstIncludedInPrices && !form.pricesIncludeChargesAndGst;
+      ? chargedTotal - chargedTotal / (1 + gstPercentNum / 100)
+      : chargedTotal * (gstPercentNum / 100);
+  // GST already inside item prices and installation/transportation.
+  const gstInclusive = form.pricesIncludeChargesAndGst || form.gstIncludedInPrices;
   // Bug fix: mirrors QuotationsService.computeTotals() — GST is quoted as
   // "Extra" but not charged/collected at the Quotation stage at all (it's
   // only actually added once a Sales Order is created from an accepted
@@ -727,8 +732,8 @@ export default function QuotationForm() {
                         <span>
                           Unit price includes GST (installation &amp; transportation extra)
                           <span className="block text-xs text-muted-foreground">
-                            GST is already in the item prices; it is charged again only on the installation /
-                            transportation amounts below.
+                            GST is already in the item prices and in the installation / transportation amounts
+                            below; no GST is added on top.
                           </span>
                         </span>
                       </label>
@@ -824,13 +829,7 @@ export default function QuotationForm() {
                         GST ({gstPercentNum || 0}%){form.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">
-                        {form.pricesIncludeChargesAndGst
-                          ? "Included"
-                          : gstOnExtrasOnly
-                            ? installationChargeNum + transportationChargeNum > 0
-                              ? "Included in price; Extra on charges"
-                              : "Included"
-                            : "Extra"}
+                        {gstInclusive ? "Included" : "Extra"}
                       </p>
                     </div>
                     <div>
@@ -840,8 +839,7 @@ export default function QuotationForm() {
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">
-                        {form.pricesIncludeChargesAndGst ||
-                        (gstOnExtrasOnly && installationChargeNum + transportationChargeNum === 0)
+                        {gstInclusive
                           ? formatCurrency(grandTotal)
                           : `${formatCurrency(grandTotal)} + GST Extra`}
                       </p>
@@ -901,6 +899,17 @@ export default function QuotationForm() {
                         (key === "installationCharge" || key === "transportation") &&
                         form.pricesIncludeChargesAndGst
                       ) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
+                          </div>
+                        );
+                      }
+                      // GST already in prices: the PDF prints "Included"
+                      if (key === "gstTerms" && gstInclusive) {
                         return (
                           <div key={key} className="space-y-1">
                             <Label htmlFor={`ct-${key}`} className="text-xs">
