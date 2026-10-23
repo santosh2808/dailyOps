@@ -416,8 +416,9 @@ export default function SalesOrderForm() {
   // pricesIncludeChargesAndGst branch — that flag means the quotation's
   // grandTotal already includes GST, so adding quotation.gstAmount again
   // here would double-count it, same bug just fixed backend-side.
+  // gstIncludedInPrices is the same case.
   const grandTotal = matchesQuotationExactly
-    ? quotation!.pricesIncludeChargesAndGst
+    ? quotation!.pricesIncludeChargesAndGst || quotation!.gstIncludedInPrices
       ? quotation!.grandTotal
       : Math.round((quotation!.grandTotal + quotation!.gstAmount) * 100) / 100
     : subtotal + tax + installationCharge + transportationCharge;
