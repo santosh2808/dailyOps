@@ -51,6 +51,16 @@ describe('Sales Order totals carried from the accepted quotation', () => {
     expect(totals.grandTotal).toBe(100000);
   });
 
+  it('does not add GST when the unit price (and charges) already include it', () => {
+    const { svc } = makeService();
+    const totals: any = blankTotals();
+    (svc as any).freezeToQuotationTotalsIfUnmodified(
+      totals, raw, quotation({ gstIncludedInPrices: true, grandTotal: 112000, gstAmount: 18305.08 }),
+    );
+    expect(totals.grandTotal).toBe(112000);
+    expect(totals.tax).toBe(18305.08);
+  });
+
   it('leaves totals untouched when the order items differ from the quotation', () => {
     const { svc } = makeService();
     const totals: any = blankTotals();

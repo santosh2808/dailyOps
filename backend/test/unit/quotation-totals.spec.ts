@@ -78,21 +78,21 @@ describe('Quotation discount limit', () => {
 });
 
 describe('Quotation: GST included in item price, installation extra', () => {
-  it('charges GST only on installation/transportation, not on the items', async () => {
+  it('adds installation but no GST on top; GST is the amount already inside', async () => {
     const { compute } = makeService();
-    // items 100000 (GST already inside) + installation 10000 + transport 0
+    // items 100000 + installation 10000, both GST-inclusive
     const t = await compute(items(), 18, 10000, 0, undefined, false, 0, true);
     expect(t.gstIncludedInPrices).toBe(true);
     expect(t.subtotal).toBe(100000);
     expect(t.installationCharge).toBe(10000);
-    expect(t.gstAmount).toBe(1800); // 18% of 10000 only
-    expect(t.grandTotal).toBe(110000); // GST on extras is added later, at Sales Order
+    expect(t.gstAmount).toBe(16779.66); // 110000 - 110000 / 1.18
+    expect(t.grandTotal).toBe(110000); // final: nothing added later
   });
 
-  it('with installation included (0) there is no extra GST at all', async () => {
+  it('with installation included (0) the GST inside is back-calculated from the items', async () => {
     const { compute } = makeService();
     const t = await compute(items(), 18, 0, 0, undefined, false, 0, true);
-    expect(t.gstAmount).toBe(0);
+    expect(t.gstAmount).toBe(15254.24); // 100000 - 100000 / 1.18
     expect(t.grandTotal).toBe(100000);
   });
 

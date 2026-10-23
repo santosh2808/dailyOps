@@ -1228,6 +1228,7 @@ export class SalesOrdersService {
       installationCharge: number;
       transportationCharge: number;
       pricesIncludeChargesAndGst: boolean;
+      gstIncludedInPrices?: boolean;
       discount: number;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
@@ -1280,8 +1281,9 @@ export class SalesOrdersService {
     // (see its own comment: "GST is shown as the amount already embedded in
     // the subtotal... not an additional line"). Adding it again here
     // inflated the Sales Order's Grand Total above the actual accepted
-    // price.
-    totals.grandTotal = quotation.pricesIncludeChargesAndGst
+    // price. gstIncludedInPrices is the same case: GST is already inside
+    // grandTotal (item prices and installation/transportation).
+    totals.grandTotal = quotation.pricesIncludeChargesAndGst || quotation.gstIncludedInPrices
       ? quotation.grandTotal
       : Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
 

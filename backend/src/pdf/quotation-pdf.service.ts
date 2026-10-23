@@ -740,7 +740,7 @@ export class QuotationPdfService {
         value: includesCharges
           ? `${this.gstLabel(quotation)} Included`
           : quotation.gstIncludedInPrices
-            ? `${this.gstLabel(quotation)} Included in item price${quotation.installationCharge + quotation.transportationCharge > 0 ? '; Extra on Installation / Transportation' : ''}`
+            ? `${this.gstLabel(quotation)} Included`
             : `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
       },
       {
@@ -998,17 +998,10 @@ export class QuotationPdfService {
     // under Commercial Terms), never a computed rupee figure — showing an
     // amount here would suggest that amount is already part of Grand Total
     // below, which it deliberately isn't.
-    // gstIncludedInPrices: GST is already inside the item prices, but the
-    // separately quoted installation/transportation still attract GST.
-    const gstOnExtras =
-      !includesCharges && !!quotation.gstIncludedInPrices && quotation.installationCharge + quotation.transportationCharge > 0;
-    const gstValue = includesCharges
-      ? 'Included'
-      : quotation.gstIncludedInPrices
-        ? gstOnExtras
-          ? 'Included in item price; Extra on Installation / Transportation'
-          : 'Included'
-        : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // gstIncludedInPrices: GST is already inside the item prices and the
+    // installation/transportation amounts, so it reads "Included" too.
+    const gstInclusive = includesCharges || !!quotation.gstIncludedInPrices;
+    const gstValue = gstInclusive ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
     // Grand Total on the Quotation is GST-exclusive (see above) — append
     // "+ GST Extra" so it's unambiguous the number below doesn't already
     // include tax, matching the GST row's own wording. Not appended when
@@ -1017,8 +1010,8 @@ export class QuotationPdfService {
     // QA fix: the Commercial Terms "GST" field is free text; when staff
     // enter "Included" there, the GST row already reads "Included", so
     // Grand Total must not still say "+ GST Extra".
-    const gstTermsIncluded = !gstOnExtras && /\bincluded\b/i.test(gstValue);
-    const grandTotalValue = includesCharges || gstTermsIncluded
+    const gstTermsIncluded = /\bincluded\b/i.test(gstValue);
+    const grandTotalValue = gstInclusive || gstTermsIncluded
       ? this.formatCurrency(quotation.grandTotal)
       : `${this.formatCurrency(quotation.grandTotal)} + GST Extra`;
     // Additive: printed as its own row, right above Grand Total, only when a
