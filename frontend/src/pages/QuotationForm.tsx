@@ -904,6 +904,17 @@ export default function QuotationForm() {
                           </div>
                         );
                       }
+                      // GST already in prices: the PDF prints "Included"
+                      if (key === "gstTerms" && gstInclusive) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
+                          </div>
+                        );
+                      }
                       // Bug fix: once a real Installation/Transportation
                       // Charge (₹) is entered above, QuotationPdfService
                       // overrides this wording with that actual amount on
