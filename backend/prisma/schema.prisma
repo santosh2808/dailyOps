@@ -54,6 +54,10 @@ model User {
   // Back-relation for FormSubjectRoute.assignedUserId below (routing default
   // assignee, optional).
   formSubjectRoutes FormSubjectRoute[]
+
+  // Content posts
+  authoredContentPosts ContentPost[] @relation("ContentPostAuthor")
+  updatedContentPosts  ContentPost[] @relation("ContentPostUpdatedBy")
 }
 
 // Enterprise RBAC — additive models only; nothing above this comment was
@@ -274,6 +278,7 @@ enum LeadSource {
   EMAIL
   PHONE
   META
+  GOOGLE_ADS
   OTHER
 }
 
@@ -359,6 +364,15 @@ model Lead {
   priority          LeadPriority  @default(MEDIUM)
   source            LeadSource    @default(OTHER)
   estimatedValue    Float?
+  // Installation / transportation quoted at the lead stage; carried into the
+  // quotation generated from this lead. Null = use the quotation defaults
+  // (installation auto at Rs.8,000 per fan, transportation 0).
+  installationCharge   Float?
+  transportationCharge Float?
+  customerTransport    Boolean @default(false)
+  // Unit prices already include GST, installation and transportation.
+  pricesIncludeChargesAndGst Boolean @default(false)
+  gstIncludedInPrices Boolean @default(false)
   expectedCloseDate DateTime?
   nextFollowUp      DateTime?
   // Lead Management Phase 1 (requirement #5) — a short free-text reminder
@@ -407,6 +421,7 @@ model Lead {
   products          LeadProduct[]
   // Site Visit photo evidence — see LeadSiteVisitPhoto's own comment.
   siteVisitPhotos   LeadSiteVisitPhoto[]
+  reassignmentRequests LeadReassignmentRequest[]
 
   // Additive: web-originated Lead traceability (Website Enquiries ->
   // Lead/Complaint refactor). A Lead created from a public form submission
@@ -847,6 +862,9 @@ model Quotation {
   // computeTotals()'s inclusive-GST branch). Defaults to false, i.e. today's
   // additive behavior, for every existing quotation.
   pricesIncludeChargesAndGst Boolean    @default(false)
+  // Item prices include GST, but installation/transportation are quoted
+  // separately (GST is then charged only on those extra amounts).
+  gstIncludedInPrices Boolean @default(false)
   // Additive: a flat, order-level discount amount staff can enter on the
   // quotation (separate from any per-item pricing) — mirrors
   // SalesOrder.discount exactly, including how it's applied: subtracted
@@ -1617,6 +1635,8 @@ model FormWebsite {
   // empty by default so an existing seeded website doesn't suddenly start
   // rejecting requests until an Administrator explicitly configures origins.
   allowedOrigins String[]          @default([])
+  // Public site address
+  siteUrl        String?
   configuration  Json              @default("{}")
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -1629,6 +1649,9 @@ model FormWebsite {
   // or Complaint this website's forms have ever produced.
   leads      Lead[]
   complaints Complaint[]
+
+  // Content posts
+  contentPosts ContentPost[]
 
   @@index([status])
 }
@@ -1706,6 +1729,9 @@ model FormWebsiteProduct {
   fieldConfig   Json?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  // Case study products
+  contentPostProducts ContentPostProduct[]
 
   @@unique([formWebsiteId, productId])
   @@unique([formWebsiteId, publicCode])
@@ -2363,4 +2389,128 @@ model AuditLog {
   @@index([module])
   @@index([recordId])
   @@index([createdAt])
+}
+
+// Manager approval for lead reassignment. A user outside the full-visibility
+// roles (see src/leads/lead-visibility.ts, e.g. a Sales Executive) can't
+// reassign a lead directly: PATCH /leads/:id with a different assignedToUserId
+// creates one of these instead, and the lead stays with its current owner
+// until a user holding Lead.Approve (Sales Manager/Administrator) approves it.
+// toUserId null = "unassign". Names are captured at request time (same
+// convention as LeadAssignmentHistory), user ids kept for the apply step.
+enum LeadReassignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeadReassignmentRequest {
+  id                String                 @id @default(uuid())
+  leadId            String
+  lead              Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromUserId        String?
+  fromUserName      String?
+  toUserId          String?
+  toUserName        String?
+  requestedBy       String?
+  requestedByUserId String?
+  reason            String?
+  status            LeadReassignmentStatus @default(PENDING)
+  decidedBy         String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  createdAt         DateTime               @default(now())
+
+  @@index([leadId])
+  @@index([status])
+}
+
+// Leads that arrive on their own from ad platforms (Meta lead ads, Google Ads
+// lead forms) through the webhooks in src/inbound-leads. One row per
+// (provider, externalId) makes delivery idempotent — the platforms retry — and
+// keeps a record of what was received, what it became, and why it failed.
+enum InboundLeadStatus {
+  CREATED
+  DUPLICATE
+  FAILED
+}
+
+model InboundLeadEvent {
+  id         String            @id @default(uuid())
+  provider   String
+  externalId String
+  status     InboundLeadStatus
+  leadId     String?
+  error      String?
+  payload    Json?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([createdAt])
+}
+
+// Website content posts
+model ContentPost {
+  id                    String            @id @default(uuid())
+  formWebsiteId         String
+  // Protect content
+  formWebsite           FormWebsite       @relation(fields: [formWebsiteId], references: [id], onDelete: Restrict)
+  type                  ContentPostType
+  // Unique per website
+  slug                  String
+  title                 String
+  status                ContentPostStatus @default(DRAFT)
+  featured              Boolean           @default(false)
+  seoTitle              String?
+  seoDescription        String?
+  data                  Json              @default("{}")
+  // Live snapshot
+  publishedData         Json?
+  hasUnpublishedChanges Boolean           @default(false)
+  version               Int               @default(1)
+  // Accountable user
+  authorId              String
+  author                User              @relation("ContentPostAuthor", fields: [authorId], references: [id])
+  updatedById           String?
+  updatedBy             User?             @relation("ContentPostUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  // First publish date
+  publishedAt           DateTime?
+  lastPublishedAt       DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  products ContentPostProduct[]
+
+  @@unique([formWebsiteId, slug])
+  @@index([formWebsiteId, type, status, publishedAt])
+  @@index([formWebsiteId, type, updatedAt])
+  @@index([authorId])
+  @@index([updatedById])
+}
+
+enum ContentPostType {
+  BLOG
+  CASE_STUDY
+}
+
+enum ContentPostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// Case study products
+model ContentPostProduct {
+  id                   String             @id @default(uuid())
+  contentPostId        String
+  contentPost          ContentPost        @relation(fields: [contentPostId], references: [id], onDelete: Cascade)
+  formWebsiteProductId String
+  formWebsiteProduct   FormWebsiteProduct @relation(fields: [formWebsiteProductId], references: [id], onDelete: Cascade)
+  quantity             Int
+  displayOrder         Int                @default(0)
+  createdAt            DateTime           @default(now())
+
+  @@unique([contentPostId, formWebsiteProductId])
+  @@index([formWebsiteProductId])
 }

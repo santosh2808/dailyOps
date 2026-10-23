@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
 import { QuotationsService, type QuotationActor } from './quotations.service';
+import { QuotationVisibilityGuard } from '../leads/lead-visibility';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
 import { UpdateQuotationStatusDto } from './dto/update-quotation-status.dto';
@@ -34,15 +35,17 @@ function actorFrom(req: any): QuotationActor {
 
 @ApiTags('quotations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+// QuotationVisibilityGuard: restricted users get a 404 on any ':id' route for
+// a quotation whose lead isn't assigned to them (see lead-visibility.ts).
+@UseGuards(JwtAuthGuard, PermissionsGuard, QuotationVisibilityGuard)
 @Controller('api/v1/quotations')
 export class QuotationsController {
   constructor(private quotationsService: QuotationsService) {}
 
   @Get()
   @RequirePermission('Quotation', 'View')
-  findAll(@Query() query: QueryQuotationDto) {
-    return this.quotationsService.findAll(query);
+  findAll(@Query() query: QueryQuotationDto, @Req() req: any) {
+    return this.quotationsService.findAll(query, req.user);
   }
 
   // Approvals inbox (requirement #9) — declared before ':id' so it isn't
@@ -87,7 +90,7 @@ export class QuotationsController {
   @Post()
   @RequirePermission('Quotation', 'Create')
   create(@Body() dto: CreateQuotationDto, @Req() req: any) {
-    return this.quotationsService.create(dto, req.user?.name);
+    return this.quotationsService.create(dto, req.user?.name, req.user);
   }
 
   @Patch(':id')

@@ -27,6 +27,7 @@ import AiStatusBadge from "@/components/leads/AiStatusBadge";
 import AiQualificationBadge from "@/components/leads/AiQualificationBadge";
 import LeadFiltersBar, { emptyLeadFilters, type LeadFilters } from "@/components/leads/LeadFiltersBar";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
+import { useLeadCopyAudit } from "@/hooks/useLeadCopyAudit";
 import DeleteLeadConfirmDialog from "@/components/leads/DeleteLeadConfirmDialog";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 import { sourceLabel } from "@/components/leads/leadOptions";
@@ -64,8 +65,9 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
   const source = searchParams.get("source");
   const followUp = searchParams.get("followUp");
   return {
-    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     ...emptyLeadFilters,
+    // Must come after the emptyLeadFilters spread, which resets followUp to "".
+    followUp: (["TODAY", "OVERDUE", "UPCOMING"].includes(followUp ?? "") ? followUp : "") as LeadFilters["followUp"],
     source: (source as LeadSource | null) ?? emptyLeadFilters.source,
     status: (status as LeadStatus | null) ?? emptyLeadFilters.status,
     assignedToUserId: assignedToUserId ?? emptyLeadFilters.assignedToUserId,
@@ -74,6 +76,8 @@ function initialFiltersFromSearchParams(searchParams: URLSearchParams): LeadFilt
 }
 
 export default function LeadList() {
+  // Copy / print on the leads list is recorded in the lead-access audit log.
+  useLeadCopyAudit("Leads list");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // QA bug-fix pass (TC-078/082/095): backend already rejects unauthorized
@@ -351,7 +355,7 @@ export default function LeadList() {
 
           {/* Lead Management Phase 1 (requirement #7) — exactly these
               columns: Lead No, Company, Contact, Phone, Email, Source,
-              Assigned To, Status, Next Follow-up, Last Updated, Actions.
+              Assigned To, Status, Next Follow-up, Created, Last Updated, Actions.
               Priority/Est. Value/Products still show on Lead Details. */}
           <Table>
             <TableHeader>
@@ -403,6 +407,14 @@ export default function LeadList() {
                     {sortIcon("nextFollowUp")}
                   </button>
                 </TableHead>
+                {/* "Created" is what the date-range filter above works on,
+                    so it's shown (and sortable) right next to it. */}
+                <TableHead className="hidden lg:table-cell">
+                  <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
+                    Created
+                    {sortIcon("createdAt")}
+                  </button>
+                </TableHead>
                 <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
                 {/* D.O.T. AI Lead Assistant Phase 1 (Step 10) — kept behind
                     the widest breakpoint only, per "don't clutter the main
@@ -415,7 +427,7 @@ export default function LeadList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Spinner /> Loading leads...
                     </span>
@@ -423,7 +435,7 @@ export default function LeadList() {
                 </TableRow>
               ) : leads.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
                     No leads found. Click "Create Lead" to add one.
                   </TableCell>
                 </TableRow>
@@ -472,6 +484,7 @@ export default function LeadList() {
                       <LeadStatusBadge status={lead.status} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(lead.createdAt)}</TableCell>
                     <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
                     <TableCell className="hidden 2xl:table-cell">
                       <AiStatusBadge status={lead.aiStatus} />

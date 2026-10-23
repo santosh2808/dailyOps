@@ -335,6 +335,7 @@ export const LEAD_SOURCES = [
   "EMAIL",
   "PHONE",
   "META",
+  "GOOGLE_ADS",
   "OTHER",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
@@ -435,6 +436,11 @@ export interface Lead {
   updatedAt: string;
   deletedAt?: string | null;
   products?: LeadProduct[];
+  installationCharge?: number | null;
+  transportationCharge?: number | null;
+  customerTransport?: boolean;
+  pricesIncludeChargesAndGst?: boolean;
+  gstIncludedInPrices?: boolean;
   _count?: { products: number };
   // Lead Management Phase 1 (requirement #12) — lets Lead Details show
   // "View Quotation"/"Send Quotation" instead of "Generate Quotation" once
@@ -481,6 +487,45 @@ export interface Lead {
   // actual bytes are fetched per-photo via getSiteVisitPhotoBlobUrl() in
   // api/leads.ts, never embedded here.
   siteVisitPhotos?: LeadSiteVisitPhoto[];
+  // A reassignment of this lead awaiting manager approval (at most one).
+  reassignmentRequests?: {
+    id: string;
+    toUserId: string | null;
+    toUserName: string | null;
+    requestedBy: string | null;
+    createdAt: string;
+  }[];
+  // Only present on the PATCH response when this edit's assignee change was
+  // turned into an approval request instead of being applied.
+  reassignmentRequested?: boolean;
+}
+
+export type LeadReassignmentStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface LeadReassignmentRequest {
+  id: string;
+  leadId: string;
+  fromUserName: string | null;
+  toUserName: string | null;
+  requestedBy: string | null;
+  status: LeadReassignmentStatus;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  createdAt: string;
+  lead: { id: string; leadNumber: string; companyName: string; contactPerson: string; state: string | null };
+}
+
+export interface LeadAccessSummaryRow {
+  actorName: string;
+  viewed: number;
+  distinctLeadsViewed: number;
+  exported: number;
+  leadsExported: number;
+  copied: number;
+  printed: number;
+  lastActivity: string;
+  flags: string[];
 }
 
 export interface LeadSiteVisitPhoto {
@@ -734,6 +779,7 @@ export interface Quotation {
   // product's base price). See QuotationsService.computeTotals().
   transportScope: TransportScope;
   pricesIncludeChargesAndGst: boolean;
+  gstIncludedInPrices?: boolean;
   gstAmount: number;
   // Additive: flat, order-level discount — mirrors SalesOrder.discount.
   // Applied as a post-tax rebate (subtracted from grandTotal, doesn't change
@@ -1520,6 +1566,8 @@ export interface FormWebsite {
   supportEmail?: string | null;
   // Per-website CORS allow-list for the public submission endpoint.
   allowedOrigins: string[];
+  // Public site address
+  siteUrl?: string | null;
   configuration?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1610,4 +1658,149 @@ export interface WebFormIntakeSummary {
   subjectLabel: string;
   submittedData: Record<string, unknown>;
   createdAt: string;
+}
+
+// Website content
+export const CONTENT_POST_TYPES = ["BLOG", "CASE_STUDY"] as const;
+export type ContentPostType = (typeof CONTENT_POST_TYPES)[number];
+
+export const CONTENT_POST_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
+export type ContentPostStatus = (typeof CONTENT_POST_STATUSES)[number];
+
+// Stored image
+export interface ContentImage {
+  key: string;
+  alt?: string;
+  url?: string | null;
+}
+
+// Article JSON
+export interface ContentRichTextNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: ContentRichTextNode[];
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+  text?: string;
+}
+
+export interface BlogData {
+  excerpt?: string;
+  coverImage?: ContentImage;
+  category?: string;
+  tags?: string[];
+  byline?: string;
+  body?: ContentRichTextNode;
+  ogImage?: ContentImage;
+  date?: string;
+}
+
+export interface CaseStudyKeyResult {
+  value: string;
+  label: string;
+}
+
+export interface CaseStudyQuote {
+  text: string;
+  name: string;
+  designation?: string;
+}
+
+export interface CaseStudyData {
+  excerpt?: string;
+  coverImage?: ContentImage;
+  clientName?: string;
+  anonymousClientLabel?: string;
+  clientLogo?: ContentImage;
+  industry?: string;
+  // For industry Other
+  industryOther?: string;
+  city?: string;
+  state?: string;
+  areaSqFt?: number;
+  keyResults?: CaseStudyKeyResult[];
+  challenge?: string;
+  solution?: string;
+  results?: string;
+  quote?: CaseStudyQuote;
+  gallery?: ContentImage[];
+  videoUrl?: string;
+  completedAt?: string;
+}
+
+export interface ContentUserRef {
+  id: string;
+  name: string;
+}
+
+export interface ContentWebsiteOption {
+  id: string;
+  code: string;
+  name: string;
+  status: FormWebsiteStatus;
+  siteUrl?: string | null;
+}
+
+export interface ContentProductOption {
+  id: string;
+  publicCode: string;
+  label: string;
+  product: { id: string; name: string };
+}
+
+export interface ContentPostProduct {
+  id: string;
+  formWebsiteProductId: string;
+  quantity: number;
+  displayOrder: number;
+  formWebsiteProduct: {
+    id: string;
+    publicCode: string;
+    label: string;
+    enabled: boolean;
+    product: { id: string; name: string };
+  };
+}
+
+// List row
+export interface ContentPostListItem {
+  id: string;
+  formWebsiteId: string;
+  formWebsite: { id: string; code: string; name: string; siteUrl?: string | null };
+  type: ContentPostType;
+  slug: string;
+  title: string;
+  status: ContentPostStatus;
+  featured: boolean;
+  hasUnpublishedChanges: boolean;
+  version: number;
+  author: ContentUserRef;
+  updatedBy?: ContentUserRef | null;
+  publishedAt?: string | null;
+  lastPublishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  coverImage?: ContentImage | null;
+}
+
+// Status tab counts
+export interface ContentPostCounts {
+  all: number;
+  draft: number;
+  published: number;
+  unpublishedChanges: number;
+  archived: number;
+}
+
+export interface ContentPost extends Omit<ContentPostListItem, "coverImage"> {
+  formWebsite: { id: string; code: string; name: string; status: FormWebsiteStatus; siteUrl?: string | null };
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  data: BlogData & CaseStudyData;
+  products: ContentPostProduct[];
+}
+
+// Field error
+export interface ContentFieldError {
+  field: string;
+  message: string;
 }

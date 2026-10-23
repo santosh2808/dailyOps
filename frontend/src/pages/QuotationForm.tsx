@@ -15,6 +15,7 @@ import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import CustomerSelect from "@/components/quotations/CustomerSelect";
 import QuotationItemsEditor, {
   computeSubtotal,
+  isFanProduct,
 } from "@/components/quotations/QuotationItemsEditor";
 import ConfirmPriceIncludesChargesDialog from "@/components/quotations/ConfirmPriceIncludesChargesDialog";
 import { Select } from "@/components/ui/select";
@@ -44,6 +45,8 @@ interface FormState {
   // a raised item price already includes installation/transportation/GST —
   // see Quotation.pricesIncludeChargesAndGst.
   pricesIncludeChargesAndGst: boolean;
+  // Item prices include GST, installation/transportation are extra.
+  gstIncludedInPrices: boolean;
   // Additive: flat, order-level discount — mirrors SalesOrderForm's own
   // "Additional Discount" field/convention. Blank/0 means no discount.
   // Applied as a post-tax rebate (subtracted from grandTotal only, doesn't
@@ -162,6 +165,7 @@ const emptyForm: FormState = {
   transportationCharge: "",
   transportScope: "COMPANY_SCOPE",
   pricesIncludeChargesAndGst: false,
+  gstIncludedInPrices: false,
   discount: "",
   validUntil: "",
   notes: "",
@@ -274,7 +278,11 @@ export default function QuotationForm() {
         // current items — i.e. it was deliberately overridden. Otherwise
         // leave the field blank so it keeps auto-recalculating if items are
         // edited, instead of freezing today's amount as a stale override.
-        const loadedQty = (quotation.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+        // Fan items only, matching the preview and backend
+        const loadedQty = (quotation.items ?? []).reduce(
+          (sum, item) => (isFanProduct(item.product) ? sum + item.quantity : sum),
+          0,
+        );
         const autoInstallation = INSTALLATION_RATE_PER_FAN * loadedQty;
         const installationCharge =
           quotation.installationCharge !== autoInstallation ? String(quotation.installationCharge ?? "") : "";
@@ -287,6 +295,7 @@ export default function QuotationForm() {
           transportationCharge: quotation.transportationCharge ? String(quotation.transportationCharge) : "",
           transportScope: quotation.transportScope ?? "COMPANY_SCOPE",
           pricesIncludeChargesAndGst: quotation.pricesIncludeChargesAndGst ?? false,
+          gstIncludedInPrices: quotation.gstIncludedInPrices ?? false,
           discount: quotation.discount ? String(quotation.discount) : "",
           validUntil: toDateInputValue(quotation.validUntil),
           notes: quotation.notes ?? "",
@@ -441,6 +450,7 @@ export default function QuotationForm() {
       transportationCharge: form.transportationCharge.trim() ? Number(form.transportationCharge) : undefined,
       transportScope: form.transportScope,
       pricesIncludeChargesAndGst: form.pricesIncludeChargesAndGst,
+      gstIncludedInPrices: form.gstIncludedInPrices && !form.pricesIncludeChargesAndGst,
       discount: form.discount.trim() ? Number(form.discount) : undefined,
       validUntil: form.validUntil || undefined,
       notes: form.notes.trim() || undefined,
@@ -468,8 +478,13 @@ export default function QuotationForm() {
   }
 
   const subtotal = computeSubtotal(items);
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const autoInstallationCharge = INSTALLATION_RATE_PER_FAN * totalQuantity;
+  // Matches the backend: only fan-type items (populated technicalSpec) earn
+  // the per-fan installation charge; spare parts don't.
+  const fanQuantity = items.reduce(
+    (sum, item) => (isFanProduct(catalog.find((p) => p.id === item.productId)) ? sum + item.quantity : sum),
+    0,
+  );
+  const autoInstallationCharge = INSTALLATION_RATE_PER_FAN * fanQuantity;
   const gstPercentNum = form.gstPercent.trim() ? Number(form.gstPercent) || 0 : 0;
   // Mirrors QuotationsService.computeTotals(): once staff confirm item
   // prices already include installation/transportation/GST, those charges
@@ -487,9 +502,14 @@ export default function QuotationForm() {
       : form.transportationCharge.trim()
         ? Number(form.transportationCharge) || 0
         : 0;
+  const chargedTotal = subtotal + installationChargeNum + transportationChargeNum;
   const gstAmount = form.pricesIncludeChargesAndGst
     ? subtotal - subtotal / (1 + gstPercentNum / 100)
-    : (subtotal + installationChargeNum + transportationChargeNum) * (gstPercentNum / 100);
+    : form.gstIncludedInPrices
+      ? chargedTotal - chargedTotal / (1 + gstPercentNum / 100)
+      : chargedTotal * (gstPercentNum / 100);
+  // GST already inside item prices and installation/transportation.
+  const gstInclusive = form.pricesIncludeChargesAndGst || form.gstIncludedInPrices;
   // Bug fix: mirrors QuotationsService.computeTotals() — GST is quoted as
   // "Extra" but not charged/collected at the Quotation stage at all (it's
   // only actually added once a Sales Order is created from an accepted
@@ -637,7 +657,10 @@ export default function QuotationForm() {
                         min="0.01"
                         step="0.01"
                         value={form.gstPercent}
-                        onChange={(e) => update("gstPercent", e.target.value)}
+                        readOnly
+                        disabled
+                        title="GST is fixed and cannot be edited"
+                        className="bg-muted"
                       />
                       {errors.gstPercent && (
                         <p className="text-xs text-destructive">{errors.gstPercent}</p>
@@ -699,6 +722,24 @@ export default function QuotationForm() {
                     </div>
 
                     {!form.pricesIncludeChargesAndGst && (
+                      <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={form.gstIncludedInPrices}
+                          onChange={(e) => update("gstIncludedInPrices", e.target.checked)}
+                        />
+                        <span>
+                          Unit price includes GST (installation &amp; transportation extra)
+                          <span className="block text-xs text-muted-foreground">
+                            GST is already in the item prices and in the installation / transportation amounts
+                            below; no GST is added on top.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+                    {!form.pricesIncludeChargesAndGst && (
                       <div className="space-y-2">
                         <Label htmlFor="installationCharge">Installation Charge (₹)</Label>
                         <Input
@@ -706,7 +747,7 @@ export default function QuotationForm() {
                           inputMode="decimal"
                           value={form.installationCharge}
                           onChange={(e) => update("installationCharge", e.target.value)}
-                          placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${totalQuantity} fan${totalQuantity === 1 ? "" : "s"})`}
+                          placeholder={`Auto: ${formatCurrency(autoInstallationCharge)} (₹8,000 × ${fanQuantity} fan${fanQuantity === 1 ? "" : "s"})`}
                         />
                         <p className="text-xs text-muted-foreground">
                           Leave blank to auto-calculate at ₹8,000 per fan. Only fill this in to
@@ -788,7 +829,7 @@ export default function QuotationForm() {
                         GST ({gstPercentNum || 0}%){form.pricesIncludeChargesAndGst ? " — Included" : ""}
                       </p>
                       <p className="font-medium text-slate-900">
-                        {form.pricesIncludeChargesAndGst ? "Included" : "Extra"}
+                        {gstInclusive ? "Included" : "Extra"}
                       </p>
                     </div>
                     <div>
@@ -798,7 +839,7 @@ export default function QuotationForm() {
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Grand Total</p>
                       <p className="font-semibold text-slate-900">
-                        {form.pricesIncludeChargesAndGst
+                        {gstInclusive
                           ? formatCurrency(grandTotal)
                           : `${formatCurrency(grandTotal)} + GST Extra`}
                       </p>
@@ -858,6 +899,17 @@ export default function QuotationForm() {
                         (key === "installationCharge" || key === "transportation") &&
                         form.pricesIncludeChargesAndGst
                       ) {
+                        return (
+                          <div key={key} className="space-y-1">
+                            <Label htmlFor={`ct-${key}`} className="text-xs">
+                              {label}
+                            </Label>
+                            <Input id={`ct-${key}`} value="Included" disabled readOnly />
+                          </div>
+                        );
+                      }
+                      // GST already in prices: the PDF prints "Included"
+                      if (key === "gstTerms" && gstInclusive) {
                         return (
                           <div key={key} className="space-y-1">
                             <Label htmlFor={`ct-${key}`} className="text-xs">

@@ -24,6 +24,7 @@ import { SalesOrderItemInputDto } from './dto/sales-order-item-input.dto';
 import { MINIMUM_ADVANCE_PERCENT } from './dispatch-override-approvers';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
 import { ApprovalRequestsService } from '../approval-requests/approval-requests.service';
+import { salesOrderVisibilityWhere, type LeadViewer } from '../leads/lead-visibility';
 
 // QA bug-fix pass (TC-080): the linear production sequence a Sales Order
 // moves through. CANCELLED is a side-terminal reachable from any of these
@@ -205,13 +206,16 @@ export class SalesOrdersService {
     private whatsAppService: WhatsAppService,
   ) {}
 
-  async findAll(query: QuerySalesOrderDto) {
+  async findAll(query: QuerySalesOrderDto, viewer?: LeadViewer) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
     const where: Prisma.SalesOrderWhereInput = {
       deletedAt: null,
+      // Restricted users only see orders whose quotation traces to one of
+      // their leads (or has no lead) — see lead-visibility.ts.
+      AND: [salesOrderVisibilityWhere(viewer)],
       ...(query.delayed
         ? {
             status: { notIn: ['DISPATCHED', 'COMPLETED', 'CANCELLED'] as SalesOrderStatus[] },
@@ -1224,6 +1228,7 @@ export class SalesOrdersService {
       installationCharge: number;
       transportationCharge: number;
       pricesIncludeChargesAndGst: boolean;
+      gstIncludedInPrices?: boolean;
       discount: number;
       items: { productId: string; quantity: number; lineTotal: number }[];
     },
@@ -1276,8 +1281,9 @@ export class SalesOrdersService {
     // (see its own comment: "GST is shown as the amount already embedded in
     // the subtotal... not an additional line"). Adding it again here
     // inflated the Sales Order's Grand Total above the actual accepted
-    // price.
-    totals.grandTotal = quotation.pricesIncludeChargesAndGst
+    // price. gstIncludedInPrices is the same case: GST is already inside
+    // grandTotal (item prices and installation/transportation).
+    totals.grandTotal = quotation.pricesIncludeChargesAndGst || quotation.gstIncludedInPrices
       ? quotation.grandTotal
       : Math.round((quotation.grandTotal + quotation.gstAmount) * 100) / 100;
 

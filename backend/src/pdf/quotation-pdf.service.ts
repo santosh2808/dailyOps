@@ -111,6 +111,8 @@ export interface QuotationPdfInput {
   // own defaults.
   transportScope?: TransportScope;
   pricesIncludeChargesAndGst?: boolean;
+  // Item prices include GST; installation/transportation are extra and carry GST.
+  gstIncludedInPrices?: boolean;
   // Additive: flat, order-level discount (see Quotation.discount) —
   // subtracted from grandTotal already (see QuotationsService.computeTotals),
   // so grandTotal below is already net of this. Shown as its own "Discount"
@@ -693,6 +695,18 @@ export class QuotationPdfService {
     return quotation.items.reduce((sum, item) => sum + item.quantity, 0) > 1;
   }
 
+  // Installation is a quotation-level total (Rs.8,000 per fan across ALL fan
+  // items). Printing that same total under every product's Annexure made a
+  // 5 x 8ft + 1 x 24ft quotation read as Rs.48,000 for each fan size. Each
+  // item's Annexure now shows only its own share (proportional to its fan
+  // quantity), so the shares add up to the quotation's installation total.
+  private installationShareForItem(item: QuotationPdfItem, quotation: QuotationPdfInput): { share: number; qty: number } | null {
+    const isFan = (i: QuotationPdfItem) => Object.keys(this.getTechnicalSpec(i) ?? {}).length > 0;
+    const fanQty = quotation.items.reduce((sum, i) => (isFan(i) ? sum + i.quantity : sum), 0);
+    if (!isFan(item) || fanQty <= 0 || fanQty === item.quantity) return null;
+    return { share: Math.round(((quotation.installationCharge * item.quantity) / fanQty) * 100) / 100, qty: item.quantity };
+  }
+
   private resolveCommercialTerms(quotation: QuotationPdfInput): QuotationCommercialTerms {
     const raw = quotation.commercialTerms;
     const given = raw && typeof raw === 'object' ? (raw as QuotationCommercialTerms) : {};
@@ -725,7 +739,9 @@ export class QuotationPdfService {
         // just below.
         value: includesCharges
           ? `${this.gstLabel(quotation)} Included`
-          : `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
+          : quotation.gstIncludedInPrices
+            ? `${this.gstLabel(quotation)} Included`
+            : `${this.gstLabel(quotation)} ${terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms}`,
       },
       {
         label: 'Transportation',
@@ -946,7 +962,12 @@ export class QuotationPdfService {
         value: includesCharges
           ? 'Included'
           : quotation.installationCharge > 0
-            ? `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
+            ? (() => {
+                const part = this.installationShareForItem(item, quotation);
+                return part
+                  ? `${this.formatCurrency(part.share)} (for ${part.qty} fan${part.qty === 1 ? '' : 's'}; quotation total ${this.formatCurrency(quotation.installationCharge)})`
+                  : `${this.formatCurrency(quotation.installationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`;
+              })()
             : quotation.installationCharge === 0
               ? 'Included'
               : terms.installationCharge || DEFAULT_COMMERCIAL_TERMS.installationCharge,
@@ -963,7 +984,7 @@ export class QuotationPdfService {
           : quotation.transportScope === 'CUSTOMER_SCOPE'
             ? 'By Customer'
             : quotation.transportationCharge > 0
-              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (Total, all fans)' : ''}`
+              ? `${this.formatCurrency(quotation.transportationCharge)}${this.hasMultipleFans(quotation) ? ' (one charge for the whole order)' : ''}`
               : quotation.transportationCharge === 0
                 ? 'Included'
                 : terms.transportation || DEFAULT_COMMERCIAL_TERMS.transportation,
@@ -977,7 +998,10 @@ export class QuotationPdfService {
     // under Commercial Terms), never a computed rupee figure — showing an
     // amount here would suggest that amount is already part of Grand Total
     // below, which it deliberately isn't.
-    const gstValue = includesCharges ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
+    // gstIncludedInPrices: GST is already inside the item prices and the
+    // installation/transportation amounts, so it reads "Included" too.
+    const gstInclusive = includesCharges || !!quotation.gstIncludedInPrices;
+    const gstValue = gstInclusive ? 'Included' : terms.gstTerms || DEFAULT_COMMERCIAL_TERMS.gstTerms;
     // Grand Total on the Quotation is GST-exclusive (see above) — append
     // "+ GST Extra" so it's unambiguous the number below doesn't already
     // include tax, matching the GST row's own wording. Not appended when
@@ -987,7 +1011,7 @@ export class QuotationPdfService {
     // enter "Included" there, the GST row already reads "Included", so
     // Grand Total must not still say "+ GST Extra".
     const gstTermsIncluded = /\bincluded\b/i.test(gstValue);
-    const grandTotalValue = includesCharges || gstTermsIncluded
+    const grandTotalValue = gstInclusive || gstTermsIncluded
       ? this.formatCurrency(quotation.grandTotal)
       : `${this.formatCurrency(quotation.grandTotal)} + GST Extra`;
     // Additive: printed as its own row, right above Grand Total, only when a

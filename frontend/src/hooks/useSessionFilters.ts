@@ -15,13 +15,42 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 // wins over a remembered one. Pass `null` when the URL carries no relevant
 // filter params, so a stored/remembered value (or the default) is used
 // instead.
+//
+// A browser refresh (F5 / reload button) resets filters to their defaults:
+// filters are only remembered across in-app navigation, not across a reload.
+// Each key's remembered value is discarded the first time it is read after a
+// reload; later visits in the same page load remember filters as normal.
+const isReload = (() => {
+  try {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type === "reload";
+  } catch {
+    return false;
+  }
+})();
+const keysHandledThisLoad = new Set<string>();
+
+function shouldIgnoreStored(storageKey: string): boolean {
+  if (keysHandledThisLoad.has(storageKey)) return false;
+  keysHandledThisLoad.add(storageKey);
+  if (!isReload) return false;
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
 export function useSessionFilters<T>(
   storageKey: string,
   initialFromUrl: T | null,
   defaultValue: T,
 ): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
+    const ignoreStored = shouldIgnoreStored(storageKey);
     if (initialFromUrl !== null) return initialFromUrl;
+    if (ignoreStored) return defaultValue;
     try {
       const stored = sessionStorage.getItem(storageKey);
       if (stored) return JSON.parse(stored) as T;

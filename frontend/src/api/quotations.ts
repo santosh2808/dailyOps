@@ -62,6 +62,7 @@ export interface QuotationPayload {
   // ConfirmPriceIncludesChargesDialog).
   transportScope?: TransportScope;
   pricesIncludeChargesAndGst?: boolean;
+  gstIncludedInPrices?: boolean;
   // Additive: flat, order-level discount applied to the grand total —
   // mirrors SalesOrder's own discount field. Omit/0 for no discount.
   discount?: number;
@@ -90,8 +91,11 @@ export async function createQuotation(payload: QuotationPayload) {
 // Lead Management Phase 1 (requirement #8) — the one-click "Generate
 // Quotation" action on a Qualified lead. No items/customer to pick: the
 // backend derives everything from the Lead's own linked products.
-export async function generateQuotationFromLead(leadId: string) {
-  const res = await api.post<Quotation>("/api/v1/quotations", { leadId });
+export async function generateQuotationFromLead(
+  leadId: string,
+  charges: Pick<QuotationPayload, "installationCharge" | "transportationCharge" | "transportScope" | "pricesIncludeChargesAndGst" | "gstIncludedInPrices"> = {},
+) {
+  const res = await api.post<Quotation>("/api/v1/quotations", { leadId, ...charges });
   return res.data;
 }
 

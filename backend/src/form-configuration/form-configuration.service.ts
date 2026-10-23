@@ -109,6 +109,7 @@ export class FormConfigurationService {
         name: dto.name,
         supportEmail: dto.supportEmail,
         allowedOrigins: dto.allowedOrigins ?? [],
+        siteUrl: dto.siteUrl || null,
         configuration: (dto.configuration ?? {}) as Prisma.InputJsonValue,
       },
       include: FORM_INCLUDE,
@@ -136,6 +137,8 @@ export class FormConfigurationService {
         status: dto.status,
         supportEmail: dto.supportEmail,
         allowedOrigins: dto.allowedOrigins,
+        // '' clears it
+        siteUrl: dto.siteUrl === undefined ? undefined : dto.siteUrl || null,
         configuration: dto.configuration as Prisma.InputJsonValue | undefined,
       },
       include: FORM_INCLUDE,
@@ -147,8 +150,8 @@ export class FormConfigurationService {
         recordId: id,
         action: 'WebsiteUpdated',
         actorName,
-        oldValue: { status: existing.status },
-        newValue: { status: updated.status },
+        oldValue: { status: existing.status, siteUrl: existing.siteUrl },
+        newValue: { status: updated.status, siteUrl: updated.siteUrl },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 

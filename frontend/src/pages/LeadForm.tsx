@@ -9,6 +9,12 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LeadProductsSelector from "@/components/leads/LeadProductsSelector";
+import GenerateChargesFields, {
+  chargesFromLead,
+  emptyGenerateCharges,
+  validateGenerateCharges,
+  type GenerateCharges,
+} from "@/components/quotations/GenerateChargesFields";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
 import PreviousLeadSelect from "@/components/leads/PreviousLeadSelect";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
@@ -88,8 +94,11 @@ export default function LeadForm() {
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [products, setProducts] = useState<LeadProductPayload[]>([]);
+  const [charges, setCharges] = useState<GenerateCharges>(emptyGenerateCharges);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [loading, setLoading] = useState(isEdit);
+  // True when the lead being edited already has an owner (see validate()).
+  const [wasAssigned, setWasAssigned] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -102,6 +111,7 @@ export default function LeadForm() {
       try {
         const lead = await getLead(leadId);
         if (cancelled) return;
+        setWasAssigned(!!lead.assignedToUserId);
         setForm({
           companyName: lead.companyName,
           contactPerson: lead.contactPerson,
@@ -128,6 +138,7 @@ export default function LeadForm() {
           // edit mode). Kept at "" just to satisfy FormState.
           previousLeadId: "",
         });
+        setCharges(chargesFromLead(lead));
         setProducts(
           (lead.products ?? []).map((p) => ({
             productId: p.productId,
@@ -172,7 +183,13 @@ export default function LeadForm() {
     // Dashboard's India Sales Map, and needs an owner so nothing sits
     // unassigned.
     if (!form.state.trim()) next.state = "State is required";
-    if (!form.assignedToUserId) next.assignedToUserId = "Assigning this lead to a user is required";
+    // Required when creating, and when editing a lead that already has an
+    // owner (so an edit can't silently un-assign it). A still-unassigned lead
+    // (e.g. just imported, being worked by a telecaller) must stay editable so
+    // remarks/description can be saved before it reaches a sales person.
+    if (!form.assignedToUserId && (!isEdit || wasAssigned)) {
+      next.assignedToUserId = "Assigning this lead to a user is required";
+    }
     // QA bug-fix pass, Group B (TC-083/097): normalize before validating,
     // so "+91 98765 43210" / "+91-9876543210" typed the way a staff member
     // would naturally read it off a card is accepted instead of rejected —
@@ -216,6 +233,11 @@ export default function LeadForm() {
     e.preventDefault();
     setSubmitError("");
     if (!validate()) return;
+    const chargeError = validateGenerateCharges(charges);
+    if (chargeError) {
+      setSubmitError(chargeError);
+      return;
+    }
 
     const payload: LeadPayload = {
       companyName: form.companyName.trim(),
@@ -233,6 +255,23 @@ export default function LeadForm() {
       title: form.title.trim(),
       description: form.description.trim() || undefined,
       products: products.length > 0 ? products : undefined,
+      // Installation unticked => 0 (not charged); ticked & blank => auto per fan.
+      installationCharge: !charges.installationOn
+        ? 0
+        : charges.installationCharge.trim()
+          ? Number(charges.installationCharge)
+          : isEdit
+            ? null
+            : undefined,
+      transportationCharge:
+        charges.transportOn && charges.transportationCharge.trim()
+          ? Number(charges.transportationCharge)
+          : isEdit
+            ? null
+            : undefined,
+      customerTransport: !charges.transportOn,
+      pricesIncludeChargesAndGst: false,
+      gstIncludedInPrices: !charges.gstExtra,
       estimatedValue: form.estimatedValue.trim() ? Number(form.estimatedValue) : undefined,
       priority: form.priority,
       source: form.source,
@@ -252,8 +291,14 @@ export default function LeadForm() {
     setSubmitting(true);
     try {
       if (isEdit && id) {
-        await updateLead(id, payload);
-        toast.success("Lead updated successfully.");
+        const saved = await updateLead(id, payload);
+        if (saved.reassignmentRequested) {
+          toast.info(
+            "Changes saved. The reassignment was sent to a manager for approval — the lead stays with you until it is approved.",
+          );
+        } else {
+          toast.success("Lead updated successfully.");
+        }
         navigate(`/leads/${id}`);
       } else {
         const created = await createLead(payload);
@@ -423,6 +468,10 @@ export default function LeadForm() {
 
                   <LeadProductsSelector value={products} onChange={setProducts} />
 
+                  {products.length > 0 && (
+                    <GenerateChargesFields value={charges} onChange={setCharges} idPrefix="lead-charges" />
+                  )}
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor="estimatedValue">Estimated Value</Label>
@@ -509,7 +558,7 @@ export default function LeadForm() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Assigned To *</Label>
+                    <Label>Assigned To{!isEdit || wasAssigned ? " *" : ""}</Label>
                     <AssignedToPicker
                       value={form.assignedToUserId || null}
                       onChange={(userId) => update("assignedToUserId", userId ?? "")}

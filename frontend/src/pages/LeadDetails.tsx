@@ -23,6 +23,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/context/AuthContext";
+import { useLeadCopyAudit } from "@/hooks/useLeadCopyAudit";
 import {
   addLeadNote,
   convertLeadToCustomer,
@@ -71,6 +72,8 @@ export default function LeadDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
+  // Copy / print on this lead is recorded in the lead-access audit log.
+  useLeadCopyAudit("Lead details", id);
 
   // User feedback: clicking through to a quotation from here, then hitting
   // QuotationDetails.tsx's own "Back to Quotations" button, always dumped
@@ -294,12 +297,12 @@ export default function LeadDetails() {
   // Quotation, only reachable while Qualified and only shown once (see
   // nextActionFor: once lead.quotations has an entry, the button becomes
   // "View Quotation" instead of generating a second one).
-  async function handleGenerateQuotation() {
+  async function handleGenerateQuotation(charges: Parameters<typeof generateQuotationFromLead>[1] = {}) {
     if (!id) return;
     setGeneratingQuotation(true);
     setGenerateError("");
     try {
-      const quotation = await generateQuotationFromLead(id);
+      const quotation = await generateQuotationFromLead(id, charges);
       toast.success("Quotation generated.");
       goToQuotation(quotation.id);
     } catch (err: any) {
@@ -368,6 +371,13 @@ export default function LeadDetails() {
             </div>
           ) : (
             <div className="mx-auto max-w-4xl space-y-6">
+              {lead.reassignmentRequests && lead.reassignmentRequests.length > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Reassignment to <strong>{lead.reassignmentRequests[0].toUserName ?? "Unassigned"}</strong> requested
+                  {lead.reassignmentRequests[0].requestedBy ? ` by ${lead.reassignmentRequests[0].requestedBy}` : ""}{" "}
+                  and awaiting manager approval. The lead stays with its current owner until then.
+                </div>
+              )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">{lead.leadNumber}</h2>

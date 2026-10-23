@@ -1,3 +1,4 @@
+import { createdAtRange } from '../common/date-range.util';
 import {
   BadRequestException,
   ConflictException,
@@ -30,6 +31,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
 import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
+import { canViewAllLeads, leadVisibilityWhere, type LeadViewer } from './lead-visibility';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
@@ -216,6 +218,14 @@ const LEAD_DETAIL_INCLUDE = {
     },
     orderBy: { createdAt: 'asc' },
   },
+  // A reassignment awaiting manager approval (see LeadReassignmentRequest) —
+  // lets Lead Details show "reassignment pending" without a second call.
+  reassignmentRequests: {
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { id: true, toUserId: true, toUserName: true, requestedBy: true, createdAt: true },
+  },
 } satisfies Prisma.LeadInclude;
 
 @Injectable()
@@ -394,13 +404,25 @@ export class LeadsService {
     return { status: { notIn: ['WON', 'LOST'] }, nextFollowUp };
   }
 
-  async findAll(query: QueryLeadDto) {
+  // Throws 404 (same as a missing lead) unless `viewer` may see this lead.
+  // Used by services that reach a lead by id outside LeadsController (whose
+  // own `:id` routes are covered by LeadVisibilityGuard).
+  async assertLeadVisible(id: string, viewer?: LeadViewer) {
+    if (canViewAllLeads(viewer)) return;
+    const visible = await this.prisma.lead.count({ where: { id, ...leadVisibilityWhere(viewer) } });
+    if (!visible) throw new NotFoundException('Lead not found');
+  }
+
+  async findAll(query: QueryLeadDto, viewer?: LeadViewer) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
 
     const where: Prisma.LeadWhereInput = {
       deletedAt: null,
+      // AND (not a spread) so it can't be overridden by, or collide with, the
+      // optional assignedToUserId / search OR filters below.
+      AND: [leadVisibilityWhere(viewer)],
       // Before `status` so an explicit status filter still wins over the
       // follow-up window's open-leads rule.
       ...this.followUpWhere(query.followUp),
@@ -411,10 +433,7 @@ export class LeadsService {
       ...(query.state ? { state: query.state } : {}),
       ...(query.dateFrom || query.dateTo
         ? {
-            createdAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
+            createdAt: createdAtRange(query.dateFrom, query.dateTo),
           }
         : {}),
       ...(search
@@ -625,7 +644,7 @@ export class LeadsService {
     throw new Error('Failed to generate a unique lead number');
   }
 
-  async update(id: string, dto: UpdateLeadDto, actorName?: string) {
+  async update(id: string, dto: UpdateLeadDto, actorName?: string, viewer?: LeadViewer) {
     const existing = await this.findOne(id);
     // previousLeadId is immutable after creation (see create-lead.dto.ts) —
     // destructured out here and intentionally discarded so it can never be
@@ -635,11 +654,32 @@ export class LeadsService {
       products,
       expectedCloseDate,
       nextFollowUp,
-      assignedToUserId,
+      assignedToUserId: requestedAssignee,
       preferredLanguage,
       previousLeadId: _previousLeadId,
       ...leadData
     } = dto;
+
+    // Reassignment needs manager approval for users outside the
+    // full-visibility roles (e.g. a Sales Executive): their change is stored
+    // as a pending LeadReassignmentRequest and the lead stays with its
+    // current owner until a Lead.Approve holder approves it. Everything else
+    // in this PATCH still applies. Full-visibility roles (and internal
+    // callers, e.g. the approval itself) reassign directly.
+    let reassignmentRequest: Awaited<ReturnType<LeadsService['createReassignmentRequest']>> | null = null;
+    if (
+      requestedAssignee !== undefined &&
+      (requestedAssignee || null) !== (existing.assignedToUserId ?? null) &&
+      !canViewAllLeads(viewer)
+    ) {
+      reassignmentRequest = await this.createReassignmentRequest(
+        existing,
+        requestedAssignee || null,
+        viewer,
+        actorName,
+      );
+    }
+    const assignedToUserId = reassignmentRequest ? undefined : requestedAssignee;
 
     // D.O.T. AI Lead Assistant Phase 1: recompute the state-based language
     // default only when appropriate — see resolveLanguageOnUpdate() below.
@@ -839,7 +879,122 @@ export class LeadsService {
       await this.notifyLeadAssigned(assignedToUserId, updated);
     }
 
-    return updated;
+    return reassignmentRequest ? { ...updated, reassignmentRequested: true } : updated;
+  }
+
+  // ---- Reassignment approval -------------------------------------------
+
+  private async createReassignmentRequest(
+    existing: { id: string; assignedToUserId: string | null; assignedToUser?: { name: string } | null },
+    toUserId: string | null,
+    viewer?: LeadViewer,
+    actorName?: string,
+  ) {
+    const pending = await this.prisma.leadReassignmentRequest.count({
+      where: { leadId: existing.id, status: 'PENDING' },
+    });
+    if (pending > 0) {
+      throw new BadRequestException('A reassignment request for this lead is already awaiting approval.');
+    }
+    let toUserName: string | null = null;
+    if (toUserId) {
+      const toUser = await this.prisma.user.findUnique({
+        where: { id: toUserId },
+        select: { name: true, isActive: true },
+      });
+      if (!toUser || !toUser.isActive) {
+        throw new BadRequestException('The selected user is not available for assignment.');
+      }
+      toUserName = toUser.name;
+    }
+    const request = await this.prisma.leadReassignmentRequest.create({
+      data: {
+        leadId: existing.id,
+        fromUserId: existing.assignedToUserId,
+        fromUserName: existing.assignedToUser?.name ?? null,
+        toUserId,
+        toUserName,
+        requestedBy: actorName ?? null,
+        requestedByUserId: viewer?.id ?? null,
+      },
+    });
+    await this.prisma.leadHistory.create({
+      data: {
+        leadId: existing.id,
+        action: 'EDITED',
+        description: `Reassignment to ${toUserName ?? 'Unassigned'} requested by ${actorName ?? 'a user'} — awaiting manager approval`,
+        performedBy: actorName,
+      },
+    });
+    return request;
+  }
+
+  async listReassignmentRequests(status?: 'PENDING' | 'APPROVED' | 'REJECTED') {
+    return this.prisma.leadReassignmentRequest.findMany({
+      where: { status: status ?? 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        lead: {
+          select: { id: true, leadNumber: true, companyName: true, contactPerson: true, state: true },
+        },
+      },
+    });
+  }
+
+  async decideReassignment(
+    requestId: string,
+    approve: boolean,
+    approver: { id?: string; name?: string },
+    note?: string,
+  ) {
+    const request = await this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Reassignment request not found');
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException(`This request was already ${request.status.toLowerCase()}.`);
+    }
+
+    // Claim first so two approvers can't both apply it.
+    const claimed = await this.prisma.leadReassignmentRequest.updateMany({
+      where: { id: requestId, status: 'PENDING' },
+      data: {
+        status: approve ? 'APPROVED' : 'REJECTED',
+        decidedBy: approver.name ?? null,
+        decidedAt: new Date(),
+        decisionNote: note ?? null,
+      },
+    });
+    if (claimed.count === 0) throw new BadRequestException('This request was already decided.');
+
+    if (approve) {
+      try {
+        // No viewer = internal/unrestricted: applies the assignment through the
+        // normal update() path (history, assignment history, notification).
+        await this.update(
+          request.leadId,
+          { assignedToUserId: request.toUserId } as unknown as UpdateLeadDto,
+          approver.name,
+        );
+      } catch (err) {
+        await this.prisma.leadReassignmentRequest.update({
+          where: { id: requestId },
+          data: { status: 'PENDING', decidedBy: null, decidedAt: null, decisionNote: null },
+        });
+        throw err;
+      }
+    } else {
+      await this.prisma.leadHistory.create({
+        data: {
+          leadId: request.leadId,
+          action: 'EDITED',
+          description: `Reassignment to ${request.toUserName ?? 'Unassigned'} rejected by ${approver.name ?? 'a manager'}${
+            note ? ` — ${note}` : ''
+          }`,
+          performedBy: approver.name,
+        },
+      });
+    }
+    return this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
   }
 
   // QA bug-fix pass (TC-080): WON/LOST are terminal — this endpoint must
@@ -907,9 +1062,23 @@ export class LeadsService {
       // This endpoint only ever updates the status field. Setting status to
       // WON does not create a Customer — that only happens when the user
       // explicitly calls convertToCustomer() via POST /:id/convert below.
+      // A remark entered with a status change (e.g. a telecaller moving a
+      // lead to Contacted) must also show in the Overview's "Description &
+      // Remarks" card, which reads Lead.remarks. Append (dated, with the
+      // author) rather than overwrite so earlier remarks are never lost; the
+      // full history still lives in the Timeline.
+      const remark = dto.remarks?.trim();
+      const stampedRemark = remark
+        ? `[${new Date().toISOString().slice(0, 10)}${actorName ? ` ${actorName}` : ''}] ${remark}`
+        : undefined;
       const updated = await tx.lead.update({
         where: { id },
-        data: { status: dto.status },
+        data: {
+          status: dto.status,
+          ...(stampedRemark
+            ? { remarks: existing.remarks?.trim() ? `${existing.remarks.trim()}\n${stampedRemark}` : stampedRemark }
+            : {}),
+        },
         include: LEAD_DETAIL_INCLUDE,
       });
 
@@ -1150,6 +1319,75 @@ export class LeadsService {
     return lead;
   }
 
+  // Leads delivered automatically by an ad platform (see src/inbound-leads).
+  // Always created unassigned at NEW, for a manager/telecaller to hand out —
+  // never defaulted to any user. A phone number that already belongs to an
+  // open lead is not created again: the existing lead gets a timeline note and
+  // is returned as `duplicateOf` instead.
+  async createFromAdLead(input: {
+    source: 'META' | 'GOOGLE_ADS';
+    platformLabel: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    company?: string | null;
+    city?: string | null;
+    state?: string | null;
+    details?: string | null;
+  }): Promise<{ lead: { id: string; leadNumber: string }; duplicateOf?: boolean }> {
+    const phone = normalizePhone(input.phone) ?? (input.phone ?? '').replace(/\D/g, '');
+    const contactPerson = input.name?.trim() || 'Ad lead';
+
+    if (phone) {
+      const existing = await this.prisma.lead.findFirst({
+        where: { deletedAt: null, status: { not: 'LOST' }, phone },
+        select: { id: true, leadNumber: true },
+      });
+      if (existing) {
+        await this.prisma.leadHistory.create({
+          data: {
+            leadId: existing.id,
+            action: 'EDITED',
+            description: `Same contact came in again from ${input.platformLabel} — no duplicate lead created`,
+          },
+        });
+        return { lead: existing, duplicateOf: true };
+      }
+    }
+
+    for (let attempt = 1; attempt <= MAX_LEAD_NUMBER_ATTEMPTS; attempt++) {
+      const leadNumber = await this.generateLeadNumber();
+      try {
+        const lead = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.lead.create({
+            data: {
+              leadNumber,
+              companyName: input.company?.trim() || '',
+              contactPerson,
+              email: input.email?.trim() || undefined,
+              phone,
+              city: input.city?.trim() || undefined,
+              state: input.state ? this.matchIndiaState(input.state) : undefined,
+              title: `${input.platformLabel} - ${contactPerson}`,
+              description: input.details || undefined,
+              remarks: input.details || undefined,
+              source: input.source as LeadSource,
+              priority: LeadPriority.MEDIUM,
+            },
+            select: { id: true, leadNumber: true },
+          });
+          await this.logHistory(tx, created.id, 'CREATED', `Lead ${created.leadNumber} received from ${input.platformLabel}`);
+          return created;
+        });
+        return { lead };
+      } catch (error) {
+        if (this.isLeadNumberConflict(error) && attempt < MAX_LEAD_NUMBER_ATTEMPTS) continue;
+        throw error;
+      }
+    }
+    throw new Error('Failed to generate a unique lead number');
+  }
+
   // Additive: Lead <-> Complaint conversion (Website Enquiries -> Lead/Complaint
   // refactor). Requires the caller to hold BOTH Lead.Edit and Complaint.Create
   // (see LeadsController — @RequireAllPermissions). Idempotent guard mirrors
@@ -1259,7 +1497,8 @@ export class LeadsService {
   // it does anything else, so a rejected generation never creates a
   // half-formed Quotation. Returns the lead (with its products already
   // included via findOne()) so the caller doesn't need a second query.
-  async getLeadForQuotationGeneration(leadId: string) {
+  async getLeadForQuotationGeneration(leadId: string, viewer?: LeadViewer) {
+    await this.assertLeadVisible(leadId, viewer);
     const lead = await this.findOne(leadId);
     if (lead.status !== 'QUALIFIED') {
       throw new BadRequestException(
@@ -1956,9 +2195,14 @@ export class LeadsService {
   // export pattern — same isActive-equivalent scope (deletedAt: null, same
   // soft-delete convention as findAll() above), same xlsx library, same
   // "all matching records, not paginated" shape.
-  async exportLeadsToExcel(): Promise<Buffer> {
+  async exportLeadsToExcel(viewer?: LeadViewer): Promise<Buffer> {
+    return (await this.exportLeads(viewer)).buffer;
+  }
+
+  // Same export, also returning the row count so the caller can audit-log it.
+  async exportLeads(viewer?: LeadViewer): Promise<{ buffer: Buffer; count: number }> {
     const leads = await this.prisma.lead.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...leadVisibilityWhere(viewer) },
       orderBy: { createdAt: 'desc' },
       include: { assignedToUser: { select: ASSIGNED_TO_USER_SELECT } },
     });
@@ -1990,7 +2234,10 @@ export class LeadsService {
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+      count: rows.length,
+    };
   }
 
   async previewLeadImport(fileBuffer: Buffer) {

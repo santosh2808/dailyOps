@@ -23,6 +23,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequireAllPermissions, RequirePermission } from '../permissions/require-permission.decorator';
 import { LeadsService } from './leads.service';
+import { LeadVisibilityGuard } from './lead-visibility';
+import { LeadAccessService } from './lead-access.service';
+import { LeadAccessEventDto } from './dto/lead-access-event.dto';
+import { DecideLeadReassignmentDto } from './dto/decide-lead-reassignment.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
@@ -35,15 +39,21 @@ import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 
 @ApiTags('leads')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+// LeadVisibilityGuard: users outside the full-visibility roles (see
+// lead-visibility.ts) get a 404 on any ':id' route for a lead not assigned to
+// them. List/export are scoped inside LeadsService (they pass req.user).
+@UseGuards(JwtAuthGuard, PermissionsGuard, LeadVisibilityGuard)
 @Controller('api/v1/leads')
 export class LeadsController {
-  constructor(private leadsService: LeadsService) {}
+  constructor(
+    private leadsService: LeadsService,
+    private leadAccess: LeadAccessService,
+  ) {}
 
   @Get()
   @RequirePermission('Lead', 'View')
-  findAll(@Query() query: QueryLeadDto) {
-    return this.leadsService.findAll(query);
+  findAll(@Query() query: QueryLeadDto, @Req() req: any) {
+    return this.leadsService.findAll(query, req.user);
   }
 
   // Lead Import. All three are multi-segment or otherwise structurally
@@ -85,15 +95,69 @@ export class LeadsController {
   @RequirePermission('Lead', 'View')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="leads-export.xlsx"')
-  async exportLeads(@Res() res: Response) {
-    const buffer = await this.leadsService.exportLeadsToExcel();
+  async exportLeads(@Res() res: Response, @Req() req: any) {
+    const { buffer, count } = await this.leadsService.exportLeads(req.user);
+    await this.leadAccess.recordExport(req.user, count);
     res.send(buffer);
+  }
+
+  // Lead-access audit. Static routes — declared ahead of ':id' below.
+  // Browser-reported copy/print events on Leads screens (leadId optional for
+  // the list). The lead, when given, must be visible to the caller.
+  @Post('access-events')
+  @RequirePermission('Lead', 'View')
+  async recordAccessEvent(@Body() dto: LeadAccessEventDto, @Req() req: any) {
+    if (dto.leadId) await this.leadsService.assertLeadVisible(dto.leadId, req.user);
+    await this.leadAccess.recordClientEvent(req.user, dto.type, dto.leadId ?? null, {
+      chars: dto.chars,
+      page: dto.page,
+    });
+    return { ok: true };
+  }
+
+  // Per-user totals of views/exports/copies/prints with "worth a look" flags.
+  @Get('access-audit/summary')
+  @RequirePermission('AuditLog', 'View')
+  accessAuditSummary(@Query('days') days?: string) {
+    const n = Math.min(365, Math.max(1, Number(days) || 30));
+    return this.leadAccess.summary(n);
+  }
+
+  // Reassignment approvals (Lead.Approve: Sales Manager / Administrator).
+  @Get('reassignment-requests')
+  @RequirePermission('Lead', 'Approve')
+  listReassignmentRequests(@Query('status') status?: string) {
+    const s = status === 'APPROVED' || status === 'REJECTED' || status === 'PENDING' ? status : 'PENDING';
+    return this.leadsService.listReassignmentRequests(s);
+  }
+
+  @Post('reassignment-requests/:requestId/approve')
+  @RequirePermission('Lead', 'Approve')
+  approveReassignment(
+    @Param('requestId') requestId: string,
+    @Body() dto: DecideLeadReassignmentDto,
+    @Req() req: any,
+  ) {
+    return this.leadsService.decideReassignment(requestId, true, { id: req.user?.id, name: req.user?.name }, dto.note);
+  }
+
+  @Post('reassignment-requests/:requestId/reject')
+  @RequirePermission('Lead', 'Approve')
+  rejectReassignment(
+    @Param('requestId') requestId: string,
+    @Body() dto: DecideLeadReassignmentDto,
+    @Req() req: any,
+  ) {
+    return this.leadsService.decideReassignment(requestId, false, { id: req.user?.id, name: req.user?.name }, dto.note);
   }
 
   @Get(':id')
   @RequirePermission('Lead', 'View')
-  findOne(@Param('id') id: string) {
-    return this.leadsService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req: any) {
+    const lead = await this.leadsService.findOne(id);
+    // Best-effort audit trail of who opened which lead (deduped per 5 min).
+    await this.leadAccess.recordView(id, req.user, lead.leadNumber);
+    return lead;
   }
 
   @Post()
@@ -105,7 +169,7 @@ export class LeadsController {
   @Patch(':id')
   @RequirePermission('Lead', 'Edit')
   update(@Param('id') id: string, @Body() dto: UpdateLeadDto, @Req() req: any) {
-    return this.leadsService.update(id, dto, req.user?.name);
+    return this.leadsService.update(id, dto, req.user?.name, req.user);
   }
 
   @Patch(':id/status')

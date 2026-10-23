@@ -20,6 +20,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../permissions/permissions.guard';
 import { RequirePermission } from '../permissions/require-permission.decorator';
 import { SalesOrdersService, type SalesOrderActor } from './sales-orders.service';
+import { SalesOrderVisibilityGuard } from '../leads/lead-visibility';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
@@ -36,15 +37,15 @@ function actorFrom(req: any): SalesOrderActor {
 
 @ApiTags('sales-orders')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, SalesOrderVisibilityGuard)
 @Controller('api/v1/sales-orders')
 export class SalesOrdersController {
   constructor(private salesOrdersService: SalesOrdersService) {}
 
   @Get()
   @RequirePermission('SalesOrder', 'View')
-  findAll(@Query() query: QuerySalesOrderDto) {
-    return this.salesOrdersService.findAll(query);
+  findAll(@Query() query: QuerySalesOrderDto, @Req() req: any) {
+    return this.salesOrdersService.findAll(query, req.user);
   }
 
   @Get(':id')
