@@ -3,22 +3,17 @@ import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { MOBILE_ACCORDION } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 
-// EXPERIMENT — see MOBILE_ACCORDION in lib/featureFlags.ts.
-//
 // <ResponsiveRecords table={<Table …/>} mobile={<MobileRecordList …/>} />
-// With the flag off (the default) it renders `table` alone — byte-for-byte
-// the committed markup, at every width. With the flag on, the table stays
-// the md+ presentation and MobileRecordList replaces it below md.
+// List pages show their records as expandable cards on phones (below md)
+// and as the table on tablet/desktop (md and up).
 //
 // MobileRecordList is presentation only: each page passes the rows it
 // already fetched plus render functions built from the same expressions
 // its table cells use, and its existing selection/sort state and action
 // buttons. No data fetching, filtering or business rules live here.
 export function ResponsiveRecords({ table, mobile }: { table: ReactNode; mobile: ReactNode }) {
-  if (!MOBILE_ACCORDION) return <>{table}</>;
   return (
     <>
       <div className="hidden md:block">{table}</div>
