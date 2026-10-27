@@ -105,11 +105,11 @@ export default function StateSeriesCodes() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="State Series Codes" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               Job Execution Orders for customers in a listed state are numbered from that state's
@@ -141,7 +141,7 @@ export default function StateSeriesCodes() {
             </div>
           )}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">

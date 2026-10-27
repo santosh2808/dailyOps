@@ -45,11 +45,11 @@ export default function Permissions() {
   }, {});
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Permissions" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <p className="mb-4 text-sm text-muted-foreground">
             Permissions are seeded by the system and assigned to roles from the Roles
             screen. This list is read-only.
@@ -57,7 +57,7 @@ export default function Permissions() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead>Module</TableHead>

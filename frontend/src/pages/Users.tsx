@@ -198,11 +198,11 @@ export default function Users() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Users" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -238,7 +238,7 @@ export default function Users() {
             </div>
           )}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>

@@ -1492,13 +1492,13 @@ export default function FormConfigurationPage() {
   }, [fetchWebsites]);
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Web Form Configuration" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           <div className="mx-auto max-w-6xl space-y-4">
             <div className="inline-flex rounded-md border p-1">
               {SECTIONS.map((s) => (
