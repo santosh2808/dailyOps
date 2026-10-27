@@ -230,9 +230,9 @@ export default function ComplaintList() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): this is a top-level Sidebar destination, not
             reached from anywhere with a predictable "back" target — Topbar's
             showBackButton calls navigate(-1), which is confusing here (same
@@ -240,12 +240,12 @@ export default function ComplaintList() {
             top-level list pages (Suppliers, Customers, etc.) already have no
             back button; this one and the others below were the outliers. */}
         <Topbar title="Complaints" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <ComplaintFiltersBar filters={filters} onChange={setFilters} />
-            <div className="flex flex-wrap gap-2">
+            <div className="app-page-actions flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
                 {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
                 {exporting ? "Exporting..." : "Export Excel"}
@@ -278,7 +278,7 @@ export default function ComplaintList() {
             </div>
           )}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
@@ -463,9 +463,9 @@ export default function ComplaintList() {
                 ? "0 complaints"
                 : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total} complaints`}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               {/* Bug fix (TC-061): page-size selector — resets to page 1 on change. */}
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
                 Rows per page
                 <select
                   className="flex h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -487,7 +487,7 @@ export default function ComplaintList() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="whitespace-nowrap text-sm text-muted-foreground">
                 Page {page} of {totalPages}
               </span>
               <Button
