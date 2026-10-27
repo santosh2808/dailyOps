@@ -97,11 +97,11 @@ export default function ProductionDashboard() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Production Dashboard" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           {error && (
             <div className="mb-4 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span className="flex items-center gap-2">

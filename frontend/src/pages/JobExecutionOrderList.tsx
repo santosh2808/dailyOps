@@ -128,13 +128,13 @@ export default function JobExecutionOrderList() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Job Execution Orders" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
             <JeoFiltersBar filters={filters} onChange={setFilters} />
           </div>
@@ -146,7 +146,7 @@ export default function JobExecutionOrderList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead>
