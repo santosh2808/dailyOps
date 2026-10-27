@@ -59,11 +59,11 @@ export default function LeadReassignments() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Lead Reassignment Requests" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <p className="mb-4 text-sm text-muted-foreground">
             A Sales Executive's request to move a lead to someone else. The lead stays with its current owner
             until you approve.
@@ -82,7 +82,7 @@ export default function LeadReassignments() {
             ))}
           </div>
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead>Lead</TableHead>

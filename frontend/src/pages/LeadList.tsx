@@ -280,13 +280,13 @@ export default function LeadList() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Leads" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app"): this row's
               two children (the filters bar — 5 selects + date-range picker —
               and the action-button group) together need far more width than
@@ -302,7 +302,7 @@ export default function LeadList() {
               filters-bar + action-buttons header pattern. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <LeadFiltersBar filters={filters} onChange={setFilters} />
-            <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="app-page-actions flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
                 {downloadingTemplate ? (
                   <Spinner className="mr-2 h-4 w-4" />
@@ -357,7 +357,7 @@ export default function LeadList() {
               columns: Lead No, Company, Contact, Phone, Email, Source,
               Assigned To, Status, Next Follow-up, Created, Last Updated, Actions.
               Priority/Est. Value/Products still show on Lead Details. */}
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
@@ -373,7 +373,7 @@ export default function LeadList() {
                 <TableHead>
                   <button
                     type="button"
-                    className="flex items-center"
+                    className="flex items-center whitespace-nowrap"
                     onClick={() => toggleSort("leadNumber")}
                   >
                     Lead No
@@ -449,7 +449,7 @@ export default function LeadList() {
                         aria-label={`Select lead ${lead.leadNumber}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium text-slate-900">{lead.leadNumber}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium text-slate-900">{lead.leadNumber}</TableCell>
                     <TableCell>
                       <TruncatedText text={lead.companyName || "-"} />
                     </TableCell>

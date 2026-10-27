@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import FilterPanel from "@/components/shared/FilterPanel";
 import { STATUS_OPTIONS, PRIORITY_OPTIONS, SOURCE_OPTIONS } from "./leadOptions";
 import { listAssignableUsers } from "@/api/users";
 import { INDIA_STATES } from "@/lib/indiaStates";
@@ -52,15 +52,16 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
       .catch(() => setAssignableUsers([]));
   }, []);
 
-  const hasActiveFilters =
-    !!filters.status ||
-    !!filters.priority ||
-    !!filters.source ||
-    !!filters.assignedToUserId ||
-    !!filters.state ||
-    !!filters.dateFrom ||
-    !!filters.dateTo ||
-    !!filters.followUp;
+  // The created-date range counts as one filter.
+  const activeFilterCount = [
+    filters.status,
+    filters.priority,
+    filters.source,
+    filters.assignedToUserId,
+    filters.state,
+    filters.dateFrom || filters.dateTo,
+    filters.followUp,
+  ].filter(Boolean).length;
 
   function update<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     onChange({ ...filters, [key]: value });
@@ -68,7 +69,7 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
 
   return (
     <div className="space-y-3">
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full md:max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by lead #, company, contact, email, phone, or title"
@@ -78,7 +79,10 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterPanel
+        activeCount={activeFilterCount}
+        onClear={() => onChange({ ...emptyLeadFilters, search: filters.search })}
+      >
         <Select
           className="w-40"
           value={filters.status}
@@ -161,14 +165,7 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
           onChange={({ from, to }) => onChange({ ...filters, dateFrom: from, dateTo: to })}
           placeholder="Created date range"
         />
-
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={() => onChange({ ...emptyLeadFilters, search: filters.search })}>
-            <X className="mr-1 h-3.5 w-3.5" />
-            Clear filters
-          </Button>
-        )}
-      </div>
+      </FilterPanel>
     </div>
   );
 }

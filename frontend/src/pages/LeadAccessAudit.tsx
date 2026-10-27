@@ -71,11 +71,11 @@ export default function LeadAccessAudit() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Lead Access Audit" />
-        <main className="flex-1 space-y-6 p-6">
+        <main className="app-shell-main space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="max-w-2xl text-sm text-muted-foreground">
               Who opened, exported, copied or printed lead data. Copy and print are recorded from the browser; a
