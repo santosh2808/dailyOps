@@ -180,11 +180,11 @@ export default function SupplierList() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Suppliers" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning:
               sm:flex-wrap lets the action-buttons group drop to its own line
@@ -192,7 +192,7 @@ export default function SupplierList() {
               filters bar into an impossible width. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <SupplierFiltersBar filters={filters} onChange={setFilters} />
-            <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="app-page-actions flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
                 {downloadingTemplate ? (
                   <Spinner className="mr-2 h-4 w-4" />
@@ -237,7 +237,7 @@ export default function SupplierList() {
             </div>
           )}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">

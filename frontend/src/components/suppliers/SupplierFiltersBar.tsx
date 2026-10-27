@@ -1,7 +1,7 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import FilterPanel from "@/components/shared/FilterPanel";
 import { STATUS_OPTIONS } from "./supplierOptions";
 import type { SupplierStatus } from "@/types";
 
@@ -23,7 +23,10 @@ export const emptySupplierFilters: SupplierFilters = {
 };
 
 export default function SupplierFiltersBar({ filters, onChange }: SupplierFiltersBarProps) {
-  const hasActiveFilters = !!filters.status || !!filters.country;
+  const activeFilterCount = [
+    filters.status,
+    filters.country,
+  ].filter(Boolean).length;
 
   function update<K extends keyof SupplierFilters>(key: K, value: SupplierFilters[K]) {
     onChange({ ...filters, [key]: value });
@@ -31,7 +34,7 @@ export default function SupplierFiltersBar({ filters, onChange }: SupplierFilter
 
   return (
     <div className="space-y-3">
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full md:max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by code, name, contact, phone, email, or GST number"
@@ -41,7 +44,10 @@ export default function SupplierFiltersBar({ filters, onChange }: SupplierFilter
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterPanel
+        activeCount={activeFilterCount}
+        onClear={() => onChange({ ...emptySupplierFilters, search: filters.search })}
+      >
         <Select
           className="w-40"
           value={filters.status}
@@ -61,18 +67,7 @@ export default function SupplierFiltersBar({ filters, onChange }: SupplierFilter
           value={filters.country}
           onChange={(e) => update("country", e.target.value)}
         />
-
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onChange({ ...emptySupplierFilters, search: filters.search })}
-          >
-            <X className="mr-1 h-3.5 w-3.5" />
-            Clear filters
-          </Button>
-        )}
-      </div>
+      </FilterPanel>
     </div>
   );
 }
