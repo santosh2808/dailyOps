@@ -1,7 +1,7 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import FilterPanel from "@/components/shared/FilterPanel";
 import { STATUS_OPTIONS } from "./quotationOptions";
 import type { QuotationStatus } from "@/types";
 
@@ -25,7 +25,11 @@ export const emptyQuotationFilters: QuotationFilters = {
 };
 
 export default function QuotationFiltersBar({ filters, onChange }: QuotationFiltersBarProps) {
-  const hasActiveFilters = !!filters.status || !!filters.dateFrom || !!filters.dateTo;
+  // A from/to date pair counts as one filter.
+  const activeFilterCount = [
+    filters.status,
+    filters.dateFrom || filters.dateTo,
+  ].filter(Boolean).length;
 
   function update<K extends keyof QuotationFilters>(key: K, value: QuotationFilters[K]) {
     onChange({ ...filters, [key]: value });
@@ -33,7 +37,7 @@ export default function QuotationFiltersBar({ filters, onChange }: QuotationFilt
 
   return (
     <div className="space-y-3">
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full md:max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by quotation #, company, or contact"
@@ -43,7 +47,10 @@ export default function QuotationFiltersBar({ filters, onChange }: QuotationFilt
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterPanel
+        activeCount={activeFilterCount}
+        onClear={() => onChange({ ...emptyQuotationFilters, search: filters.search })}
+      >
         <Select
           className="w-40"
           value={filters.status}
@@ -71,18 +78,7 @@ export default function QuotationFiltersBar({ filters, onChange }: QuotationFilt
           onChange={(e) => update("dateTo", e.target.value)}
           aria-label="Created to"
         />
-
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onChange({ ...emptyQuotationFilters, search: filters.search })}
-          >
-            <X className="mr-1 h-3.5 w-3.5" />
-            Clear filters
-          </Button>
-        )}
-      </div>
+      </FilterPanel>
     </div>
   );
 }
