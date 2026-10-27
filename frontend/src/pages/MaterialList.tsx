@@ -208,13 +208,13 @@ export default function MaterialList() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Materials" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -240,7 +240,7 @@ export default function MaterialList() {
                 </button>
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="app-page-actions flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
                 Import Excel
@@ -281,7 +281,7 @@ export default function MaterialList() {
             </div>
           )}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
