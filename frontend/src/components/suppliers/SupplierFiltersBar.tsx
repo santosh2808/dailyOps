@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -14,6 +15,8 @@ export interface SupplierFilters {
 interface SupplierFiltersBarProps {
   filters: SupplierFilters;
   onChange: (filters: SupplierFilters) => void;
+  // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptySupplierFilters: SupplierFilters = {
@@ -22,7 +25,7 @@ export const emptySupplierFilters: SupplierFilters = {
   country: "",
 };
 
-export default function SupplierFiltersBar({ filters, onChange }: SupplierFiltersBarProps) {
+export default function SupplierFiltersBar({ filters, onChange, mobileActions }: SupplierFiltersBarProps) {
   const activeFilterCount = [
     filters.status,
     filters.country,
@@ -46,6 +49,7 @@ export default function SupplierFiltersBar({ filters, onChange }: SupplierFilter
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptySupplierFilters, search: filters.search })}
       >
         <Select

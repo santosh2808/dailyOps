@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -25,6 +25,8 @@ export interface LeadFilters {
 interface LeadFiltersBarProps {
   filters: LeadFilters;
   onChange: (filters: LeadFilters) => void;
+  // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyLeadFilters: LeadFilters = {
@@ -39,7 +41,7 @@ export const emptyLeadFilters: LeadFilters = {
   followUp: "",
 };
 
-export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProps) {
+export default function LeadFiltersBar({ filters, onChange, mobileActions }: LeadFiltersBarProps) {
   // Lead Assignment enhancement: this filter used to be free text; it's now
   // a select over the same active Sales Executive/Sales Manager users the
   // Lead Assignment picker itself uses, since assignment is now a real user
@@ -81,6 +83,7 @@ export default function LeadFiltersBar({ filters, onChange }: LeadFiltersBarProp
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyLeadFilters, search: filters.search })}
       >
         <Select

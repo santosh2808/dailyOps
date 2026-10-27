@@ -23,11 +23,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import {
   deleteSupplier,
-  downloadSupplierImportTemplate,
   exportSuppliers,
   listSuppliers,
 } from "@/api/suppliers";
@@ -63,7 +63,6 @@ export default function SupplierList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -156,17 +155,6 @@ export default function SupplierList() {
     await fetchSuppliers();
   }
 
-  async function handleDownloadTemplate() {
-    setDownloadingTemplate(true);
-    try {
-      await downloadSupplierImportTemplate();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to download the import template."));
-    } finally {
-      setDownloadingTemplate(false);
-    }
-  }
-
   async function handleExport() {
     setExporting(true);
     try {
@@ -191,16 +179,31 @@ export default function SupplierList() {
               instead of forcing a non-wrapping flex row to squeeze the
               filters bar into an impossible width. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <SupplierFiltersBar filters={filters} onChange={setFilters} />
-            <div className="app-page-actions flex flex-wrap gap-2 shrink-0">
-              <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-                {downloadingTemplate ? (
-                  <Spinner className="mr-2 h-4 w-4" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {downloadingTemplate ? "Downloading..." : "Download Template"}
-              </Button>
+            <SupplierFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                <MobileActionBar
+                  layout="inline"
+                  primary={
+                    hasPermission("Supplier", "Create")
+                      ? { label: "Add Supplier", shortLabel: "Add", icon: Plus, onSelect: () => navigate("/suppliers/new") }
+                      : null
+                  }
+                  more={[
+                    { label: "Import Excel", icon: Upload, onSelect: () => setImportOpen(true) },
+                    {
+                      label: exporting ? "Exporting..." : "Export Excel",
+                      icon: Download,
+                      onSelect: handleExport,
+                      disabled: exporting,
+                      busy: exporting,
+                    },
+                  ]}
+                />
+              }
+            />
+            <div className="app-page-actions flex flex-wrap gap-2 shrink-0 max-md:hidden">
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
                 Import Excel
