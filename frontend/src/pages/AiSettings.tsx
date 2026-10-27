@@ -83,11 +83,11 @@ export default function AiSettings() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="AI Settings" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           <div className="mx-auto max-w-2xl space-y-6">
             <p className="text-sm text-muted-foreground">
               Foundation settings for D.O.T., the future AI Lead Assistant. This is Phase 1 — no

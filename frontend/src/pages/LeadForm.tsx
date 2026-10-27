@@ -317,11 +317,11 @@ export default function LeadForm() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title={isEdit ? "Edit Lead" : "Create Lead"} />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           {loading ? (
             <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
               <Spinner /> Loading lead...

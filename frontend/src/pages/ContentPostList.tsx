@@ -19,6 +19,7 @@ import ContentFiltersBar, {
 } from "@/components/content/ContentFiltersBar";
 import { STATUS_TABS, TYPE_CONFIG, formatDateTime, liveUrl, timeAgo } from "@/components/content/contentOptions";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -113,15 +114,43 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
   const noun = config.plural.toLowerCase();
   const newPostUrl = `/content/${config.path}/new`;
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function postActions(post: ContentPostListItem) {
+    return (
+      <>
+        {post.status === "PUBLISHED" && liveUrl(type, post.formWebsite.siteUrl, post.slug) && (
+          <a
+            href={liveUrl(type, post.formWebsite.siteUrl, post.slug)!}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View on website"
+            aria-label={`View "${post.title}" on the website`}
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          title={`Open ${config.label.toLowerCase()}`}
+          onClick={() => navigate(`/content/${config.path}/${post.id}`)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title={config.plural} />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <ContentFiltersBar type={type} websites={websites} filters={filters} onChange={setFilters} />
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <div className="app-page-actions flex shrink-0 flex-wrap gap-2">
               <Button variant="outline" size="icon" title="Refresh list" aria-label="Refresh list" onClick={fetchPosts} disabled={loading}>
                 <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               </Button>
@@ -157,43 +186,92 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="hidden w-24 sm:table-cell">Cover</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Website</TableHead>
-                <TableHead className="hidden md:table-cell">Last edited</TableHead>
-                <TableHead className="hidden xl:table-cell">Published</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && posts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading {noun}...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : posts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    {counts?.all === 0 && !filters.tab && hasPermission("Content", "Create")
-                      ? `No ${noun} yet. Click "New ${config.label}" to write one — it stays a draft until you publish it.`
-                      : `No ${noun} match these filters.`}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                posts.map((post) => (
-                  <TableRow
-                    key={post.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/content/${config.path}/${post.id}`)}
-                  >
-                    <TableCell className="hidden sm:table-cell">
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="hidden w-24 sm:table-cell">Cover</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Website</TableHead>
+                    <TableHead className="hidden md:table-cell">Last edited</TableHead>
+                    <TableHead className="hidden xl:table-cell">Published</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading && posts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading {noun}...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : posts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        {counts?.all === 0 && !filters.tab && hasPermission("Content", "Create")
+                          ? `No ${noun} yet. Click "New ${config.label}" to write one — it stays a draft until you publish it.`
+                          : `No ${noun} match these filters.`}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    posts.map((post) => (
+                      <TableRow
+                        key={post.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/content/${config.path}/${post.id}`)}
+                      >
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="flex h-12 w-20 items-center justify-center overflow-hidden rounded bg-slate-100">
+                            {post.coverImage?.url ? (
+                              <img src={post.coverImage.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                            {post.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />}
+                            <TruncatedText text={post.title} />
+                          </div>
+                          <p className="text-xs text-muted-foreground">/{config.websitePath}/{post.slug}</p>
+                        </TableCell>
+                        <TableCell>
+                          <ContentStatusBadge status={post.status} hasUnpublishedChanges={post.hasUnpublishedChanges} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{post.formWebsite.name}</TableCell>
+                        <TableCell className="hidden md:table-cell" title={formatDateTime(post.updatedAt)}>
+                          <p>{timeAgo(post.updatedAt)}</p>
+                          <p className="text-xs text-muted-foreground">by {post.updatedBy?.name ?? post.author.name}</p>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">{formatDateTime(post.publishedAt)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{postActions(post)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={posts}
+                getKey={(post) => post.id}
+                title={(post) => post.title}
+                badge={(post) => (
+                  <ContentStatusBadge status={post.status} hasUnpublishedChanges={post.hasUnpublishedChanges} />
+                )}
+                subtitle={(post) => `/${config.websitePath}/${post.slug}`}
+                meta={(post) => `${post.formWebsite.name} · Edited ${timeAgo(post.updatedAt)}`}
+                fields={[
+                  {
+                    label: "Cover",
+                    render: (post) => (
                       <div className="flex h-12 w-20 items-center justify-center overflow-hidden rounded bg-slate-100">
                         {post.coverImage?.url ? (
                           <img src={post.coverImage.url} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -201,52 +279,43 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
                           <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden />
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 font-medium text-slate-900">
-                        {post.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />}
-                        <TruncatedText text={post.title} />
+                    ),
+                  },
+                  {
+                    label: "Title",
+                    render: (post) => (
+                      <>
+                        <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                          {post.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />}
+                          {post.title}
+                        </div>
+                        <p className="text-xs text-muted-foreground">/{config.websitePath}/{post.slug}</p>
+                      </>
+                    ),
+                  },
+                  { label: "Website", render: (post) => post.formWebsite.name },
+                  {
+                    label: "Last edited",
+                    render: (post) => (
+                      <div title={formatDateTime(post.updatedAt)}>
+                        <p>{timeAgo(post.updatedAt)}</p>
+                        <p className="text-xs text-muted-foreground">by {post.updatedBy?.name ?? post.author.name}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">/{config.websitePath}/{post.slug}</p>
-                    </TableCell>
-                    <TableCell>
-                      <ContentStatusBadge status={post.status} hasUnpublishedChanges={post.hasUnpublishedChanges} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{post.formWebsite.name}</TableCell>
-                    <TableCell className="hidden md:table-cell" title={formatDateTime(post.updatedAt)}>
-                      <p>{timeAgo(post.updatedAt)}</p>
-                      <p className="text-xs text-muted-foreground">by {post.updatedBy?.name ?? post.author.name}</p>
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">{formatDateTime(post.publishedAt)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        {post.status === "PUBLISHED" && liveUrl(type, post.formWebsite.siteUrl, post.slug) && (
-                          <a
-                            href={liveUrl(type, post.formWebsite.siteUrl, post.slug)!}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="View on website"
-                            aria-label={`View "${post.title}" on the website`}
-                            className={buttonVariants({ variant: "ghost", size: "icon" })}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={`Open ${config.label.toLowerCase()}`}
-                          onClick={() => navigate(`/content/${config.path}/${post.id}`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    ),
+                  },
+                  { label: "Published", render: (post) => formatDateTime(post.publishedAt) },
+                ]}
+                actions={postActions}
+                loading={loading && posts.length === 0}
+                loadingText={`Loading ${noun}...`}
+                emptyText={
+                  counts?.all === 0 && !filters.tab && hasPermission("Content", "Create")
+                    ? `No ${noun} yet. Click "New ${config.label}" to write one — it stays a draft until you publish it.`
+                    : `No ${noun} match these filters.`
+                }
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

@@ -205,21 +205,8 @@ export async function convertLeadToCustomer(id: string) {
   return res.data;
 }
 
-export async function downloadLeadImportTemplate() {
-  const res = await api.get("/api/v1/leads/import/template", { responseType: "blob" });
-  const url = window.URL.createObjectURL(new Blob([res.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "lead-import-template.xlsx");
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-}
-
 // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
-// records, distinct from downloadLeadImportTemplate() above (which only
-// ever produces a blank header row for uploading).
+// records.
 export async function downloadLeadData() {
   const res = await api.get("/api/v1/leads/export", { responseType: "blob" });
   const url = window.URL.createObjectURL(new Blob([res.data]));

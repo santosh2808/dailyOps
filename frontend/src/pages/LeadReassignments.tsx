@@ -6,6 +6,7 @@ import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { decideLeadReassignment, listLeadReassignmentRequests } from "@/api/leads";
@@ -59,11 +60,11 @@ export default function LeadReassignments() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Lead Reassignment Requests" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <p className="mb-4 text-sm text-muted-foreground">
             A Sales Executive's request to move a lead to someone else. The lead stays with its current owner
             until you approve.
@@ -82,55 +83,132 @@ export default function LeadReassignments() {
             ))}
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Lead</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Requested by</TableHead>
-                <TableHead>Requested</TableHead>
-                {status === "PENDING" ? (
-                  <TableHead className="text-right">Decision</TableHead>
-                ) : (
-                  <TableHead>Decision</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <Spinner /> Loading...
-                  </TableCell>
-                </TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No {status.toLowerCase()} requests.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Requested by</TableHead>
+                    <TableHead>Requested</TableHead>
+                    {status === "PENDING" ? (
+                      <TableHead className="text-right">Decision</TableHead>
+                    ) : (
+                      <TableHead>Decision</TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        <Spinner /> Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        No {status.toLowerCase()} requests.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <Link to={`/leads/${r.lead.id}`} className="font-medium text-primary hover:underline">
+                            {r.lead.leadNumber}
+                          </Link>
+                          <div className="text-xs text-muted-foreground">
+                            {r.lead.companyName || r.lead.contactPerson}
+                            {r.lead.state ? ` · ${r.lead.state}` : ""}
+                          </div>
+                        </TableCell>
+                        <TableCell>{r.fromUserName ?? "Unassigned"}</TableCell>
+                        <TableCell className="font-medium">{r.toUserName ?? "Unassigned"}</TableCell>
+                        <TableCell>{r.requestedBy ?? "—"}</TableCell>
+                        <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>
+                          {status === "PENDING" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <input
+                                className="h-8 w-40 rounded-md border border-input bg-background px-2 text-xs"
+                                placeholder="Note (optional)"
+                                value={notes[r.id] ?? ""}
+                                onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))}
+                              />
+                              <Button size="sm" disabled={busyId === r.id} onClick={() => decide(r, true)}>
+                                <Check className="mr-1 h-4 w-4" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busyId === r.id}
+                                onClick={() => decide(r, false)}
+                              >
+                                <X className="mr-1 h-4 w-4" />
+                                Reject
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="text-xs">
+                              {r.decidedBy ?? "—"}
+                              {r.decidedAt ? ` · ${new Date(r.decidedAt).toLocaleDateString()}` : ""}
+                              {r.decisionNote ? <div className="text-muted-foreground">{r.decisionNote}</div> : null}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={rows}
+                getKey={(r) => r.id}
+                title={(r) => r.lead.leadNumber}
+                subtitle={(r) => `${r.lead.companyName || r.lead.contactPerson}${r.lead.state ? ` · ${r.lead.state}` : ""}`}
+                meta={(r) => `${r.fromUserName ?? "Unassigned"} → ${r.toUserName ?? "Unassigned"}`}
+                fields={[
+                  {
+                    label: "Lead",
+                    render: (r) => (
                       <Link to={`/leads/${r.lead.id}`} className="font-medium text-primary hover:underline">
                         {r.lead.leadNumber}
                       </Link>
-                      <div className="text-xs text-muted-foreground">
-                        {r.lead.companyName || r.lead.contactPerson}
-                        {r.lead.state ? ` · ${r.lead.state}` : ""}
-                      </div>
-                    </TableCell>
-                    <TableCell>{r.fromUserName ?? "Unassigned"}</TableCell>
-                    <TableCell className="font-medium">{r.toUserName ?? "Unassigned"}</TableCell>
-                    <TableCell>{r.requestedBy ?? "—"}</TableCell>
-                    <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
-                    <TableCell>
-                      {status === "PENDING" ? (
-                        <div className="flex items-center justify-end gap-2">
+                    ),
+                  },
+                  { label: "From", render: (r) => r.fromUserName ?? "Unassigned" },
+                  { label: "To", render: (r) => <span className="font-medium">{r.toUserName ?? "Unassigned"}</span> },
+                  { label: "Requested by", render: (r) => r.requestedBy ?? "—" },
+                  { label: "Requested", render: (r) => new Date(r.createdAt).toLocaleString() },
+                  ...(status === "PENDING"
+                    ? []
+                    : [
+                        {
+                          label: "Decision",
+                          render: (r: LeadReassignmentRequest) => (
+                            <>
+                              {r.decidedBy ?? "—"}
+                              {r.decidedAt ? ` · ${new Date(r.decidedAt).toLocaleDateString()}` : ""}
+                              {r.decisionNote ? <div className="text-muted-foreground">{r.decisionNote}</div> : null}
+                            </>
+                          ),
+                        },
+                      ]),
+                ]}
+                // Pending: the same per-row note (shared `notes` state) and
+                // decide() as the table's Decision cell, stacked for a phone.
+                actions={
+                  status === "PENDING"
+                    ? (r) => (
+                        <>
                           <input
-                            className="h-8 w-40 rounded-md border border-input bg-background px-2 text-xs"
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                             placeholder="Note (optional)"
                             value={notes[r.id] ?? ""}
                             onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))}
@@ -139,29 +217,20 @@ export default function LeadReassignments() {
                             <Check className="mr-1 h-4 w-4" />
                             Approve
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busyId === r.id}
-                            onClick={() => decide(r, false)}
-                          >
+                          <Button size="sm" variant="outline" disabled={busyId === r.id} onClick={() => decide(r, false)}>
                             <X className="mr-1 h-4 w-4" />
                             Reject
                           </Button>
-                        </div>
-                      ) : (
-                        <div className="text-xs">
-                          {r.decidedBy ?? "—"}
-                          {r.decidedAt ? ` · ${new Date(r.decidedAt).toLocaleDateString()}` : ""}
-                          {r.decisionNote ? <div className="text-muted-foreground">{r.decisionNote}</div> : null}
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                        </>
+                      )
+                    : undefined
+                }
+                loading={loading}
+                loadingText="Loading..."
+                emptyText={`No ${status.toLowerCase()} requests.`}
+              />
+            }
+          />
         </main>
       </div>
     </div>

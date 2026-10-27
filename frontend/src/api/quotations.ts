@@ -183,7 +183,7 @@ export async function getQuotationHistory(id: string) {
 // The PDF route is behind JwtAuthGuard, so it can't be linked to directly
 // with a plain <a href> (no Authorization header would be sent). Fetch it
 // through the authenticated axios client instead and open the resulting
-// blob in a new tab — same pattern as downloadSupplierImportTemplate(),
+// blob in a new tab — same pattern as exportSuppliers(),
 // but viewing inline rather than triggering a download.
 export async function openQuotationPdf(id: string) {
   const res = await api.get(`/api/v1/quotations/${id}/pdf`, { responseType: "blob" });

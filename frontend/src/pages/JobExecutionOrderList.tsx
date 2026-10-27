@@ -20,6 +20,7 @@ import JeoFiltersBar, {
 } from "@/components/job-execution-orders/JeoFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
@@ -127,14 +128,30 @@ export default function JobExecutionOrderList() {
     );
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function jeoActions(jeo: JobExecutionOrder) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Job Execution Orders" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
             <JeoFiltersBar filters={filters} onChange={setFilters} />
           </div>
@@ -146,94 +163,125 @@ export default function JobExecutionOrderList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("jeoNumber")}>
-                    JEO Number
-                    {sortIcon("jeoNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                {/* Bug fix: lower-priority columns now progressively appear
-                    from md/lg up instead of all eight always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden lg:table-cell">State</TableHead>
-                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("priority")}>
-                    Priority
-                    {sortIcon("priority")}
-                  </button>
-                </TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("deliveryDate")}
-                  >
-                    Delivery Date
-                    {sortIcon("deliveryDate")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading job execution orders...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : jeos.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No job execution orders found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                jeos.map((jeo) => (
-                  <TableRow
-                    key={jeo.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
-                  >
-                    <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
-                    <TableCell>
-                      <TruncatedText text={jeo.customer?.companyName ?? "—"} />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{jeo.customer?.state ?? "—"}</TableCell>
-                    <TableCell className="hidden md:table-cell">{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <JeoPriorityBadge priority={jeo.priority} />
-                    </TableCell>
-                    <TableCell>
-                      <JeoStatusBadge status={jeo.status} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{formatDate(jeo.deliveryDate)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("jeoNumber")}>
+                        JEO Number
+                        {sortIcon("jeoNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Customer</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively appear
+                        from md/lg up instead of all eight always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    <TableHead className="hidden lg:table-cell">State</TableHead>
+                    <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("priority")}>
+                        Priority
+                        {sortIcon("priority")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("deliveryDate")}
+                      >
+                        Delivery Date
+                        {sortIcon("deliveryDate")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading job execution orders...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : jeos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No job execution orders found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    jeos.map((jeo) => (
+                      <TableRow
+                        key={jeo.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
+                      >
+                        <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
+                        <TableCell>
+                          <TruncatedText text={jeo.customer?.companyName ?? "—"} />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">{jeo.customer?.state ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <JeoPriorityBadge priority={jeo.priority} />
+                        </TableCell>
+                        <TableCell>
+                          <JeoStatusBadge status={jeo.status} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{formatDate(jeo.deliveryDate)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{jeoActions(jeo)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={jeos}
+                getKey={(jeo) => jeo.id}
+                title={(jeo) => jeo.jeoNumber}
+                badge={(jeo) => <JeoStatusBadge status={jeo.status} />}
+                subtitle={(jeo) => jeo.customer?.companyName ?? "—"}
+                meta={(jeo) =>
+                  `${jeo.salesOrder?.salesOrderNumber ?? "—"} · Delivery ${formatDate(jeo.deliveryDate)}`
+                }
+                fields={[
+                  { label: "Customer", render: (jeo) => jeo.customer?.companyName ?? "—" },
+                  { label: "State", render: (jeo) => jeo.customer?.state ?? "—" },
+                  { label: "Sales Order", render: (jeo) => jeo.salesOrder?.salesOrderNumber ?? "—" },
+                  { label: "Priority", render: (jeo) => <JeoPriorityBadge priority={jeo.priority} /> },
+                  { label: "Delivery Date", render: (jeo) => formatDate(jeo.deliveryDate) },
+                ]}
+                actions={jeoActions}
+                loading={loading}
+                loadingText="Loading job execution orders..."
+                emptyText="No job execution orders found."
+                sort={{
+                  options: [
+                    { value: "jeoNumber", label: "JEO Number" },
+                    { value: "priority", label: "Priority" },
+                    { value: "deliveryDate", label: "Delivery Date" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

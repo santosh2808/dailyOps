@@ -18,6 +18,7 @@ import ProductFormDialog from "@/components/products/ProductFormDialog";
 import ProductViewDialog from "@/components/products/ProductViewDialog";
 import DeactivateProductConfirmDialog from "@/components/products/DeactivateProductConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -162,12 +163,58 @@ export default function Products() {
     await fetchProducts();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function productActions(product: Product) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => openViewDialog(product)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        {!product.isActive && hasPermission("Product", "Edit") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Reactivate product"
+            onClick={() => handleReactivate(product)}
+          >
+            <RotateCcw className="h-4 w-4 text-srm-green" />
+          </Button>
+        )}
+        {product.isActive && hasPermission("Product", "Edit") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Edit product"
+            onClick={() => openEditDialog(product)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+        {product.isActive && hasPermission("Product", "Delete") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Deactivate product"
+            onClick={() => openDeactivateDialog(product)}
+          >
+            <Ban className="h-4 w-4 text-destructive" />
+          </Button>
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Products" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -219,94 +266,78 @@ export default function Products() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading products...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : products.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    No products found. Click "Add Product" to create one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium text-slate-900">
-                      <TruncatedText text={product.name} />
-                      {!product.isActive && (
-                        <Badge variant="muted" className="ml-2">
-                          Inactive
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="orange">{product.category}</Badge>
-                    </TableCell>
-                    <TableCell>{product.sku || "—"}</TableCell>
-                    <TableCell>{formatPrice(product.price)}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => openViewDialog(product)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {!product.isActive && hasPermission("Product", "Edit") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Reactivate product"
-                            onClick={() => handleReactivate(product)}
-                          >
-                            <RotateCcw className="h-4 w-4 text-srm-green" />
-                          </Button>
-                        )}
-                        {product.isActive && hasPermission("Product", "Edit") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Edit product"
-                            onClick={() => openEditDialog(product)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {product.isActive && hasPermission("Product", "Delete") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Deactivate product"
-                            onClick={() => openDeactivateDialog(product)}
-                          >
-                            <Ban className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product Name</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading products...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : products.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        No products found. Click "Add Product" to create one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    products.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium text-slate-900">
+                          <TruncatedText text={product.name} />
+                          {!product.isActive && (
+                            <Badge variant="muted" className="ml-2">
+                              Inactive
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="orange">{product.category}</Badge>
+                        </TableCell>
+                        <TableCell>{product.sku || "—"}</TableCell>
+                        <TableCell>{formatPrice(product.price)}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">{productActions(product)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={products}
+                getKey={(product) => product.id}
+                title={(product) => product.name}
+                badge={(product) => !product.isActive && <Badge variant="muted">Inactive</Badge>}
+                subtitle={(product) => product.category}
+                meta={(product) => `${formatPrice(product.price)} · SKU ${product.sku || "—"}`}
+                fields={[
+                  { label: "Category", render: (product) => <Badge variant="orange">{product.category}</Badge> },
+                  { label: "SKU", render: (product) => product.sku || "—" },
+                  { label: "Price", render: (product) => formatPrice(product.price) },
+                ]}
+                actions={productActions}
+                loading={loading}
+                loadingText="Loading products..."
+                emptyText={'No products found. Click "Add Product" to create one.'}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

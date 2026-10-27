@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -45,11 +46,11 @@ export default function Permissions() {
   }, {});
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Permissions" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <p className="mb-4 text-sm text-muted-foreground">
             Permissions are seeded by the system and assigned to roles from the Roles
             screen. This list is read-only.
@@ -57,50 +58,71 @@ export default function Permissions() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Module</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Description</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading permissions...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : permissions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    No permissions found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                Object.entries(grouped).map(([module, items]) =>
-                  items.map((permission, i) => (
-                    <TableRow key={permission.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        {i === 0 ? module : ""}
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Module</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading permissions...
+                        </span>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="muted">{permission.action}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {permission.code}
-                      </TableCell>
-                      <TableCell>{permission.description || "—"}</TableCell>
                     </TableRow>
-                  ))
-                )
-              )}
-            </TableBody>
-          </Table>
+                  ) : permissions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                        No permissions found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    Object.entries(grouped).map(([module, items]) =>
+                      items.map((permission, i) => (
+                        <TableRow key={permission.id}>
+                          <TableCell className="font-medium text-slate-900">
+                            {i === 0 ? module : ""}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="muted">{permission.action}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {permission.code}
+                          </TableCell>
+                          <TableCell>{permission.description || "—"}</TableCell>
+                        </TableRow>
+                      ))
+                    )
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={Object.values(grouped).flat()}
+                getKey={(permission) => permission.id}
+                title={(permission) => <span className="font-mono text-sm">{permission.code}</span>}
+                badge={(permission) => <Badge variant="muted">{permission.action}</Badge>}
+                subtitle={(permission) => permission.description || "—"}
+                meta={(permission) => permission.module}
+                fields={[
+                  { label: "Module", render: (permission) => permission.module },
+                  { label: "Description", render: (permission) => permission.description || "—" },
+                ]}
+                loading={loading}
+                loadingText="Loading permissions..."
+                emptyText="No permissions found."
+              />
+            }
+          />
         </main>
       </div>
     </div>

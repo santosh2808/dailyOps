@@ -347,11 +347,11 @@ export default function LeadDetails() {
     );
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Lead Details" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/leads")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Leads

@@ -15,6 +15,7 @@ import {
 import StateSeriesCodeFormDialog from "@/components/state-series-codes/StateSeriesCodeFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -104,12 +105,28 @@ export default function StateSeriesCodes() {
     await fetchCodes();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function seriesActions(code: StateSeriesCode) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Delete series"
+          onClick={() => openDeleteDialog(code)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="State Series Codes" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               Job Execution Orders for customers in a listed state are numbered from that state's
@@ -141,75 +158,94 @@ export default function StateSeriesCodes() {
             </div>
           )}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < codes.length;
-                    }}
-                    checked={codes.length > 0 && selectedIds.size === codes.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all state series"
-                  />
-                </TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Series Start</TableHead>
-                <TableHead>Next JEO Number</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading state series codes...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : codes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No state series configured yet. Every state currently uses the original
-                    JEO-YYYY-NNNNNN numbering.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                codes.map((code) => (
-                  <TableRow key={code.id}>
-                    <TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(code.id)}
-                        onChange={() => toggleSelected(code.id)}
-                        aria-label={`Select series for ${code.state}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < codes.length;
+                        }}
+                        checked={codes.length > 0 && selectedIds.size === codes.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all state series"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">{code.state}</TableCell>
-                    <TableCell>{code.seriesStart}</TableCell>
-                    <TableCell>
-                      <Badge variant="muted">{code.nextNumber}</Badge>
-                    </TableCell>
-                    <TableCell>{new Date(code.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete series"
-                          onClick={() => openDeleteDialog(code)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Series Start</TableHead>
+                    <TableHead>Next JEO Number</TableHead>
+                    <TableHead>Added</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading state series codes...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : codes.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        No state series configured yet. Every state currently uses the original
+                        JEO-YYYY-NNNNNN numbering.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    codes.map((code) => (
+                      <TableRow key={code.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(code.id)}
+                            onChange={() => toggleSelected(code.id)}
+                            aria-label={`Select series for ${code.state}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">{code.state}</TableCell>
+                        <TableCell>{code.seriesStart}</TableCell>
+                        <TableCell>
+                          <Badge variant="muted">{code.nextNumber}</Badge>
+                        </TableCell>
+                        <TableCell>{new Date(code.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">{seriesActions(code)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={codes}
+                getKey={(code) => code.id}
+                title={(code) => code.state}
+                subtitle={(code) => `Series Start ${code.seriesStart}`}
+                meta={(code) => `Added ${new Date(code.createdAt).toLocaleDateString()}`}
+                fields={[
+                  { label: "Series Start", render: (code) => code.seriesStart },
+                  { label: "Next JEO Number", render: (code) => <Badge variant="muted">{code.nextNumber}</Badge> },
+                  { label: "Added", render: (code) => new Date(code.createdAt).toLocaleDateString() },
+                ]}
+                actions={seriesActions}
+                loading={loading}
+                loadingText="Loading state series codes..."
+                emptyText="No state series configured yet. Every state currently uses the original JEO-YYYY-NNNNNN numbering."
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (code) => `Select series for ${code.state}`,
+                }}
+              />
+            }
+          />
         </main>
       </div>
 

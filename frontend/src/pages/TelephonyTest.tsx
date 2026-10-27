@@ -85,11 +85,11 @@ export default function TelephonyTest() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="D.O.T. Telephony Test" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main">
           <div className="mx-auto max-w-2xl space-y-6">
             <p className="text-sm text-muted-foreground">
               Phase 2A foundation — proves DailyOps can place a call through Exotel and reach a
