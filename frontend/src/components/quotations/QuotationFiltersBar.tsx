@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -15,6 +16,8 @@ export interface QuotationFilters {
 interface QuotationFiltersBarProps {
   filters: QuotationFilters;
   onChange: (filters: QuotationFilters) => void;
+  // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyQuotationFilters: QuotationFilters = {
@@ -24,7 +27,7 @@ export const emptyQuotationFilters: QuotationFilters = {
   dateTo: "",
 };
 
-export default function QuotationFiltersBar({ filters, onChange }: QuotationFiltersBarProps) {
+export default function QuotationFiltersBar({ filters, onChange, mobileActions }: QuotationFiltersBarProps) {
   // A from/to date pair counts as one filter.
   const activeFilterCount = [
     filters.status,
@@ -49,6 +52,7 @@ export default function QuotationFiltersBar({ filters, onChange }: QuotationFilt
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyQuotationFilters, search: filters.search })}
       >
         <Select

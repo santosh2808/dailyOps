@@ -16,13 +16,19 @@ import { cn } from "@/lib/utils";
 // callers don't need per-control responsive classes. Native <select>s are
 // kept on purpose: the OS renders their option list, which can't be
 // clipped by an overflow container or run off the viewport.
+//
+// mobileActions (optional, below md only): the page's main action + ⋮ menu
+// (MobileActionBar layout="inline"), placed on the right of the Filters
+// row. The Clear action then moves into the expanded panel, because
+// Filters + Clear + actions don't fit one row on a 320px screen.
 interface FilterPanelProps {
   activeCount: number;
   onClear: () => void;
   children: ReactNode;
+  mobileActions?: ReactNode;
 }
 
-export default function FilterPanel({ activeCount, onClear, children }: FilterPanelProps) {
+export default function FilterPanel({ activeCount, onClear, children, mobileActions }: FilterPanelProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
 
@@ -45,12 +51,13 @@ export default function FilterPanel({ activeCount, onClear, children }: FilterPa
           )}
           {open ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
         </Button>
-        {activeCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={onClear}>
-            <X className="mr-1 h-3.5 w-3.5" />
-            Clear
-          </Button>
-        )}
+        {mobileActions ??
+          (activeCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={onClear}>
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear
+            </Button>
+          ))}
       </div>
 
       <div
@@ -63,7 +70,7 @@ export default function FilterPanel({ activeCount, onClear, children }: FilterPa
       >
         {children}
         {activeCount > 0 && (
-          <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={onClear}>
+          <Button variant="ghost" size="sm" className={mobileActions ? undefined : "hidden md:inline-flex"} onClick={onClear}>
             <X className="mr-1 h-3.5 w-3.5" />
             Clear filters
           </Button>

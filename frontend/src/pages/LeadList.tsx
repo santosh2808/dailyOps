@@ -37,9 +37,10 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteLead, downloadLeadData, downloadLeadImportTemplate, listLeads } from "@/api/leads";
+import { deleteLead, downloadLeadData, listLeads } from "@/api/leads";
 import type { Lead, LeadSource, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -118,10 +119,7 @@ export default function LeadList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  // QA fix (TC-074 re-fail): "Download Data" — separate loading state from
-  // Download Template above, since these are two independent buttons/
-  // requests now.
+  // QA fix (TC-074 re-fail): loading state for the "Download Data" export.
   const [downloadingData, setDownloadingData] = useState(false);
 
   // Bulk delete — select-multiple checkboxes in the table, scoped to the
@@ -250,23 +248,8 @@ export default function LeadList() {
     await fetchLeads();
   }
 
-  async function handleDownloadTemplate() {
-    setDownloadingTemplate(true);
-    try {
-      await downloadLeadImportTemplate();
-    } catch (err) {
-      const message = getErrorMessage(err, "Failed to download the import template.");
-      setError(message);
-      toast.error(message);
-    } finally {
-      setDownloadingTemplate(false);
-    }
-  }
-
   // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
-  // records as Excel, kept entirely separate from handleDownloadTemplate()
-  // above (that one must keep producing a blank template for import, not
-  // real data).
+  // records as Excel.
   async function handleDownloadData() {
     setDownloadingData(true);
     try {
@@ -319,18 +302,32 @@ export default function LeadList() {
               width. Same fix applied to every other list page with this
               filters-bar + action-buttons header pattern. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <LeadFiltersBar filters={filters} onChange={setFilters} />
-            <div className="app-page-actions flex flex-wrap gap-2 shrink-0">
-              <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-                {downloadingTemplate ? (
-                  <Spinner className="mr-2 h-4 w-4" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {downloadingTemplate ? "Downloading..." : "Download Template"}
-              </Button>
-              {/* QA fix (TC-074 re-fail): separate, real data export —
-                  distinct from the blank import template above. */}
+            <LeadFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                <MobileActionBar
+                  layout="inline"
+                  primary={
+                    hasPermission("Lead", "Create")
+                      ? { label: "Create Lead", shortLabel: "Create", icon: Plus, onSelect: () => navigate("/leads/new") }
+                      : null
+                  }
+                  more={[
+                    { label: "Import Leads", icon: Upload, onSelect: () => setImportOpen(true) },
+                    {
+                      label: downloadingData ? "Downloading..." : "Download Data",
+                      icon: Download,
+                      onSelect: handleDownloadData,
+                      disabled: downloadingData,
+                      busy: downloadingData,
+                    },
+                  ]}
+                />
+              }
+            />
+            <div className="app-page-actions flex flex-wrap gap-2 shrink-0 max-md:hidden">
+              {/* QA fix (TC-074 re-fail): real lead data export. */}
               <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
                 {downloadingData ? (
                   <Spinner className="mr-2 h-4 w-4" />

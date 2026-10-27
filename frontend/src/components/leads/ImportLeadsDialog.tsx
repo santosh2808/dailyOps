@@ -159,7 +159,7 @@ export default function ImportLeadsDialog({ open, onOpenChange, onImported }: Im
           <DialogTitle>Import Leads</DialogTitle>
           <DialogDescription>
             {step === "upload" &&
-              "Upload an .xlsx or .csv file using the Download Template column layout: Company Name, Contact Person, Email, Phone, City, State, Industry, Lead Source, Status, Remarks. No column is required — any of them can be blank or left out of the file entirely. If your workbook has separate tabs per state (e.g. \"Telangana\", \"Maharashtra\"), every tab is read, and leads on a state-named tab are automatically assigned that state."}
+              "Upload an .xlsx or .csv file with these columns: Company Name, Contact Person, Email, Phone, City, State, Industry, Lead Source, Status, Remarks. No column is required — any of them can be blank or left out of the file entirely. If your workbook has separate tabs per state (e.g. \"Telangana\", \"Maharashtra\"), every tab is read, and leads on a state-named tab are automatically assigned that state."}
             {step === "preview" &&
               "Review the rows below. Only Valid rows will be imported — Invalid and Duplicate rows are skipped."}
             {step === "summary" && "Import complete."}

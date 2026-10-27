@@ -145,7 +145,7 @@ export default function ImportSupplierDialog({ open, onOpenChange, onImported }:
           <DialogTitle>Import Suppliers</DialogTitle>
           <DialogDescription>
             {step === "upload" &&
-              "Upload an .xlsx or .csv file using the Download Template column layout: Supplier Name, GST Number, PAN Number, Contact Person, Phone, Email, Website, Address, City, State, Country, PIN Code, Payment Terms, Lead Time, Currency, Remarks, Status. Only Supplier Name is required — every other column can be blank or left out of the file entirely."}
+              "Upload an .xlsx or .csv file with these columns: Supplier Name, GST Number, PAN Number, Contact Person, Phone, Email, Website, Address, City, State, Country, PIN Code, Payment Terms, Lead Time, Currency, Remarks, Status. Only Supplier Name is required — every other column can be blank or left out of the file entirely."}
             {step === "preview" &&
               "Review the rows below. Only Valid rows will be imported — Invalid and Duplicate rows are skipped."}
             {step === "summary" && "Import complete."}

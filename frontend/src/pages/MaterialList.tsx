@@ -21,6 +21,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { deactivateMaterial, exportMaterials, listMaterials } from "@/api/materials";
@@ -263,7 +264,7 @@ export default function MaterialList() {
                 </button>
               </div>
             )}
-            <div className="app-page-actions flex flex-wrap gap-2">
+            <div className="app-page-actions flex flex-wrap gap-2 max-md:hidden">
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
                 Import Excel
@@ -283,6 +284,23 @@ export default function MaterialList() {
                 </Button>
               )}
             </div>
+            <MobileActionBar
+              primary={
+                hasPermission("Material", "Create")
+                  ? { label: "Create Material", icon: Plus, onSelect: () => navigate("/materials/new") }
+                  : null
+              }
+              more={[
+                { label: "Import Excel", icon: Upload, onSelect: () => setImportOpen(true) },
+                {
+                  label: exporting ? "Exporting..." : "Export Excel",
+                  icon: Download,
+                  onSelect: handleExport,
+                  disabled: exporting,
+                  busy: exporting,
+                },
+              ]}
+            />
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

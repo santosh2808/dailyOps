@@ -25,6 +25,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
@@ -251,9 +252,27 @@ export default function QuotationList() {
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <QuotationFiltersBar filters={filters} onChange={setFilters} />
+            <QuotationFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                hasPermission("Quotation", "Create") ? (
+                  <MobileActionBar
+                    layout="inline"
+                    primary={{
+                      label: "Create Quotation",
+                      shortLabel: "Create",
+                      shortBelow: 390,
+                      icon: Plus,
+                      onSelect: () => navigate("/quotations/new"),
+                    }}
+                    more={[{ label: "Generate from Lead", icon: UserSquare2, onSelect: () => setGenerateFromLeadOpen(true) }]}
+                  />
+                ) : undefined
+              }
+            />
             {hasPermission("Quotation", "Create") && (
-              <div className="app-page-actions flex shrink-0 flex-wrap gap-2">
+              <div className="app-page-actions flex shrink-0 flex-wrap gap-2 max-md:hidden">
                 {/* Generates a quotation straight from a Qualified lead's
                     own linked products — no Customer required until
                     Convert to Customer later, at Create Sales Order time.
