@@ -16,6 +16,7 @@ import RoleFormDialog from "@/components/roles/RoleFormDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -125,6 +126,36 @@ export default function Roles() {
     await fetchRoles();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function roleActions(role: Role) {
+    const isProtected = PROTECTED_ROLE_NAMES.includes(role.name);
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit role"
+          onClick={() => openEditDialog(role)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title={
+            isProtected
+              ? "The Administrator role is required for administrative access and cannot be deleted"
+              : "Delete role"
+          }
+          disabled={isProtected}
+          onClick={() => openDeleteDialog(role)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -161,96 +192,104 @@ export default function Roles() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el)
-                        el.indeterminate = selectedIds.size > 0 && selectedIds.size < selectableRoles.length;
-                    }}
-                    checked={selectableRoles.length > 0 && selectedIds.size === selectableRoles.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all roles"
-                  />
-                </TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Permissions</TableHead>
-                <TableHead>Users</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading roles...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : roles.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No roles found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                roles.map((role) => {
-                  const isProtected = PROTECTED_ROLE_NAMES.includes(role.name);
-                  return (
-                  <TableRow key={role.id}>
-                    <TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(role.id)}
-                        onChange={() => toggleSelected(role.id)}
-                        disabled={isProtected}
-                        aria-label={`Select role ${role.name}`}
+                        ref={(el) => {
+                          if (el)
+                            el.indeterminate = selectedIds.size > 0 && selectedIds.size < selectableRoles.length;
+                        }}
+                        checked={selectableRoles.length > 0 && selectedIds.size === selectableRoles.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all roles"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">{role.name}</TableCell>
-                    <TableCell>
-                      <TruncatedText text={role.description || "—"} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="orange">{role.permissions?.length ?? 0}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="muted">{role._count?.users ?? 0}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit role"
-                          onClick={() => openEditDialog(role)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={
-                            isProtected
-                              ? "The Administrator role is required for administrative access and cannot be deleted"
-                              : "Delete role"
-                          }
-                          disabled={isProtected}
-                          onClick={() => openDeleteDialog(role)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Permissions</TableHead>
+                    <TableHead>Users</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading roles...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : roles.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        No roles found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    roles.map((role) => {
+                      const isProtected = PROTECTED_ROLE_NAMES.includes(role.name);
+                      return (
+                      <TableRow key={role.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(role.id)}
+                            onChange={() => toggleSelected(role.id)}
+                            disabled={isProtected}
+                            aria-label={`Select role ${role.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">{role.name}</TableCell>
+                        <TableCell>
+                          <TruncatedText text={role.description || "—"} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="orange">{role.permissions?.length ?? 0}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="muted">{role._count?.users ?? 0}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">{roleActions(role)}</div>
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={roles}
+                getKey={(role) => role.id}
+                title={(role) => role.name}
+                subtitle={(role) => role.description || "—"}
+                meta={(role) => `${role.permissions?.length ?? 0} permissions · ${role._count?.users ?? 0} users`}
+                fields={[
+                  { label: "Description", render: (role) => role.description || "—" },
+                  { label: "Permissions", render: (role) => <Badge variant="orange">{role.permissions?.length ?? 0}</Badge> },
+                  { label: "Users", render: (role) => <Badge variant="muted">{role._count?.users ?? 0}</Badge> },
+                ]}
+                actions={roleActions}
+                loading={loading}
+                loadingText="Loading roles..."
+                emptyText="No roles found."
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  // Same rule as the table's disabled checkbox on protected roles.
+                  isSelectable: (role) => !PROTECTED_ROLE_NAMES.includes(role.name),
+                  rowLabel: (role) => `Select role ${role.name}`,
+                }}
+              />
+            }
+          />
         </main>
       </div>
 

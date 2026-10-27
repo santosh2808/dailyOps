@@ -17,6 +17,7 @@ import DepartmentFormDialog from "@/components/departments/DepartmentFormDialog"
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -132,6 +133,30 @@ export default function Departments() {
     await fetchDepartments();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function departmentActions(department: Department) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit department"
+          onClick={() => openEditDialog(department)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Delete department"
+          onClick={() => openDeleteDialog(department)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -167,64 +192,97 @@ export default function Departments() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < departments.length;
-                    }}
-                    checked={departments.length > 0 && selectedIds.size === departments.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all departments"
-                  />
-                </TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Users</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading departments...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : departments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    No departments found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                departments.map((department) => (
-                  <TableRow key={department.id}>
-                    <TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(department.id)}
-                        onChange={() => toggleSelected(department.id)}
-                        aria-label={`Select department ${department.name}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < departments.length;
+                        }}
+                        checked={departments.length > 0 && selectedIds.size === departments.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all departments"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      <button
-                        type="button"
-                        title="View users in this department"
-                        onClick={() => viewDepartmentUsers(department)}
-                        className="text-left hover:underline hover:text-primary"
-                      >
-                        {department.name}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={department.description || "—"} />
-                    </TableCell>
-                    <TableCell>
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Users</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading departments...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : departments.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        No departments found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    departments.map((department) => (
+                      <TableRow key={department.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(department.id)}
+                            onChange={() => toggleSelected(department.id)}
+                            aria-label={`Select department ${department.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">
+                          <button
+                            type="button"
+                            title="View users in this department"
+                            onClick={() => viewDepartmentUsers(department)}
+                            className="text-left hover:underline hover:text-primary"
+                          >
+                            {department.name}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={department.description || "—"} />
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            title="View users in this department"
+                            onClick={() => viewDepartmentUsers(department)}
+                          >
+                            <Badge variant="muted" className="hover:bg-slate-200">
+                              {department._count?.users ?? 0}
+                            </Badge>
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">{departmentActions(department)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={departments}
+                getKey={(department) => department.id}
+                title={(department) => department.name}
+                subtitle={(department) => department.description || "—"}
+                meta={(department) => `${department._count?.users ?? 0} users`}
+                fields={[
+                  { label: "Description", render: (department) => department.description || "—" },
+                  {
+                    label: "Users",
+                    render: (department) => (
                       <button
                         type="button"
                         title="View users in this department"
@@ -234,32 +292,22 @@ export default function Departments() {
                           {department._count?.users ?? 0}
                         </Badge>
                       </button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit department"
-                          onClick={() => openEditDialog(department)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete department"
-                          onClick={() => openDeleteDialog(department)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    ),
+                  },
+                ]}
+                actions={departmentActions}
+                loading={loading}
+                loadingText="Loading departments..."
+                emptyText="No departments found."
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (department) => `Select department ${department.name}`,
+                }}
+              />
+            }
+          />
         </main>
       </div>
 

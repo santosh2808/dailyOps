@@ -22,6 +22,7 @@ import ImportSupplierDialog from "@/components/suppliers/ImportSupplierDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -179,6 +180,28 @@ export default function SupplierList() {
     }
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function supplierActions(supplier: Supplier) {
+    return (
+      <>
+        <Button variant="ghost" size="icon" title="View details" onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit supplier"
+          onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Delete supplier" onClick={() => openDeleteDialog(supplier)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -237,110 +260,117 @@ export default function SupplierList() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < suppliers.length;
-                    }}
-                    checked={suppliers.length > 0 && selectedIds.size === suppliers.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all suppliers on this page"
-                  />
-                </TableHead>
-                <TableHead>Supplier Code</TableHead>
-                <TableHead>Supplier Name</TableHead>
-                {/* Bug fix: lower-priority columns now progressively
-                    appear from md/lg/xl up instead of all ten always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden md:table-cell">Contact Person</TableHead>
-                <TableHead className="hidden md:table-cell">Phone</TableHead>
-                <TableHead className="hidden xl:table-cell">Email</TableHead>
-                <TableHead className="hidden lg:table-cell">City</TableHead>
-                <TableHead className="hidden lg:table-cell">Country</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading suppliers...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : suppliers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                    No suppliers found. Click "Add Supplier" to create one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                suppliers.map((supplier) => (
-                  <TableRow
-                    key={supplier.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/suppliers/${supplier.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(supplier.id)}
-                        onChange={() => toggleSelected(supplier.id)}
-                        aria-label={`Select supplier ${supplier.supplierName}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < suppliers.length;
+                        }}
+                        checked={suppliers.length > 0 && selectedIds.size === suppliers.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all suppliers on this page"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      {supplier.supplierCode}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={supplier.supplierName} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{supplier.contactPerson || "—"}</TableCell>
-                    <TableCell className="hidden md:table-cell">{supplier.phone || "—"}</TableCell>
-                    <TableCell className="hidden xl:table-cell">{supplier.email || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{supplier.city || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{supplier.country || "—"}</TableCell>
-                    <TableCell>
-                      <SupplierStatusBadge status={supplier.status} />
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/suppliers/${supplier.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit supplier"
-                          onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete supplier"
-                          onClick={() => openDeleteDialog(supplier)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Supplier Code</TableHead>
+                    <TableHead>Supplier Name</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively
+                        appear from md/lg/xl up instead of all ten always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    <TableHead className="hidden md:table-cell">Contact Person</TableHead>
+                    <TableHead className="hidden md:table-cell">Phone</TableHead>
+                    <TableHead className="hidden xl:table-cell">Email</TableHead>
+                    <TableHead className="hidden lg:table-cell">City</TableHead>
+                    <TableHead className="hidden lg:table-cell">Country</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading suppliers...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : suppliers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                        No suppliers found. Click "Add Supplier" to create one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    suppliers.map((supplier) => (
+                      <TableRow
+                        key={supplier.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/suppliers/${supplier.id}`)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(supplier.id)}
+                            onChange={() => toggleSelected(supplier.id)}
+                            aria-label={`Select supplier ${supplier.supplierName}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">
+                          {supplier.supplierCode}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={supplier.supplierName} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{supplier.contactPerson || "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{supplier.phone || "—"}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{supplier.email || "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{supplier.city || "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{supplier.country || "—"}</TableCell>
+                        <TableCell>
+                          <SupplierStatusBadge status={supplier.status} />
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{supplierActions(supplier)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={suppliers}
+                getKey={(supplier) => supplier.id}
+                title={(supplier) => supplier.supplierCode}
+                badge={(supplier) => <SupplierStatusBadge status={supplier.status} />}
+                subtitle={(supplier) => supplier.supplierName}
+                meta={(supplier) => `${supplier.contactPerson || "—"} · ${supplier.phone || "—"}`}
+                fields={[
+                  { label: "Supplier Name", render: (supplier) => supplier.supplierName },
+                  { label: "Contact Person", render: (supplier) => supplier.contactPerson || "—" },
+                  { label: "Phone", render: (supplier) => supplier.phone || "—" },
+                  { label: "Email", render: (supplier) => supplier.email || "—" },
+                  { label: "City", render: (supplier) => supplier.city || "—" },
+                  { label: "Country", render: (supplier) => supplier.country || "—" },
+                ]}
+                actions={supplierActions}
+                loading={loading}
+                loadingText="Loading suppliers..."
+                emptyText={'No suppliers found. Click "Add Supplier" to create one.'}
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (supplier) => `Select supplier ${supplier.supplierName}`,
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

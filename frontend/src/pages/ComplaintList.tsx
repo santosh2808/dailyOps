@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -229,6 +230,84 @@ export default function ComplaintList() {
     await fetchComplaints();
   }
 
+  // Per-row derived values, shared by the table row and the mobile card so
+  // both render from the same expressions.
+  function complaintRowDisplay(complaint: Complaint) {
+    const proformaInvoice = complaint.salesOrder?.proformaInvoices?.[0];
+    const customerName =
+      complaint.salesOrder?.customer?.companyName || complaint.reporterName || "—";
+    // Bug fix (TC-060): a Proforma Invoice's number was
+    // previously shown identically, unstyled, to a verified
+    // Tax Invoice number — a user could easily mistake one for
+    // the other. Now distinct from both the verified case
+    // (plain) and the unverified-claimed case.
+    const invoiceDisplay = complaint.taxInvoice
+      ? complaint.taxInvoice.invoiceNumber
+      : proformaInvoice?.invoiceNumber
+        ? `${proformaInvoice.invoiceNumber} (Proforma)`
+        : complaint.claimedInvoiceNumber
+          ? `${complaint.claimedInvoiceNumber} (unverified)`
+          : "—";
+    const originText = complaint.salesOrder
+      ? `${complaint.salesOrder.salesOrderNumber} — ${customerName}`
+      : customerName !== "—"
+        ? customerName
+        : "—";
+    // Bug fix (TC-060): same warranty badge semantics as
+    // ComplaintDetails.tsx's Invoice Verification card —
+    // success when under warranty, destructive when expired
+    // or the automatic check found no matching invoice,
+    // nothing when still unverified with no claim at all.
+    const warrantyBadge = complaint.warranty ? (
+      <Badge variant={complaint.warranty.isUnderWarranty ? "success" : "destructive"}>
+        {complaint.warranty.isUnderWarranty ? "Under Warranty" : "Warranty Expired"}
+      </Badge>
+    ) : complaint.warrantyVerificationStatus === "NOT_FOUND" ? (
+      <Badge variant="destructive">Not Found</Badge>
+    ) : null;
+    const sourceBadge = (
+      <Badge
+        variant={
+          complaint.source === "WEB_FORM"
+            ? "info"
+            : complaint.source === "CONVERTED_FROM_LEAD"
+              ? "warning"
+              : "muted"
+        }
+      >
+        {complaint.source.replace(/_/g, " ")}
+      </Badge>
+    );
+    return { invoiceDisplay, originText, warrantyBadge, sourceBadge };
+  }
+
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function complaintActions(complaint: Complaint) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/complaints/${complaint.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit complaint"
+          onClick={() => navigate(`/complaints/${complaint.id}/edit`)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Delete complaint" onClick={() => openDeleteDialog(complaint)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -278,184 +357,185 @@ export default function ComplaintList() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < complaints.length;
-                    }}
-                    checked={complaints.length > 0 && selectedIds.size === complaints.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all complaints on this page"
-                  />
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("complaintNumber")}>
-                    Complaint No.
-                    {sortIcon("complaintNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Subject</TableHead>
-                {/* Bug fix: lower-priority columns now progressively
-                    appear from md/lg/xl up instead of all nine always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                {/* Bug fix (TC-060): Source/Sales Order/Customer merged into
-                    one combined "Origin" column — a Source badge stacked
-                    above the sales order + customer (or reporter) text. */}
-                <TableHead className="hidden md:table-cell">Origin</TableHead>
-                <TableHead className="hidden lg:table-cell">Invoice / Warranty</TableHead>
-                {/* Bug fix (TC-059): who/which department this complaint is
-                    assigned to, and how long it's been open/took to resolve. */}
-                <TableHead className="hidden xl:table-cell">Assigned To</TableHead>
-                <TableHead className="hidden xl:table-cell">
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
-                    Age (days)
-                    {sortIcon("createdAt")}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("status")}>
-                    Status
-                    {sortIcon("status")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading complaints...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : complaints.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    No complaints found. Click "Log Complaint" to create one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                complaints.map((complaint) => {
-                  const proformaInvoice = complaint.salesOrder?.proformaInvoices?.[0];
-                  const customerName =
-                    complaint.salesOrder?.customer?.companyName || complaint.reporterName || "—";
-                  // Bug fix (TC-060): a Proforma Invoice's number was
-                  // previously shown identically, unstyled, to a verified
-                  // Tax Invoice number — a user could easily mistake one for
-                  // the other. Now distinct from both the verified case
-                  // (plain) and the unverified-claimed case.
-                  const invoiceDisplay = complaint.taxInvoice
-                    ? complaint.taxInvoice.invoiceNumber
-                    : proformaInvoice?.invoiceNumber
-                      ? `${proformaInvoice.invoiceNumber} (Proforma)`
-                      : complaint.claimedInvoiceNumber
-                        ? `${complaint.claimedInvoiceNumber} (unverified)`
-                        : "—";
-                  const originText = complaint.salesOrder
-                    ? `${complaint.salesOrder.salesOrderNumber} — ${customerName}`
-                    : customerName !== "—"
-                      ? customerName
-                      : "—";
-                  // Bug fix (TC-060): same warranty badge semantics as
-                  // ComplaintDetails.tsx's Invoice Verification card —
-                  // success when under warranty, destructive when expired
-                  // or the automatic check found no matching invoice,
-                  // nothing when still unverified with no claim at all.
-                  const warrantyBadge = complaint.warranty ? (
-                    <Badge variant={complaint.warranty.isUnderWarranty ? "success" : "destructive"}>
-                      {complaint.warranty.isUnderWarranty ? "Under Warranty" : "Warranty Expired"}
-                    </Badge>
-                  ) : complaint.warrantyVerificationStatus === "NOT_FOUND" ? (
-                    <Badge variant="destructive">Not Found</Badge>
-                  ) : null;
-                  return (
-                    <TableRow
-                      key={complaint.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/complaints/${complaint.id}`)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedIds.has(complaint.id)}
-                          onChange={() => toggleSelected(complaint.id)}
-                          aria-label={`Select complaint ${complaint.complaintNumber}`}
-                        />
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < complaints.length;
+                        }}
+                        checked={complaints.length > 0 && selectedIds.size === complaints.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all complaints on this page"
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("complaintNumber")}>
+                        Complaint No.
+                        {sortIcon("complaintNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Subject</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively
+                        appear from md/lg/xl up instead of all nine always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    {/* Bug fix (TC-060): Source/Sales Order/Customer merged into
+                        one combined "Origin" column — a Source badge stacked
+                        above the sales order + customer (or reporter) text. */}
+                    <TableHead className="hidden md:table-cell">Origin</TableHead>
+                    <TableHead className="hidden lg:table-cell">Invoice / Warranty</TableHead>
+                    {/* Bug fix (TC-059): who/which department this complaint is
+                        assigned to, and how long it's been open/took to resolve. */}
+                    <TableHead className="hidden xl:table-cell">Assigned To</TableHead>
+                    <TableHead className="hidden xl:table-cell">
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
+                        Age (days)
+                        {sortIcon("createdAt")}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("status")}>
+                        Status
+                        {sortIcon("status")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading complaints...
+                        </span>
                       </TableCell>
-                      <TableCell className="font-medium text-slate-900">
-                        {complaint.complaintNumber}
+                    </TableRow>
+                  ) : complaints.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        No complaints found. Click "Log Complaint" to create one.
                       </TableCell>
-                      <TableCell>
-                        <TruncatedText text={complaint.subject} />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                    </TableRow>
+                  ) : (
+                    complaints.map((complaint) => {
+                      const { invoiceDisplay, originText, warrantyBadge, sourceBadge } =
+                        complaintRowDisplay(complaint);
+                      return (
+                        <TableRow
+                          key={complaint.id}
+                          className="cursor-pointer"
+                          onClick={() => navigate(`/complaints/${complaint.id}`)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedIds.has(complaint.id)}
+                              onChange={() => toggleSelected(complaint.id)}
+                              aria-label={`Select complaint ${complaint.complaintNumber}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900">
+                            {complaint.complaintNumber}
+                          </TableCell>
+                          <TableCell>
+                            <TruncatedText text={complaint.subject} />
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <div className="space-y-1">
+                              {sourceBadge}
+                              <div>
+                                <TruncatedText text={originText} />
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <div className="space-y-1">
+                              <div>{invoiceDisplay}</div>
+                              {warrantyBadge}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden xl:table-cell">{complaint.assignedToUser?.name || "—"}</TableCell>
+                          <TableCell className="hidden xl:table-cell">{complaint.ageInDays}</TableCell>
+                          <TableCell>
+                            <ComplaintStatusBadge status={complaint.status} />
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end gap-1">{complaintActions(complaint)}</div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={complaints}
+                getKey={(complaint) => complaint.id}
+                title={(complaint) => complaint.complaintNumber}
+                badge={(complaint) => <ComplaintStatusBadge status={complaint.status} />}
+                subtitle={(complaint) => complaint.subject}
+                meta={(complaint) => `${complaint.assignedToUser?.name || "—"} · Age ${complaint.ageInDays} days`}
+                fields={[
+                  { label: "Subject", render: (complaint) => complaint.subject },
+                  {
+                    label: "Origin",
+                    render: (complaint) => {
+                      const { originText, sourceBadge } = complaintRowDisplay(complaint);
+                      return (
                         <div className="space-y-1">
-                          <Badge
-                            variant={
-                              complaint.source === "WEB_FORM"
-                                ? "info"
-                                : complaint.source === "CONVERTED_FROM_LEAD"
-                                  ? "warning"
-                                  : "muted"
-                            }
-                          >
-                            {complaint.source.replace(/_/g, " ")}
-                          </Badge>
-                          <div>
-                            <TruncatedText text={originText} />
-                          </div>
+                          {sourceBadge}
+                          <div>{originText}</div>
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
+                      );
+                    },
+                  },
+                  {
+                    label: "Invoice / Warranty",
+                    render: (complaint) => {
+                      const { invoiceDisplay, warrantyBadge } = complaintRowDisplay(complaint);
+                      return (
                         <div className="space-y-1">
                           <div>{invoiceDisplay}</div>
                           {warrantyBadge}
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden xl:table-cell">{complaint.assignedToUser?.name || "—"}</TableCell>
-                      <TableCell className="hidden xl:table-cell">{complaint.ageInDays}</TableCell>
-                      <TableCell>
-                        <ComplaintStatusBadge status={complaint.status} />
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="View details"
-                            onClick={() => navigate(`/complaints/${complaint.id}`)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Edit complaint"
-                            onClick={() => navigate(`/complaints/${complaint.id}/edit`)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Delete complaint"
-                            onClick={() => openDeleteDialog(complaint)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                      );
+                    },
+                  },
+                  { label: "Assigned To", render: (complaint) => complaint.assignedToUser?.name || "—" },
+                  { label: "Age (days)", render: (complaint) => complaint.ageInDays },
+                ]}
+                actions={complaintActions}
+                loading={loading}
+                loadingText="Loading complaints..."
+                emptyText={'No complaints found. Click "Log Complaint" to create one.'}
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (complaint) => `Select complaint ${complaint.complaintNumber}`,
+                }}
+                sort={{
+                  options: [
+                    { value: "complaintNumber", label: "Complaint No." },
+                    { value: "createdAt", label: "Age (days)" },
+                    { value: "status", label: "Status" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

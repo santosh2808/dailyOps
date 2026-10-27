@@ -5,6 +5,7 @@ import {
   Boxes,
   CheckCircle2,
   Clock,
+  Eye,
   PackageCheck,
   ShieldCheck,
   Truck,
@@ -23,11 +24,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
+import JeoStatusBadge from "@/components/job-execution-orders/JeoStatusBadge";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { STATUS_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
 import { getProductionDashboard, updateJeoStatus } from "@/api/job-execution-orders";
-import type { JeoDashboardResponse, JeoStatus } from "@/types";
+import type { JeoDashboardResponse, JeoStatus, JobExecutionOrder } from "@/types";
 
 type DashboardCountKey = keyof Omit<JeoDashboardResponse, "activeOrders">;
 
@@ -96,6 +99,37 @@ export default function ProductionDashboard() {
     }
   }
 
+  // Per-row derived values and the inline status control, shared by the
+  // table row and the mobile card so both render from the same expressions.
+  function activeOrderSummary(jeo: JobExecutionOrder) {
+    const items = jeo.salesOrder?.items ?? [];
+    const products = items.length
+      ? items.map((item) => item.product?.name ?? "Unknown product").join(", ")
+      : "—";
+    const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
+    return { products, quantity };
+  }
+
+  function jeoStatusControl(jeo: JobExecutionOrder) {
+    return (
+      <>
+        <Select
+          className="w-44"
+          value={jeo.status}
+          disabled={updatingId === jeo.id}
+          onChange={(e) => handleStatusChange(jeo.id, e.target.value as JeoStatus)}
+        >
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </Select>
+        {updatingId === jeo.id && <Spinner className="h-4 w-4" />}
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -143,80 +177,111 @@ export default function ProductionDashboard() {
               <CardTitle className="text-base">Active Job Execution Orders</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>JEO Number</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Sales Order</TableHead>
-                    <TableHead>Products</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Assigned Production Manager</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Delivery Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        <span className="inline-flex items-center gap-2">
-                          <Spinner /> Loading active job execution orders...
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ) : !data || data.activeOrders.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        No active job execution orders.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    data.activeOrders.map((jeo) => {
-                      const items = jeo.salesOrder?.items ?? [];
-                      const products = items.length
-                        ? items.map((item) => item.product?.name ?? "Unknown product").join(", ")
-                        : "—";
-                      const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
-
-                      return (
-                        <TableRow
-                          key={jeo.id}
-                          className="cursor-pointer"
-                          onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
-                        >
-                          <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
-                          <TableCell>{jeo.customer?.companyName ?? "—"}</TableCell>
-                          <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                          <TableCell className="max-w-[220px] truncate" title={products}>
-                            {products}
+              <ResponsiveRecords
+                table={
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>JEO Number</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Sales Order</TableHead>
+                        <TableHead>Products</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Assigned Production Manager</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Delivery Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                            <span className="inline-flex items-center gap-2">
+                              <Spinner /> Loading active job execution orders...
+                            </span>
                           </TableCell>
-                          <TableCell>{quantity || "—"}</TableCell>
-                          <TableCell>{jeo.assignedTo ?? "—"}</TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-2">
-                              <Select
-                                className="w-44"
-                                value={jeo.status}
-                                disabled={updatingId === jeo.id}
-                                onChange={(e) => handleStatusChange(jeo.id, e.target.value as JeoStatus)}
-                              >
-                                {STATUS_OPTIONS.map((s) => (
-                                  <option key={s.value} value={s.value}>
-                                    {s.label}
-                                  </option>
-                                ))}
-                              </Select>
-                              {updatingId === jeo.id && <Spinner className="h-4 w-4" />}
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatDate(jeo.deliveryDate)}</TableCell>
                         </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                      ) : !data || data.activeOrders.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                            No active job execution orders.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        data.activeOrders.map((jeo) => {
+                          const { products, quantity } = activeOrderSummary(jeo);
+
+                          return (
+                            <TableRow
+                              key={jeo.id}
+                              className="cursor-pointer"
+                              onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
+                            >
+                              <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
+                              <TableCell>{jeo.customer?.companyName ?? "—"}</TableCell>
+                              <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                              <TableCell className="max-w-[220px] truncate" title={products}>
+                                {products}
+                              </TableCell>
+                              <TableCell>{quantity || "—"}</TableCell>
+                              <TableCell>{jeo.assignedTo ?? "—"}</TableCell>
+                              <TableCell onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-2">{jeoStatusControl(jeo)}</div>
+                              </TableCell>
+                              <TableCell>{formatDate(jeo.deliveryDate)}</TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                }
+                mobile={
+                  <MobileRecordList
+                    rows={data?.activeOrders ?? []}
+                    getKey={(jeo) => jeo.id}
+                    title={(jeo) => jeo.jeoNumber}
+                    badge={(jeo) => <JeoStatusBadge status={jeo.status} />}
+                    subtitle={(jeo) => jeo.customer?.companyName ?? "—"}
+                    meta={(jeo) =>
+                      `${jeo.salesOrder?.salesOrderNumber ?? "—"} · Delivery ${formatDate(jeo.deliveryDate)}`
+                    }
+                    fields={[
+                      { label: "Customer", render: (jeo) => jeo.customer?.companyName ?? "—" },
+                      { label: "Sales Order", render: (jeo) => jeo.salesOrder?.salesOrderNumber ?? "—" },
+                      { label: "Products", render: (jeo) => activeOrderSummary(jeo).products },
+                      { label: "Quantity", render: (jeo) => activeOrderSummary(jeo).quantity || "—" },
+                      { label: "Assigned Production Manager", render: (jeo) => jeo.assignedTo ?? "—" },
+                      {
+                        label: "Status",
+                        // Same control as the table; its w-44 select is stretched to the
+                        // card's value column so it can't overflow a narrow phone.
+                        render: (jeo) => (
+                          <div className="flex min-w-0 items-center gap-2 [&>div]:min-w-0 [&>div]:flex-1 [&_select]:w-full">
+                            {jeoStatusControl(jeo)}
+                          </div>
+                        ),
+                      },
+                      { label: "Delivery Date", render: (jeo) => formatDate(jeo.deliveryDate) },
+                    ]}
+                    // The table row navigates on click; cards expand on tap instead, so
+                    // the detail page stays reachable through an explicit action here.
+                    actions={(jeo) => (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="View details"
+                        onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+                    loading={loading}
+                    loadingText="Loading active job execution orders..."
+                    emptyText="No active job execution orders."
+                  />
+                }
+              />
             </CardContent>
           </Card>
         </main>

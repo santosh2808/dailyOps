@@ -19,6 +19,7 @@ import ImportMaterialsDialog from "@/components/materials/ImportMaterialsDialog"
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -207,6 +208,28 @@ export default function MaterialList() {
     }
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function materialActions(material: Material) {
+    return (
+      <>
+        <Button variant="ghost" size="icon" title="View details" onClick={() => navigate(`/materials/${material.id}`)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit material"
+          onClick={() => navigate(`/materials/${material.id}/edit`)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Delete material" onClick={() => openDeleteDialog(material)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -281,108 +304,114 @@ export default function MaterialList() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < materials.length;
-                    }}
-                    checked={materials.length > 0 && selectedIds.size === materials.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all materials on this page"
-                  />
-                </TableHead>
-                <TableHead>Material Code</TableHead>
-                <TableHead>Name</TableHead>
-                {/* Bug fix: lower-priority columns now progressively
-                    appear from md/lg up instead of all nine always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden md:table-cell">Category</TableHead>
-                <TableHead className="hidden lg:table-cell">Unit</TableHead>
-                <TableHead className="hidden lg:table-cell">Cost</TableHead>
-                <TableHead className="hidden md:table-cell">Current Stock</TableHead>
-                <TableHead>Stock Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading materials...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : materials.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    No materials found. Click "Create Material" to add one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                materials.map((material) => (
-                  <TableRow
-                    key={material.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/materials/${material.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(material.id)}
-                        onChange={() => toggleSelected(material.id)}
-                        aria-label={`Select material ${material.materialCode}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < materials.length;
+                        }}
+                        checked={materials.length > 0 && selectedIds.size === materials.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all materials on this page"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      {material.materialCode}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={material.name} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{material.category?.name ?? "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{material.unit?.symbol || material.unit?.name || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatCurrency(material.cost)}</TableCell>
-                    <TableCell className="hidden md:table-cell">{material.currentStock}</TableCell>
-                    <TableCell>
-                      <MaterialStockBadge material={material} />
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/materials/${material.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit material"
-                          onClick={() => navigate(`/materials/${material.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete material"
-                          onClick={() => openDeleteDialog(material)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Material Code</TableHead>
+                    <TableHead>Name</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively
+                        appear from md/lg up instead of all nine always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    <TableHead className="hidden md:table-cell">Category</TableHead>
+                    <TableHead className="hidden lg:table-cell">Unit</TableHead>
+                    <TableHead className="hidden lg:table-cell">Cost</TableHead>
+                    <TableHead className="hidden md:table-cell">Current Stock</TableHead>
+                    <TableHead>Stock Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading materials...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : materials.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        No materials found. Click "Create Material" to add one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    materials.map((material) => (
+                      <TableRow
+                        key={material.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/materials/${material.id}`)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(material.id)}
+                            onChange={() => toggleSelected(material.id)}
+                            aria-label={`Select material ${material.materialCode}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">
+                          {material.materialCode}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={material.name} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{material.category?.name ?? "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{material.unit?.symbol || material.unit?.name || "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatCurrency(material.cost)}</TableCell>
+                        <TableCell className="hidden md:table-cell">{material.currentStock}</TableCell>
+                        <TableCell>
+                          <MaterialStockBadge material={material} />
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{materialActions(material)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={materials}
+                getKey={(material) => material.id}
+                title={(material) => material.materialCode}
+                badge={(material) => <MaterialStockBadge material={material} />}
+                subtitle={(material) => material.name}
+                meta={(material) => `${material.category?.name ?? "—"} · Stock ${material.currentStock}`}
+                fields={[
+                  { label: "Name", render: (material) => material.name },
+                  { label: "Category", render: (material) => material.category?.name ?? "—" },
+                  { label: "Unit", render: (material) => material.unit?.symbol || material.unit?.name || "—" },
+                  { label: "Cost", render: (material) => formatCurrency(material.cost) },
+                  { label: "Current Stock", render: (material) => material.currentStock },
+                ]}
+                actions={materialActions}
+                loading={loading}
+                loadingText="Loading materials..."
+                emptyText={'No materials found. Click "Create Material" to add one.'}
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (material) => `Select material ${material.materialCode}`,
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

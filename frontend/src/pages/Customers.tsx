@@ -17,6 +17,7 @@ import {
 import CustomerFormDialog from "@/components/customers/CustomerFormDialog";
 import DeactivateConfirmDialog from "@/components/customers/DeactivateConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import {
@@ -121,6 +122,38 @@ export default function Customers() {
     await fetchCustomers();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function customerActions(customer: Customer) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/customers/${customer.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit customer"
+          onClick={() => openEditDialog(customer)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Deactivate customer"
+          onClick={() => openDeactivateDialog(customer)}
+        >
+          <Ban className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -149,93 +182,102 @@ export default function Customers() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company Name</TableHead>
-                <TableHead className="hidden md:table-cell">Contact Person</TableHead>
-                <TableHead className="hidden lg:table-cell">Phone</TableHead>
-                <TableHead className="hidden xl:table-cell">Email</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead className="hidden lg:table-cell">GST Number</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading customers...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : customers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    No customers found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                customers.map((customer) => (
-                  <TableRow
-                    key={customer.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/customers/${customer.id}`)}
-                  >
-                    <TableCell className="font-medium text-slate-900">
-                      <TruncatedText text={customer.companyName} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <TruncatedText text={customer.contactPerson} className="max-w-[160px]" />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{customer.phone}</TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      <TruncatedText text={customer.email || "—"} />
-                    </TableCell>
-                    <TableCell>{customer.state || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {customer.gstNumber ? (
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company Name</TableHead>
+                    <TableHead className="hidden md:table-cell">Contact Person</TableHead>
+                    <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                    <TableHead className="hidden xl:table-cell">Email</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead className="hidden lg:table-cell">GST Number</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading customers...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : customers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        No customers found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    customers.map((customer) => (
+                      <TableRow
+                        key={customer.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/customers/${customer.id}`)}
+                      >
+                        <TableCell className="font-medium text-slate-900">
+                          <TruncatedText text={customer.companyName} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <TruncatedText text={customer.contactPerson} className="max-w-[160px]" />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">{customer.phone}</TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <TruncatedText text={customer.email || "—"} />
+                        </TableCell>
+                        <TableCell>{customer.state || "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          {customer.gstNumber ? (
+                            customer.gstNumber
+                          ) : customer.isGstRegistered ? (
+                            <Badge variant="warning">Missing GST number</Badge>
+                          ) : (
+                            <Badge variant="muted">Not applicable</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{customerActions(customer)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={customers}
+                getKey={(customer) => customer.id}
+                title={(customer) => customer.companyName}
+                subtitle={(customer) => customer.contactPerson}
+                meta={(customer) => `${customer.phone} · ${customer.state || "—"}`}
+                fields={[
+                  { label: "Contact Person", render: (customer) => customer.contactPerson },
+                  { label: "Phone", render: (customer) => customer.phone },
+                  { label: "Email", render: (customer) => customer.email || "—" },
+                  { label: "State", render: (customer) => customer.state || "—" },
+                  {
+                    label: "GST Number",
+                    render: (customer) =>
+                      customer.gstNumber ? (
                         customer.gstNumber
                       ) : customer.isGstRegistered ? (
                         <Badge variant="warning">Missing GST number</Badge>
                       ) : (
                         <Badge variant="muted">Not applicable</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/customers/${customer.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit customer"
-                          onClick={() => openEditDialog(customer)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Deactivate customer"
-                          onClick={() => openDeactivateDialog(customer)}
-                        >
-                          <Ban className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      ),
+                  },
+                ]}
+                actions={customerActions}
+                loading={loading}
+                loadingText="Loading customers..."
+                emptyText="No customers found."
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

@@ -18,6 +18,7 @@ import UserFormDialog from "@/components/users/UserFormDialog";
 import ResetPasswordDialog from "@/components/users/ResetPasswordDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -197,6 +198,79 @@ export default function Users() {
     await fetchUsers();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function userActions(user: RbacUser) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Edit user"
+          onClick={() => openEditDialog(user)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Reset password"
+          onClick={() => openResetDialog(user)}
+        >
+          <KeyRound className="h-4 w-4" />
+        </Button>
+        {/* QA fix (AD-003): an Administrator disabling their own
+            account would log them out with no other active
+            Administrator able to log back in and re-enable it.
+            Backend enforces this independently (users.service.ts
+            update()/remove()) — this is just defense-in-depth so
+            the button doesn't even look clickable on your own row. */}
+        {user.isActive ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            title={
+              user.id === currentUser?.id
+                ? "You can't disable your own account"
+                : "Disable user"
+            }
+            disabled={user.id === currentUser?.id}
+            onClick={() => openDisableDialog(user)}
+          >
+            <Ban className="h-4 w-4 text-destructive" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Enable user"
+            onClick={() => openEnableDialog(user)}
+          >
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          </Button>
+        )}
+        {/* QA fix: "Delete User option is missing" — a
+            genuinely permanent action, distinct from
+            Disable above. Same self-protection as Disable:
+            backend enforces this independently
+            (users.service.ts hardDelete()) — this is just
+            defense-in-depth. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          title={
+            user.id === currentUser?.id
+              ? "You can't delete your own account"
+              : "Delete user"
+          }
+          disabled={user.id === currentUser?.id}
+          onClick={() => openDeleteDialog(user)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -238,47 +312,94 @@ export default function Users() {
             </div>
           )}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Roles</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading users...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    No users found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium text-slate-900">
-                      <TruncatedText text={user.name} className="max-w-[160px]" />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {user.username}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={user.email} />
-                    </TableCell>
-                    <TableCell>{user.department?.name ?? "—"}</TableCell>
-                    <TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Roles</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading users...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        No users found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium text-slate-900">
+                          <TruncatedText text={user.name} className="max-w-[160px]" />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {user.username}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={user.email} />
+                        </TableCell>
+                        <TableCell>{user.department?.name ?? "—"}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {user.roles.length === 0 ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              user.roles.map(({ role }) => (
+                                <Badge key={role.id} variant="orange">
+                                  {role.name}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.isActive ? "success" : "muted"}>
+                            {user.isActive ? "Active" : "Disabled"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">{userActions(user)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={users}
+                getKey={(user) => user.id}
+                title={(user) => user.name}
+                badge={(user) => (
+                  <Badge variant={user.isActive ? "success" : "muted"}>
+                    {user.isActive ? "Active" : "Disabled"}
+                  </Badge>
+                )}
+                subtitle={(user) => user.email}
+                meta={(user) => `${user.username} · ${user.department?.name ?? "—"}`}
+                fields={[
+                  { label: "Username", render: (user) => <span className="font-mono text-xs">{user.username}</span> },
+                  { label: "Email", render: (user) => user.email },
+                  { label: "Department", render: (user) => user.department?.name ?? "—" },
+                  {
+                    label: "Roles",
+                    render: (user) => (
                       <div className="flex flex-wrap gap-1">
                         {user.roles.length === 0 ? (
                           <span className="text-muted-foreground">—</span>
@@ -290,86 +411,16 @@ export default function Users() {
                           ))
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? "success" : "muted"}>
-                        {user.isActive ? "Active" : "Disabled"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit user"
-                          onClick={() => openEditDialog(user)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Reset password"
-                          onClick={() => openResetDialog(user)}
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
-                        {/* QA fix (AD-003): an Administrator disabling their own
-                            account would log them out with no other active
-                            Administrator able to log back in and re-enable it.
-                            Backend enforces this independently (users.service.ts
-                            update()/remove()) — this is just defense-in-depth so
-                            the button doesn't even look clickable on your own row. */}
-                        {user.isActive ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title={
-                              user.id === currentUser?.id
-                                ? "You can't disable your own account"
-                                : "Disable user"
-                            }
-                            disabled={user.id === currentUser?.id}
-                            onClick={() => openDisableDialog(user)}
-                          >
-                            <Ban className="h-4 w-4 text-destructive" />
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Enable user"
-                            onClick={() => openEnableDialog(user)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          </Button>
-                        )}
-                        {/* QA fix: "Delete User option is missing" — a
-                            genuinely permanent action, distinct from
-                            Disable above. Same self-protection as Disable:
-                            backend enforces this independently
-                            (users.service.ts hardDelete()) — this is just
-                            defense-in-depth. */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={
-                            user.id === currentUser?.id
-                              ? "You can't delete your own account"
-                              : "Delete user"
-                          }
-                          disabled={user.id === currentUser?.id}
-                          onClick={() => openDeleteDialog(user)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    ),
+                  },
+                ]}
+                actions={userActions}
+                loading={loading}
+                loadingText="Loading users..."
+                emptyText="No users found."
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

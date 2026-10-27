@@ -19,6 +19,7 @@ import ProformaInvoiceFiltersBar, {
 } from "@/components/proforma-invoices/ProformaInvoiceFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listProformaInvoices } from "@/api/proforma-invoices";
@@ -122,6 +123,22 @@ export default function ProformaInvoiceList() {
     );
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function invoiceActions(invoice: ProformaInvoice) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/proforma-invoices/${invoice.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -138,100 +155,131 @@ export default function ProformaInvoiceList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("invoiceNumber")}
-                  >
-                    Invoice Number
-                    {sortIcon("invoiceNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
-                {/* Additive: JEO-based tracking — see ProformaInvoice.jeo
-                    type comment. */}
-                <TableHead className="hidden md:table-cell">JEO</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("grandTotal")}
-                  >
-                    Grand Total
-                    {sortIcon("grandTotal")}
-                  </button>
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("validUntil")}
-                  >
-                    Valid Until
-                    {sortIcon("validUntil")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading proforma invoices...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : invoices.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No proforma invoices found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                invoices.map((invoice) => (
-                  <TableRow
-                    key={invoice.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/proforma-invoices/${invoice.id}`)}
-                  >
-                    <TableCell className="font-medium text-slate-900">
-                      {invoice.invoiceNumber}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={invoice.customer?.companyName ?? "—"} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                    <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
-                    <TableCell>
-                      <ProformaInvoiceStatusBadge status={invoice.status} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatDate(invoice.validUntil)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/proforma-invoices/${invoice.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("invoiceNumber")}
+                      >
+                        Invoice Number
+                        {sortIcon("invoiceNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                    {/* Additive: JEO-based tracking — see ProformaInvoice.jeo
+                        type comment. */}
+                    <TableHead className="hidden md:table-cell">JEO</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("grandTotal")}
+                      >
+                        Grand Total
+                        {sortIcon("grandTotal")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("validUntil")}
+                      >
+                        Valid Until
+                        {sortIcon("validUntil")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading proforma invoices...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : invoices.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No proforma invoices found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    invoices.map((invoice) => (
+                      <TableRow
+                        key={invoice.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/proforma-invoices/${invoice.id}`)}
+                      >
+                        <TableCell className="font-medium text-slate-900">
+                          {invoice.invoiceNumber}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={invoice.customer?.companyName ?? "—"} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
+                        <TableCell>
+                          <ProformaInvoiceStatusBadge status={invoice.status} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDate(invoice.validUntil)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{invoiceActions(invoice)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={invoices}
+                getKey={(invoice) => invoice.id}
+                title={(invoice) => invoice.invoiceNumber}
+                badge={(invoice) => <ProformaInvoiceStatusBadge status={invoice.status} />}
+                subtitle={(invoice) => invoice.customer?.companyName ?? "—"}
+                meta={(invoice) =>
+                  `${formatCurrency(invoice.grandTotal)} · Valid until ${formatDate(invoice.validUntil)}`
+                }
+                fields={[
+                  { label: "Customer", render: (invoice) => invoice.customer?.companyName ?? "—" },
+                  { label: "Sales Order", render: (invoice) => invoice.salesOrder?.salesOrderNumber ?? "—" },
+                  { label: "JEO", render: (invoice) => invoice.jeo?.jeoNumber ?? "—" },
+                  { label: "Grand Total", render: (invoice) => formatCurrency(invoice.grandTotal) },
+                  { label: "Valid Until", render: (invoice) => formatDate(invoice.validUntil) },
+                ]}
+                actions={invoiceActions}
+                loading={loading}
+                loadingText="Loading proforma invoices..."
+                emptyText="No proforma invoices found."
+                sort={{
+                  options: [
+                    { value: "invoiceNumber", label: "Invoice Number" },
+                    { value: "grandTotal", label: "Grand Total" },
+                    { value: "validUntil", label: "Valid Until" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

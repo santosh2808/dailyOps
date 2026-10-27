@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, XCircle } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -88,6 +89,49 @@ export default function QuotationApprovals() {
     }
   }
 
+  // Row actions (or the "by <decider>" note once decided), shared by the
+  // table's Actions cell and the mobile card.
+  function approvalActions(request: QuotationApprovalRequest) {
+    return (
+      <>
+        {request.status === "PENDING" && canApprove ? (
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Approve"
+              disabled={decidingId === request.id}
+              onClick={() => handleDecide(request.id, true)}
+            >
+              {decidingId === request.id ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Reject"
+              disabled={decidingId === request.id}
+              onClick={() => handleDecide(request.id, false)}
+            >
+              {decidingId === request.id ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <XCircle className="h-4 w-4 text-destructive" />
+              )}
+            </Button>
+          </div>
+        ) : (
+          <div className="text-right text-xs text-muted-foreground">
+            {request.decidedBy ? `by ${request.decidedBy}` : ""}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -110,107 +154,126 @@ export default function QuotationApprovals() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table fillHeightOnMobile>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quotation</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Discount %</TableHead>
-                <TableHead>Below Min Price</TableHead>
-                <TableHead>Requested By</TableHead>
-                <TableHead>Requested At</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading approval requests...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : requests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                    No approval requests found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                requests.map((request) => (
-                  <TableRow
-                    key={request.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/quotations/${request.quotationId}`)}
-                  >
-                    <TableCell className="font-medium text-slate-900">
-                      {request.quotation?.quotationNumber ?? request.quotationId}
-                    </TableCell>
-                    <TableCell>{request.quotation?.customer?.companyName ?? "—"}</TableCell>
-                    <TableCell className="max-w-xs truncate">{request.reason || "—"}</TableCell>
-                    <TableCell>
-                      {request.discountPercent != null ? `${request.discountPercent.toFixed(1)}%` : "—"}
-                    </TableCell>
-                    <TableCell>{request.belowMinPrice ? "Yes" : "No"}</TableCell>
-                    <TableCell>{request.requestedBy || "—"}</TableCell>
-                    <TableCell>{formatDateTime(request.requestedAt)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          request.status === "APPROVED"
-                            ? "success"
-                            : request.status === "REJECTED"
-                              ? "destructive"
-                              : "warning"
-                        }
-                      >
-                        {request.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      {request.status === "PENDING" && canApprove ? (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Approve"
-                            disabled={decidingId === request.id}
-                            onClick={() => handleDecide(request.id, true)}
-                          >
-                            {decidingId === request.id ? (
-                              <Spinner className="h-4 w-4" />
-                            ) : (
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Reject"
-                            disabled={decidingId === request.id}
-                            onClick={() => handleDecide(request.id, false)}
-                          >
-                            {decidingId === request.id ? (
-                              <Spinner className="h-4 w-4" />
-                            ) : (
-                              <XCircle className="h-4 w-4 text-destructive" />
-                            )}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="text-right text-xs text-muted-foreground">
-                          {request.decidedBy ? `by ${request.decidedBy}` : ""}
-                        </div>
-                      )}
-                    </TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Quotation</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Discount %</TableHead>
+                    <TableHead>Below Min Price</TableHead>
+                    <TableHead>Requested By</TableHead>
+                    <TableHead>Requested At</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading approval requests...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : requests.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                        No approval requests found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    requests.map((request) => (
+                      <TableRow
+                        key={request.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/quotations/${request.quotationId}`)}
+                      >
+                        <TableCell className="font-medium text-slate-900">
+                          {request.quotation?.quotationNumber ?? request.quotationId}
+                        </TableCell>
+                        <TableCell>{request.quotation?.customer?.companyName ?? "—"}</TableCell>
+                        <TableCell className="max-w-xs truncate">{request.reason || "—"}</TableCell>
+                        <TableCell>
+                          {request.discountPercent != null ? `${request.discountPercent.toFixed(1)}%` : "—"}
+                        </TableCell>
+                        <TableCell>{request.belowMinPrice ? "Yes" : "No"}</TableCell>
+                        <TableCell>{request.requestedBy || "—"}</TableCell>
+                        <TableCell>{formatDateTime(request.requestedAt)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              request.status === "APPROVED"
+                                ? "success"
+                                : request.status === "REJECTED"
+                                  ? "destructive"
+                                  : "warning"
+                            }
+                          >
+                            {request.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {approvalActions(request)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={requests}
+                getKey={(request) => request.id}
+                title={(request) => request.quotation?.quotationNumber ?? request.quotationId}
+                badge={(request) => (
+                  <Badge
+                    variant={
+                      request.status === "APPROVED"
+                        ? "success"
+                        : request.status === "REJECTED"
+                          ? "destructive"
+                          : "warning"
+                    }
+                  >
+                    {request.status}
+                  </Badge>
+                )}
+                subtitle={(request) => request.quotation?.customer?.companyName ?? "—"}
+                meta={(request) => `${request.requestedBy || "—"} · ${formatDateTime(request.requestedAt)}`}
+                fields={[
+                  { label: "Customer", render: (request) => request.quotation?.customer?.companyName ?? "—" },
+                  { label: "Reason", render: (request) => request.reason || "—" },
+                  {
+                    label: "Discount %",
+                    render: (request) =>
+                      request.discountPercent != null ? `${request.discountPercent.toFixed(1)}%` : "—",
+                  },
+                  { label: "Below Min Price", render: (request) => (request.belowMinPrice ? "Yes" : "No") },
+                  { label: "Requested By", render: (request) => request.requestedBy || "—" },
+                  { label: "Requested At", render: (request) => formatDateTime(request.requestedAt) },
+                ]}
+                // The table opens the quotation by clicking the row; a card
+                // tap expands instead, so the card gets an explicit button.
+                actions={(request) => (
+                  <>
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/quotations/${request.quotationId}`)}>
+                      <Eye className="mr-1 h-4 w-4" />
+                      Open quotation
+                    </Button>
+                    {approvalActions(request)}
+                  </>
+                )}
+                loading={loading}
+                loadingText="Loading approval requests..."
+                emptyText="No approval requests found."
+              />
+            }
+          />
         </main>
       </div>
     </div>
