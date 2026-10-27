@@ -157,11 +157,13 @@ export default function DateRangePicker({
   const label = from && to ? `${formatShort(from)} – ${formatShort(to)}` : from ? `${formatShort(from)} – ...` : placeholder;
 
   return (
-    <div ref={rootRef} className={cn("relative inline-block", className)}>
+    // Width lives on the wrapper (not the trigger) so a parent can stretch
+    // the whole picker, e.g. FilterPanel going full-width on phones.
+    <div ref={rootRef} className={cn("relative inline-block w-56", className)}>
       <Button
         type="button"
         variant="outline"
-        className={cn("w-56 justify-start font-normal", !from && !to && "text-muted-foreground")}
+        className={cn("w-full justify-start font-normal", !from && !to && "text-muted-foreground")}
         onClick={() => (open ? setOpen(false) : openPicker())}
       >
         <CalendarDays className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -169,7 +171,7 @@ export default function DateRangePicker({
       </Button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-72 rounded-md border border-input bg-background p-3 shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-input bg-background p-3 shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="mb-2 flex items-center justify-between">
             <button
               type="button"
