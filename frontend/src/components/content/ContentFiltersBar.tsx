@@ -1,7 +1,7 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import FilterPanel from "@/components/shared/FilterPanel";
 import type { ContentPostSort } from "@/api/content";
 import { BLOG_CATEGORIES, CASE_STUDY_INDUSTRIES, SORT_OPTIONS, type ContentStatusTab } from "./contentOptions";
 import type { ContentPostType, ContentWebsiteOption } from "@/types";
@@ -33,7 +33,10 @@ export const emptyContentFilters: ContentFilters = {
 };
 
 export default function ContentFiltersBar({ type, websites, filters, onChange }: ContentFiltersBarProps) {
-  const hasActiveFilters = !!filters.topic || !!filters.featured;
+  const activeFilterCount = [
+    filters.topic,
+    filters.featured,
+  ].filter(Boolean).length;
   const topics = type === "BLOG" ? BLOG_CATEGORIES : CASE_STUDY_INDUSTRIES;
 
   function update<K extends keyof ContentFilters>(key: K, value: ContentFilters[K]) {
@@ -56,7 +59,7 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
             </option>
           ))}
         </Select>
-        <div className="relative w-full max-w-sm">
+        <div className="relative w-full md:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by title or URL name"
@@ -67,7 +70,10 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterPanel
+        activeCount={activeFilterCount}
+        onClear={() => onChange({ ...filters, topic: "", featured: "" })}
+      >
         <Select className="w-44" aria-label={type === "BLOG" ? "Category" : "Industry"} value={filters.topic} onChange={(e) => update("topic", e.target.value)}>
           <option value="">{type === "BLOG" ? "All categories" : "All industries"}</option>
           {topics.map((t) => (
@@ -99,14 +105,7 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
             </option>
           ))}
         </Select>
-
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={() => onChange({ ...filters, topic: "", featured: "" })}>
-            <X className="mr-1 h-3.5 w-3.5" />
-            Clear filters
-          </Button>
-        )}
-      </div>
+      </FilterPanel>
     </div>
   );
 }

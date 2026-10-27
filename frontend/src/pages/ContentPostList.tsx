@@ -114,14 +114,14 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
   const newPostUrl = `/content/${config.path}/new`;
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title={config.plural} />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <ContentFiltersBar type={type} websites={websites} filters={filters} onChange={setFilters} />
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <div className="app-page-actions flex shrink-0 flex-wrap gap-2">
               <Button variant="outline" size="icon" title="Refresh list" aria-label="Refresh list" onClick={fetchPosts} disabled={loading}>
                 <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               </Button>
@@ -157,7 +157,7 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
+          <Table fillHeightOnMobile>
             <TableHeader>
               <TableRow>
                 <TableHead className="hidden w-24 sm:table-cell">Cover</TableHead>
