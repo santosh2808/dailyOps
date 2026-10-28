@@ -1,0 +1,17 @@
+{
+  // Editor/type-check config for the test suite only. The root tsconfig.json
+  // excludes test/ so specs never reach the build; without this file VS Code
+  // treats specs as loose files and can't see @types/jest or Express/Multer
+  // types. Jest itself compiles specs via ts-jest (see jest.config.js).
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    // Specs import from ../src, so the project root is backend/ (TypeScript 6
+    // otherwise defaults rootDir to this folder and rejects ../src files).
+    "rootDir": "..",
+    "types": ["jest", "node", "multer"]
+  },
+  "include": ["**/*.ts", "../src/**/*.ts"],
+  "exclude": []
+}

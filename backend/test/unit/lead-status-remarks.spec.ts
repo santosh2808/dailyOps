@@ -6,7 +6,7 @@ function setup(existing: Record<string, unknown>) {
     leadStatusHistory: { create: jest.fn().mockResolvedValue({}) },
   };
   const prisma: any = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) };
-  const svc = new LeadsService(prisma, {} as any, {} as any);
+  const svc = new LeadsService(prisma, {} as any, {} as any, {} as any);
   jest.spyOn(svc, 'findOne').mockResolvedValue({ id: 'l1', status: 'ASSIGNED', siteVisitPhotos: [], ...existing } as any);
   jest.spyOn(svc as any, 'logHistory').mockResolvedValue(undefined);
   return { svc, tx };
