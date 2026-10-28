@@ -275,6 +275,10 @@ export async function uploadSiteVisitPhotos(
   }
   const res = await api.post<LeadSiteVisitPhoto[]>(`/api/v1/leads/${id}/site-visit-photos`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    // Generous for a few MB on weak mobile data, but bounded: a request
+    // that never settles would hold the offline queue's drain lock and
+    // stall every photo behind it.
+    timeout: 120_000,
   });
   return res.data;
 }

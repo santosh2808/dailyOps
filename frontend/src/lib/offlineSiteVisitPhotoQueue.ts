@@ -28,7 +28,17 @@ const STORE_NAME = "siteVisitPhotos";
 export interface QueuedSiteVisitPhoto {
   id: string;
   leadId: string;
-  file: File;
+  // The photo's raw bytes rather than the File itself: iOS Safari (WebKit,
+  // so every iPhone browser) stores a Blob in IndexedDB fine but often
+  // can't send one read back out of it — the request fails on the phone
+  // ("Load failed" / WebKitBlobResource error) before reaching the server,
+  // so the photo sat "waiting to upload" forever. An ArrayBuffer
+  // round-trips on every browser; queuedPhotoFile() rebuilds the File.
+  bytes?: ArrayBuffer;
+  fileName?: string;
+  mimeType?: string;
+  // Only on photos queued by an older app version, before `bytes` existed.
+  file?: File;
   latitude: number;
   longitude: number;
   accuracyMeters?: number;
@@ -37,6 +47,24 @@ export interface QueuedSiteVisitPhoto {
   capturedAt: string;
   lastError?: string;
   lastAttemptAt?: string;
+}
+
+// For on-screen thumbnails (reading a stored Blob into an <img> works on
+// iOS; only sending one fails).
+export function queuedPhotoBlob(record: QueuedSiteVisitPhoto): Blob {
+  if (record.bytes) return new Blob([record.bytes], { type: record.mimeType });
+  return record.file ?? new Blob();
+}
+
+// A fresh in-memory File for the upload, never the Blob that came out of
+// IndexedDB — see `bytes` above. Throws if an old-style record's stored
+// file can no longer be read; the caller reports that rather than retrying.
+export async function queuedPhotoFile(record: QueuedSiteVisitPhoto): Promise<File> {
+  const name = record.fileName ?? record.file?.name ?? `site-visit-${record.id}.jpg`;
+  const type = record.mimeType ?? record.file?.type ?? "image/jpeg";
+  if (record.bytes) return new File([record.bytes], name, { type });
+  if (record.file) return new File([await record.file.arrayBuffer()], name, { type });
+  throw new Error("Queued photo has no image data.");
 }
 
 function openDb(): Promise<IDBDatabase> {
