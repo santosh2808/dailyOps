@@ -1,9 +1,25 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="w-full overflow-auto rounded-md border">
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  // List pages only (inside <main className="app-shell-main app-shell-main-list">,
+  // see index.css): below md the wrapper shrinks to the height left under
+  // the page's filters/actions and scrolls its rows itself, with a sticky
+  // header row. min-h-48 keeps a few rows usable when a tall expanded
+  // filter panel eats most of a small screen — <main> then scrolls as the
+  // fallback. No effect at md and up.
+  fillHeightOnMobile?: boolean;
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, fillHeightOnMobile = false, ...props }, ref) => (
+    <div
+      className={cn(
+        "w-full overflow-auto rounded-md border",
+        fillHeightOnMobile &&
+          "max-md:min-h-48 max-md:overscroll-contain max-md:[&_thead]:sticky max-md:[&_thead]:top-0 max-md:[&_thead]:z-10 max-md:[&_thead]:shadow-[inset_0_-1px_0_hsl(var(--border))]"
+      )}
+    >
       <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
     </div>
   )

@@ -23,7 +23,9 @@ import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { deleteQuotation, listQuotations } from "@/api/quotations";
@@ -198,20 +200,79 @@ export default function QuotationList() {
     await fetchQuotations();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function quotationActions(quotation: Quotation) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/quotations/${quotation.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        {/* Bug fix: once ACCEPTED, the backend rejects
+            edits (QuotationsService.update()) — a Sales
+            Order freezes its totals from this quotation's
+            live data, so a post-acceptance edit could
+            silently diverge from what the customer actually
+            agreed to. Hidden here rather than letting staff
+            hit that error from the list view. */}
+        {quotation.status !== "ACCEPTED" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Edit quotation"
+            onClick={() => navigate(`/quotations/${quotation.id}/edit`)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Delete quotation"
+          onClick={() => openDeleteDialog(quotation)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Quotations" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <QuotationFiltersBar filters={filters} onChange={setFilters} />
+            <QuotationFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                hasPermission("Quotation", "Create") ? (
+                  <MobileActionBar
+                    layout="inline"
+                    primary={{
+                      label: "Create Quotation",
+                      shortLabel: "Create",
+                      shortBelow: 390,
+                      icon: Plus,
+                      onSelect: () => navigate("/quotations/new"),
+                    }}
+                    more={[{ label: "Generate from Lead", icon: UserSquare2, onSelect: () => setGenerateFromLeadOpen(true) }]}
+                  />
+                ) : undefined
+              }
+            />
             {hasPermission("Quotation", "Create") && (
-              <div className="flex shrink-0 flex-wrap gap-2">
+              <div className="app-page-actions flex shrink-0 flex-wrap gap-2 max-md:hidden">
                 {/* Generates a quotation straight from a Qualified lead's
                     own linked products — no Customer required until
                     Convert to Customer later, at Create Sales Order time.
@@ -254,142 +315,153 @@ export default function QuotationList() {
             </div>
           )}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < quotations.length;
-                    }}
-                    checked={quotations.length > 0 && selectedIds.size === quotations.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all quotations on this page"
-                  />
-                </TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("quotationNumber")}
-                  >
-                    Quotation Number
-                    {sortIcon("quotationNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Status</TableHead>
-                {/* Bug fix: lower-priority columns now progressively appear
-                    from md/lg up instead of all eight always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden lg:table-cell">Items</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("grandTotal")}
-                  >
-                    Grand Total
-                    {sortIcon("grandTotal")}
-                  </button>
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("validUntil")}
-                  >
-                    Valid Until
-                    {sortIcon("validUntil")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading quotations...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : quotations.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No quotations found. Click "Create Quotation" to add one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                quotations.map((quotation) => (
-                  <TableRow
-                    key={quotation.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/quotations/${quotation.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(quotation.id)}
-                        onChange={() => toggleSelected(quotation.id)}
-                        aria-label={`Select quotation ${quotation.quotationNumber}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < quotations.length;
+                        }}
+                        checked={quotations.length > 0 && selectedIds.size === quotations.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all quotations on this page"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      {quotation.quotationNumber}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={quotation.customer?.companyName ?? "—"} />
-                    </TableCell>
-                    <TableCell>
-                      <QuotationStatusBadge status={quotation.status} />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{quotation._count?.items ?? 0}</TableCell>
-                    <TableCell className="hidden md:table-cell">{formatCurrency(quotation.grandTotal)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatDate(quotation.validUntil)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/quotations/${quotation.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {/* Bug fix: once ACCEPTED, the backend rejects
-                            edits (QuotationsService.update()) — a Sales
-                            Order freezes its totals from this quotation's
-                            live data, so a post-acceptance edit could
-                            silently diverge from what the customer actually
-                            agreed to. Hidden here rather than letting staff
-                            hit that error from the list view. */}
-                        {quotation.status !== "ACCEPTED" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Edit quotation"
-                            onClick={() => navigate(`/quotations/${quotation.id}/edit`)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete quotation"
-                          onClick={() => openDeleteDialog(quotation)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("quotationNumber")}
+                      >
+                        Quotation Number
+                        {sortIcon("quotationNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Status</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively appear
+                        from md/lg up instead of all eight always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    <TableHead className="hidden lg:table-cell">Items</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("grandTotal")}
+                      >
+                        Grand Total
+                        {sortIcon("grandTotal")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("validUntil")}
+                      >
+                        Valid Until
+                        {sortIcon("validUntil")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading quotations...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : quotations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No quotations found. Click "Create Quotation" to add one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    quotations.map((quotation) => (
+                      <TableRow
+                        key={quotation.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/quotations/${quotation.id}`)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(quotation.id)}
+                            onChange={() => toggleSelected(quotation.id)}
+                            aria-label={`Select quotation ${quotation.quotationNumber}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">
+                          {quotation.quotationNumber}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={quotation.customer?.companyName ?? "—"} />
+                        </TableCell>
+                        <TableCell>
+                          <QuotationStatusBadge status={quotation.status} />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">{quotation._count?.items ?? 0}</TableCell>
+                        <TableCell className="hidden md:table-cell">{formatCurrency(quotation.grandTotal)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDate(quotation.validUntil)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{quotationActions(quotation)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={quotations}
+                getKey={(quotation) => quotation.id}
+                title={(quotation) => quotation.quotationNumber}
+                badge={(quotation) => <QuotationStatusBadge status={quotation.status} />}
+                subtitle={(quotation) => quotation.customer?.companyName ?? "—"}
+                meta={(quotation) =>
+                  `${formatCurrency(quotation.grandTotal)} · Valid until ${formatDate(quotation.validUntil)}`
+                }
+                fields={[
+                  { label: "Customer", render: (quotation) => quotation.customer?.companyName ?? "—" },
+                  { label: "Items", render: (quotation) => quotation._count?.items ?? 0 },
+                  { label: "Grand Total", render: (quotation) => formatCurrency(quotation.grandTotal) },
+                  { label: "Valid Until", render: (quotation) => formatDate(quotation.validUntil) },
+                ]}
+                actions={quotationActions}
+                loading={loading}
+                loadingText="Loading quotations..."
+                emptyText={'No quotations found. Click "Create Quotation" to add one.'}
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (quotation) => `Select quotation ${quotation.quotationNumber}`,
+                }}
+                sort={{
+                  options: [
+                    { value: "quotationNumber", label: "Quotation Number" },
+                    { value: "grandTotal", label: "Grand Total" },
+                    { value: "validUntil", label: "Valid Until" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

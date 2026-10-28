@@ -205,21 +205,8 @@ export async function convertLeadToCustomer(id: string) {
   return res.data;
 }
 
-export async function downloadLeadImportTemplate() {
-  const res = await api.get("/api/v1/leads/import/template", { responseType: "blob" });
-  const url = window.URL.createObjectURL(new Blob([res.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "lead-import-template.xlsx");
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-}
-
 // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
-// records, distinct from downloadLeadImportTemplate() above (which only
-// ever produces a blank header row for uploading).
+// records.
 export async function downloadLeadData() {
   const res = await api.get("/api/v1/leads/export", { responseType: "blob" });
   const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -288,6 +275,10 @@ export async function uploadSiteVisitPhotos(
   }
   const res = await api.post<LeadSiteVisitPhoto[]>(`/api/v1/leads/${id}/site-visit-photos`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    // Generous for a few MB on weak mobile data, but bounded: a request
+    // that never settles would hold the offline queue's drain lock and
+    // stall every photo behind it.
+    timeout: 120_000,
   });
   return res.data;
 }

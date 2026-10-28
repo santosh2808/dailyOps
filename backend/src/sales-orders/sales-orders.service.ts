@@ -94,8 +94,9 @@ const MAX_SALES_ORDER_NUMBER_ATTEMPTS = 5;
 const DEFAULT_GST_PERCENT = 18;
 
 // Customer PO document upload — see uploadCustomerPoDocument()'s comment.
-// Same on-disk-file / DB-metadata-only convention as
-// LeadsService.SITE_VISIT_PHOTOS_DIR.
+// Still stored on local disk (DB holds metadata only). In a container that
+// disk is root-owned and wiped on deploy — move this to createFileStore()
+// (common/file-storage.ts) like site visit photos.
 const PO_DOCUMENT_DIR =
   process.env.SALES_ORDER_PO_DOCUMENTS_DIR?.trim() || join(process.cwd(), 'uploads', 'sales-order-po-documents');
 const ALLOWED_PO_DOCUMENT_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);

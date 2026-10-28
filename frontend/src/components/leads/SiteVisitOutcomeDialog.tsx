@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Camera, Clock } from "lucide-react";
+import { Camera, Clock, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { queuedPhotoBlob } from "@/lib/offlineSiteVisitPhotoQueue";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -86,8 +87,9 @@ export default function SiteVisitOutcomeDialog({
   const [photos, setPhotos] = useState<LeadSiteVisitPhoto[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingThumbnails, setPendingThumbnails] = useState<Record<string, string>>({});
-  const { enqueuePhoto, pendingForLead, subscribe } = useOfflineSiteVisitPhotoQueue();
+  const { enqueuePhoto, removePhoto, pendingForLead, subscribe } = useOfflineSiteVisitPhotoQueue();
   const pendingPhotos = lead ? pendingForLead(lead.id) : [];
+  const pendingError = pendingPhotos.find((p) => p.lastError)?.lastError;
 
   useEffect(() => {
     if (open) {
@@ -116,14 +118,14 @@ export default function SiteVisitOutcomeDialog({
   }, [lead?.id]);
 
   // Local (not server) thumbnails for photos still sitting in the offline
-  // queue — we already have the raw File in memory, no need to round-trip
+  // queue — we already have the photo's bytes locally, no need to round-trip
   // through the authenticated streaming endpoint like SiteVisitPhotoGallery
   // does for confirmed photos.
   useEffect(() => {
     setPendingThumbnails((prev) => {
       const next: Record<string, string> = {};
       pendingPhotos.forEach((p) => {
-        next[p.id] = prev[p.id] ?? URL.createObjectURL(p.file);
+        next[p.id] = prev[p.id] ?? URL.createObjectURL(queuedPhotoBlob(p));
       });
       Object.entries(prev).forEach(([id, url]) => {
         if (!next[id]) URL.revokeObjectURL(url);
@@ -271,13 +273,13 @@ export default function SiteVisitOutcomeDialog({
                 {pendingPhotos.map((p) => (
                   <div
                     key={p.id}
-                    className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50 opacity-60"
+                    className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50"
                   >
                     {pendingThumbnails[p.id] && (
                       <img
                         src={pendingThumbnails[p.id]}
                         alt="Queued site photo"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover opacity-60"
                       />
                     )}
                     <div
@@ -286,9 +288,27 @@ export default function SiteVisitOutcomeDialog({
                     >
                       <Clock className="h-4 w-4 text-white" />
                     </div>
+                    {/* Only once an attempt has failed — a photo that's
+                        just waiting for signal shouldn't be easy to discard.
+                        Always visible (not hover-only) since this is used on
+                        phones. */}
+                    {p.lastError && (
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(p.id)}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                        title="Remove photo"
+                        aria-label="Remove queued photo"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
+              {/* The tile tooltip above is invisible on touch screens, so the
+                  reason a photo is stuck is spelled out here too. */}
+              {pendingError && <p className="text-xs text-amber-700">Upload problem: {pendingError}</p>}
             </div>
           )}
         </div>

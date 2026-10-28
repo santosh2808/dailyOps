@@ -75,3 +75,56 @@ body {
 .bg-app-grid {
   background-color: #fafafa;
 }
+
+/* Authenticated page shell, shared by every Sidebar + Topbar page:
+     <div class="app-shell bg-app-grid">
+       <Sidebar />
+       <div class="app-shell-content">
+         <Topbar />
+         <main class="app-shell-main [app-shell-main-list]">…</main>
+
+   md and up: unchanged from before — the browser scrolls the document and
+   Sidebar/Topbar stay put via sticky positioning (see 3277cde for why
+   laptops must not get a boxed-in <main>).
+
+   Below md (phones): an app-style shell instead. The outer wrapper is
+   pinned to the viewport and <main> is the single vertical scroll
+   container, so the Topbar sits outside anything that scrolls and can
+   never drift vertically or horizontally.
+
+   min-w-0 on the content column is the mobile overflow fix: as a flex item
+   its min-width otherwise defaults to its content's min-content width, so
+   a wide table pushed the whole column (Topbar included) past the right
+   edge of the screen and the entire page scrolled sideways. With min-w-0
+   the column stays viewport-wide and wide content scrolls inside its own
+   overflow container (e.g. the Table wrapper) instead. */
+@layer components {
+  .app-shell {
+    @apply flex min-h-dvh pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] max-md:h-dvh max-md:overflow-hidden;
+  }
+
+  .app-shell-content {
+    @apply flex min-w-0 flex-1 flex-col max-md:min-h-0;
+  }
+
+  .app-shell-main {
+    @apply flex-1 p-6 max-md:min-h-0 max-md:overflow-y-auto max-md:overscroll-contain max-md:p-4;
+  }
+
+  /* List pages (filters + actions + one Table + pagination as direct
+     children of <main>): on phones <main> becomes a flex column so a
+     <Table fillHeightOnMobile> takes whatever height is left and scrolls
+     its rows itself, keeping search/filters/actions and pagination in
+     view. Desktop/tablet unaffected. */
+  .app-shell-main-list {
+    @apply max-md:flex max-md:flex-col;
+  }
+
+  /* A wrapping row of page-level action buttons: on phones each button
+     grows to fill its wrapped row, so rows come out even instead of
+     ragged. Buttons keep their natural (nowrap) width as the minimum, so
+     wrapping points are unchanged and labels are never squeezed. */
+  .app-page-actions {
+    @apply max-md:[&>*]:flex-auto;
+  }
+}

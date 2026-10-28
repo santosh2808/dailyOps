@@ -19,6 +19,7 @@ import TaxInvoiceFiltersBar, {
 } from "@/components/tax-invoices/TaxInvoiceFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listTaxInvoices } from "@/api/tax-invoices";
@@ -120,12 +121,28 @@ export default function TaxInvoiceList() {
     );
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function invoiceActions(invoice: TaxInvoice) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/tax-invoices/${invoice.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Tax Invoices" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
             <TaxInvoiceFiltersBar filters={filters} onChange={setFilters} />
           </div>
@@ -137,100 +154,129 @@ export default function TaxInvoiceList() {
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("invoiceNumber")}
-                  >
-                    Invoice Number
-                    {sortIcon("invoiceNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="hidden md:table-cell">Sales Order</TableHead>
-                {/* Additive: JEO-based tracking — see TaxInvoice.jeo type
-                    comment. */}
-                <TableHead className="hidden md:table-cell">JEO</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("grandTotal")}
-                  >
-                    Grand Total
-                    {sortIcon("grandTotal")}
-                  </button>
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("invoiceDate")}
-                  >
-                    Invoice Date
-                    {sortIcon("invoiceDate")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading tax invoices...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : invoices.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No tax invoices found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                invoices.map((invoice) => (
-                  <TableRow
-                    key={invoice.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/tax-invoices/${invoice.id}`)}
-                  >
-                    <TableCell className="font-medium text-slate-900">
-                      {invoice.invoiceNumber}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={invoice.customer?.companyName ?? "—"} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                    <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
-                    <TableCell>
-                      <TaxInvoiceStatusBadge status={invoice.status} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatDate(invoice.invoiceDate)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/tax-invoices/${invoice.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("invoiceNumber")}
+                      >
+                        Invoice Number
+                        {sortIcon("invoiceNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Sales Order</TableHead>
+                    {/* Additive: JEO-based tracking — see TaxInvoice.jeo type
+                        comment. */}
+                    <TableHead className="hidden md:table-cell">JEO</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("grandTotal")}
+                      >
+                        Grand Total
+                        {sortIcon("grandTotal")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("invoiceDate")}
+                      >
+                        Invoice Date
+                        {sortIcon("invoiceDate")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading tax invoices...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : invoices.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No tax invoices found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    invoices.map((invoice) => (
+                      <TableRow
+                        key={invoice.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/tax-invoices/${invoice.id}`)}
+                      >
+                        <TableCell className="font-medium text-slate-900">
+                          {invoice.invoiceNumber}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={invoice.customer?.companyName ?? "—"} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
+                        <TableCell>
+                          <TaxInvoiceStatusBadge status={invoice.status} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{formatCurrency(invoice.grandTotal)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDate(invoice.invoiceDate)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{invoiceActions(invoice)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={invoices}
+                getKey={(invoice) => invoice.id}
+                title={(invoice) => invoice.invoiceNumber}
+                badge={(invoice) => <TaxInvoiceStatusBadge status={invoice.status} />}
+                subtitle={(invoice) => invoice.customer?.companyName ?? "—"}
+                meta={(invoice) => `${formatCurrency(invoice.grandTotal)} · ${formatDate(invoice.invoiceDate)}`}
+                fields={[
+                  { label: "Customer", render: (invoice) => invoice.customer?.companyName ?? "—" },
+                  { label: "Sales Order", render: (invoice) => invoice.salesOrder?.salesOrderNumber ?? "—" },
+                  { label: "JEO", render: (invoice) => invoice.jeo?.jeoNumber ?? "—" },
+                  { label: "Grand Total", render: (invoice) => formatCurrency(invoice.grandTotal) },
+                  { label: "Invoice Date", render: (invoice) => formatDate(invoice.invoiceDate) },
+                ]}
+                actions={invoiceActions}
+                loading={loading}
+                loadingText="Loading tax invoices..."
+                emptyText="No tax invoices found."
+                sort={{
+                  options: [
+                    { value: "invoiceNumber", label: "Invoice Number" },
+                    { value: "grandTotal", label: "Grand Total" },
+                    { value: "invoiceDate", label: "Invoice Date" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

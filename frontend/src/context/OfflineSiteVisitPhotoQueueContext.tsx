@@ -4,6 +4,7 @@ import { toast } from "@/lib/toast";
 import {
   enqueuePhoto as dbEnqueuePhoto,
   getAllQueuedPhotos,
+  queuedPhotoFile,
   removeQueuedPhoto,
   updateQueuedPhotoError,
   type QueuedSiteVisitPhoto,
@@ -44,6 +45,9 @@ interface EnqueuePhotoInput {
 interface OfflineSiteVisitPhotoQueueContextValue {
   pendingForLead: (leadId: string) => QueuedSiteVisitPhoto[];
   enqueuePhoto: (input: EnqueuePhotoInput) => Promise<void>;
+  // Rep-initiated only (the "remove" button on a photo whose upload keeps
+  // failing) — the queue itself never drops a photo on its own.
+  removePhoto: (id: string) => Promise<void>;
   // Dialogs register here while open to learn the moment a queued photo for
   // "their" lead finally lands on the server, so they can merge it into
   // their own visible gallery the same way an immediate upload would.
@@ -84,8 +88,17 @@ export function OfflineSiteVisitPhotoQueueProvider({ children }: { children: Rea
       const current = await getAllQueuedPhotos();
       let uploadedCount = 0;
       for (const record of current) {
+        let file: File;
         try {
-          const [uploaded] = await uploadSiteVisitPhotos(record.leadId, [record.file], {
+          file = await queuedPhotoFile(record);
+        } catch {
+          // Retrying can't bring back unreadable data — say so, so the rep
+          // removes it and retakes the photo.
+          await updateQueuedPhotoError(record.id, "This photo can't be read from the phone. Remove it and take it again.");
+          continue;
+        }
+        try {
+          const [uploaded] = await uploadSiteVisitPhotos(record.leadId, [file], {
             latitude: record.latitude,
             longitude: record.longitude,
             accuracyMeters: record.accuracyMeters,
@@ -96,7 +109,11 @@ export function OfflineSiteVisitPhotoQueueProvider({ children }: { children: Rea
         } catch (err) {
           if (isRetryableNetworkError(err)) {
             // Still offline (or the server is unreachable) — leave it
-            // queued, try again on the next drain trigger.
+            // queued, try again on the next drain trigger. Record the reason
+            // anyway: the device says it's online, so a phone showing only
+            // "waiting" would hide a real failure.
+            const reason = err instanceof Error && err.message ? err.message : "no response";
+            await updateQueuedPhotoError(record.id, `Couldn't reach the server (${reason}). Retrying automatically.`);
             continue;
           }
           // The server actually responded and rejected it — record why,
@@ -142,10 +159,16 @@ export function OfflineSiteVisitPhotoQueueProvider({ children }: { children: Rea
 
   const enqueuePhoto = useCallback(
     async (input: EnqueuePhotoInput) => {
+      // Bytes, not the File — see QueuedSiteVisitPhoto.bytes. Reading a
+      // just-captured photo shouldn't fail, but if it ever does, keep the
+      // File rather than lose the shot.
+      const bytes = await input.file.arrayBuffer().catch(() => undefined);
       const record: QueuedSiteVisitPhoto = {
         id: crypto.randomUUID(),
         leadId: input.leadId,
-        file: input.file,
+        ...(bytes ? { bytes } : { file: input.file }),
+        fileName: input.file.name,
+        mimeType: input.file.type || "image/jpeg",
         latitude: input.latitude,
         longitude: input.longitude,
         accuracyMeters: input.accuracyMeters,
@@ -162,6 +185,14 @@ export function OfflineSiteVisitPhotoQueueProvider({ children }: { children: Rea
     [refresh, drain],
   );
 
+  const removePhoto = useCallback(
+    async (id: string) => {
+      await removeQueuedPhoto(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const pendingForLead = useCallback((leadId: string) => queue.filter((q) => q.leadId === leadId), [queue]);
 
   const subscribe = useCallback((leadId: string, onUploaded: (photo: LeadSiteVisitPhoto) => void) => {
@@ -173,7 +204,7 @@ export function OfflineSiteVisitPhotoQueueProvider({ children }: { children: Rea
   }, []);
 
   return (
-    <OfflineSiteVisitPhotoQueueContext.Provider value={{ pendingForLead, enqueuePhoto, subscribe }}>
+    <OfflineSiteVisitPhotoQueueContext.Provider value={{ pendingForLead, enqueuePhoto, removePhoto, subscribe }}>
       {children}
     </OfflineSiteVisitPhotoQueueContext.Provider>
   );

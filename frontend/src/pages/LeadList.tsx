@@ -35,10 +35,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteLead, downloadLeadData, downloadLeadImportTemplate, listLeads } from "@/api/leads";
+import { deleteLead, downloadLeadData, listLeads } from "@/api/leads";
 import type { Lead, LeadSource, LeadStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -117,10 +119,7 @@ export default function LeadList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  // QA fix (TC-074 re-fail): "Download Data" — separate loading state from
-  // Download Template above, since these are two independent buttons/
-  // requests now.
+  // QA fix (TC-074 re-fail): loading state for the "Download Data" export.
   const [downloadingData, setDownloadingData] = useState(false);
 
   // Bulk delete — select-multiple checkboxes in the table, scoped to the
@@ -249,23 +248,8 @@ export default function LeadList() {
     await fetchLeads();
   }
 
-  async function handleDownloadTemplate() {
-    setDownloadingTemplate(true);
-    try {
-      await downloadLeadImportTemplate();
-    } catch (err) {
-      const message = getErrorMessage(err, "Failed to download the import template.");
-      setError(message);
-      toast.error(message);
-    } finally {
-      setDownloadingTemplate(false);
-    }
-  }
-
   // QA fix (TC-074 re-fail): "Download Data" — exports the existing lead
-  // records as Excel, kept entirely separate from handleDownloadTemplate()
-  // above (that one must keep producing a blank template for import, not
-  // real data).
+  // records as Excel.
   async function handleDownloadData() {
     setDownloadingData(true);
     try {
@@ -279,14 +263,31 @@ export default function LeadList() {
     }
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function leadActions(lead: Lead) {
+    return (
+      <>
+        <Button variant="ghost" size="icon" title="View details" onClick={() => navigate(`/leads/${lead.id}`)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Edit lead" onClick={() => navigate(`/leads/${lead.id}/edit`)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Delete lead" onClick={() => openDeleteDialog(lead)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Leads" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           {/* QA fix ("There is overlap on screen in complete app"): this row's
               two children (the filters bar — 5 selects + date-range picker —
               and the action-button group) together need far more width than
@@ -301,18 +302,32 @@ export default function LeadList() {
               width. Same fix applied to every other list page with this
               filters-bar + action-buttons header pattern. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <LeadFiltersBar filters={filters} onChange={setFilters} />
-            <div className="flex flex-wrap gap-2 shrink-0">
-              <Button variant="outline" onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-                {downloadingTemplate ? (
-                  <Spinner className="mr-2 h-4 w-4" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {downloadingTemplate ? "Downloading..." : "Download Template"}
-              </Button>
-              {/* QA fix (TC-074 re-fail): separate, real data export —
-                  distinct from the blank import template above. */}
+            <LeadFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                <MobileActionBar
+                  layout="inline"
+                  primary={
+                    hasPermission("Lead", "Create")
+                      ? { label: "Create Lead", shortLabel: "Create", icon: Plus, onSelect: () => navigate("/leads/new") }
+                      : null
+                  }
+                  more={[
+                    { label: "Import Leads", icon: Upload, onSelect: () => setImportOpen(true) },
+                    {
+                      label: downloadingData ? "Downloading..." : "Download Data",
+                      icon: Download,
+                      onSelect: handleDownloadData,
+                      disabled: downloadingData,
+                      busy: downloadingData,
+                    },
+                  ]}
+                />
+              }
+            />
+            <div className="app-page-actions flex flex-wrap gap-2 shrink-0 max-md:hidden">
+              {/* QA fix (TC-074 re-fail): real lead data export. */}
               <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
                 {downloadingData ? (
                   <Spinner className="mr-2 h-4 w-4" />
@@ -357,174 +372,212 @@ export default function LeadList() {
               columns: Lead No, Company, Contact, Phone, Email, Source,
               Assigned To, Status, Next Follow-up, Created, Last Updated, Actions.
               Priority/Est. Value/Products still show on Lead Details. */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < leads.length;
-                    }}
-                    checked={leads.length > 0 && selectedIds.size === leads.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all leads on this page"
-                  />
-                </TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("leadNumber")}
-                  >
-                    Lead No
-                    {sortIcon("leadNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Company</TableHead>
-                {/* Bug fix: this table had 13 columns always rendered at
-                    once, forcing a horizontal scroll on anything narrower
-                    than a wide desktop monitor. Lower-priority columns now
-                    progressively appear from md/lg/xl up instead — Lead No/
-                    Company/Status/Actions (plus Assigned To and Next
-                    Follow-up, the two day-to-day workflow columns) stay
-                    visible everywhere; the rest reappear as the viewport has
-                    room, same data as before, just not fighting for space on
-                    a laptop-width screen. */}
-                <TableHead className="hidden lg:table-cell">Contact</TableHead>
-                <TableHead className="hidden xl:table-cell">Phone</TableHead>
-                <TableHead className="hidden xl:table-cell">Email</TableHead>
-                <TableHead className="hidden xl:table-cell">Source</TableHead>
-                <TableHead className="hidden lg:table-cell">State</TableHead>
-                <TableHead className="hidden md:table-cell">Assigned To</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("nextFollowUp")}
-                  >
-                    Next Follow-up
-                    {sortIcon("nextFollowUp")}
-                  </button>
-                </TableHead>
-                {/* "Created" is what the date-range filter above works on,
-                    so it's shown (and sortable) right next to it. */}
-                <TableHead className="hidden lg:table-cell">
-                  <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
-                    Created
-                    {sortIcon("createdAt")}
-                  </button>
-                </TableHead>
-                <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
-                {/* D.O.T. AI Lead Assistant Phase 1 (Step 10) — kept behind
-                    the widest breakpoint only, per "don't clutter the main
-                    Leads table"; full detail lives on Lead Details. */}
-                <TableHead className="hidden 2xl:table-cell">AI Status</TableHead>
-                <TableHead className="hidden 2xl:table-cell">AI Interest</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading leads...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : leads.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
-                    No leads found. Click "Create Lead" to add one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                leads.map((lead) => (
-                  <TableRow key={lead.id} className="cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(lead.id)}
-                        onChange={() => toggleSelected(lead.id)}
-                        aria-label={`Select lead ${lead.leadNumber}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < leads.length;
+                        }}
+                        checked={leads.length > 0 && selectedIds.size === leads.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all leads on this page"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">{lead.leadNumber}</TableCell>
-                    <TableCell>
-                      <TruncatedText text={lead.companyName || "-"} />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <TruncatedText text={lead.contactPerson || "-"} className="max-w-[160px]" />
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">{lead.phone || "-"}</TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      <TruncatedText text={lead.email || "-"} />
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      {/* Bug fix (TC-040): this used to show the source
-                          label ("Website") and then a static "Website"
-                          badge right next to it — literally repeating the
-                          same word. When the lead actually has a linked
-                          source website, show that website's own name
-                          (more useful than the redundant label) instead of
-                          a duplicate "Website" badge; otherwise just the
-                          plain source label. */}
-                      {lead.source === "WEBSITE" && lead.sourceWebsite ? (
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="flex items-center whitespace-nowrap"
+                        onClick={() => toggleSort("leadNumber")}
+                      >
+                        Lead No
+                        {sortIcon("leadNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Company</TableHead>
+                    {/* Bug fix: this table had 13 columns always rendered at
+                        once, forcing a horizontal scroll on anything narrower
+                        than a wide desktop monitor. Lower-priority columns now
+                        progressively appear from md/lg/xl up instead — Lead No/
+                        Company/Status/Actions (plus Assigned To and Next
+                        Follow-up, the two day-to-day workflow columns) stay
+                        visible everywhere; the rest reappear as the viewport has
+                        room, same data as before, just not fighting for space on
+                        a laptop-width screen. */}
+                    <TableHead className="hidden lg:table-cell">Contact</TableHead>
+                    <TableHead className="hidden xl:table-cell">Phone</TableHead>
+                    <TableHead className="hidden xl:table-cell">Email</TableHead>
+                    <TableHead className="hidden xl:table-cell">Source</TableHead>
+                    <TableHead className="hidden lg:table-cell">State</TableHead>
+                    <TableHead className="hidden md:table-cell">Assigned To</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("nextFollowUp")}
+                      >
+                        Next Follow-up
+                        {sortIcon("nextFollowUp")}
+                      </button>
+                    </TableHead>
+                    {/* "Created" is what the date-range filter above works on,
+                        so it's shown (and sortable) right next to it. */}
+                    <TableHead className="hidden lg:table-cell">
+                      <button type="button" className="flex items-center" onClick={() => toggleSort("createdAt")}>
+                        Created
+                        {sortIcon("createdAt")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden xl:table-cell">Last Updated</TableHead>
+                    {/* D.O.T. AI Lead Assistant Phase 1 (Step 10) — kept behind
+                        the widest breakpoint only, per "don't clutter the main
+                        Leads table"; full detail lives on Lead Details. */}
+                    <TableHead className="hidden 2xl:table-cell">AI Status</TableHead>
+                    <TableHead className="hidden 2xl:table-cell">AI Interest</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading leads...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : leads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">
+                        No leads found. Click "Create Lead" to add one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    leads.map((lead) => (
+                      <TableRow key={lead.id} className="cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(lead.id)}
+                            onChange={() => toggleSelected(lead.id)}
+                            aria-label={`Select lead ${lead.leadNumber}`}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap font-medium text-slate-900">{lead.leadNumber}</TableCell>
+                        <TableCell>
+                          <TruncatedText text={lead.companyName || "-"} />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <TruncatedText text={lead.contactPerson || "-"} className="max-w-[160px]" />
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">{lead.phone || "-"}</TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <TruncatedText text={lead.email || "-"} />
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          {/* Bug fix (TC-040): this used to show the source
+                              label ("Website") and then a static "Website"
+                              badge right next to it — literally repeating the
+                              same word. When the lead actually has a linked
+                              source website, show that website's own name
+                              (more useful than the redundant label) instead of
+                              a duplicate "Website" badge; otherwise just the
+                              plain source label. */}
+                          {lead.source === "WEBSITE" && lead.sourceWebsite ? (
+                            <Badge variant="info">{lead.sourceWebsite.name}</Badge>
+                          ) : (
+                            sourceLabel(lead.source)
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">{lead.state || "—"}</TableCell>
+                        {/* Full name only — never the role — with an explicit
+                            "Unassigned" label (not a bare dash) when no user is
+                            assigned. */}
+                        <TableCell className="hidden md:table-cell">{lead.assignedToUser?.name || "Unassigned"}</TableCell>
+                        <TableCell>
+                          <LeadStatusBadge status={lead.status} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDate(lead.createdAt)}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
+                        <TableCell className="hidden 2xl:table-cell">
+                          <AiStatusBadge status={lead.aiStatus} />
+                        </TableCell>
+                        <TableCell className="hidden 2xl:table-cell">
+                          {lead.aiQualification ? <AiQualificationBadge qualification={lead.aiQualification} /> : "—"}
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{leadActions(lead)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={leads}
+                getKey={(lead) => lead.id}
+                title={(lead) => lead.leadNumber}
+                badge={(lead) => <LeadStatusBadge status={lead.status} />}
+                subtitle={(lead) => lead.companyName || lead.contactPerson || "-"}
+                meta={(lead) => `${lead.assignedToUser?.name || "Unassigned"} · Follow-up ${formatDate(lead.nextFollowUp)}`}
+                fields={[
+                  { label: "Company", render: (lead) => lead.companyName || "-" },
+                  { label: "Contact", render: (lead) => lead.contactPerson || "-" },
+                  { label: "Phone", render: (lead) => lead.phone || "-" },
+                  { label: "Email", render: (lead) => lead.email || "-" },
+                  {
+                    label: "Source",
+                    render: (lead) =>
+                      lead.source === "WEBSITE" && lead.sourceWebsite ? (
                         <Badge variant="info">{lead.sourceWebsite.name}</Badge>
                       ) : (
                         sourceLabel(lead.source)
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{lead.state || "—"}</TableCell>
-                    {/* Full name only — never the role — with an explicit
-                        "Unassigned" label (not a bare dash) when no user is
-                        assigned. */}
-                    <TableCell className="hidden md:table-cell">{lead.assignedToUser?.name || "Unassigned"}</TableCell>
-                    <TableCell>
-                      <LeadStatusBadge status={lead.status} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{formatDate(lead.nextFollowUp)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatDate(lead.createdAt)}</TableCell>
-                    <TableCell className="hidden xl:table-cell">{formatDate(lead.updatedAt)}</TableCell>
-                    <TableCell className="hidden 2xl:table-cell">
-                      <AiStatusBadge status={lead.aiStatus} />
-                    </TableCell>
-                    <TableCell className="hidden 2xl:table-cell">
-                      {lead.aiQualification ? <AiQualificationBadge qualification={lead.aiQualification} /> : "—"}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/leads/${lead.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Edit lead"
-                          onClick={() => navigate(`/leads/${lead.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete lead"
-                          onClick={() => openDeleteDialog(lead)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      ),
+                  },
+                  { label: "State", render: (lead) => lead.state || "—" },
+                  { label: "Assigned To", render: (lead) => lead.assignedToUser?.name || "Unassigned" },
+                  { label: "Next Follow-up", render: (lead) => formatDate(lead.nextFollowUp) },
+                  { label: "Created", render: (lead) => formatDate(lead.createdAt) },
+                  { label: "Last Updated", render: (lead) => formatDate(lead.updatedAt) },
+                  { label: "AI Status", render: (lead) => <AiStatusBadge status={lead.aiStatus} /> },
+                  {
+                    label: "AI Interest",
+                    render: (lead) =>
+                      lead.aiQualification ? <AiQualificationBadge qualification={lead.aiQualification} /> : "—",
+                  },
+                ]}
+                actions={leadActions}
+                loading={loading}
+                loadingText="Loading leads..."
+                emptyText={'No leads found. Click "Create Lead" to add one.'}
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (lead) => `Select lead ${lead.leadNumber}`,
+                }}
+                sort={{
+                  options: [
+                    { value: "createdAt", label: "Created" },
+                    { value: "leadNumber", label: "Lead No" },
+                    { value: "nextFollowUp", label: "Next Follow-up" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">

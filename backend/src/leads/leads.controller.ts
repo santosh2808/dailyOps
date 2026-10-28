@@ -260,7 +260,13 @@ export class LeadsController {
   @Post(':id/site-visit-photos')
   @RequirePermission('Lead', 'Edit')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('files', 10))
+  // Multer limits reject oversized/too many files while streaming, before
+  // they're buffered whole in memory; the service re-checks per file.
+  @UseInterceptors(
+    FilesInterceptor('files', LeadsService.MAX_PHOTOS_PER_UPLOAD, {
+      limits: { fileSize: LeadsService.MAX_PHOTO_SIZE_BYTES, files: LeadsService.MAX_PHOTOS_PER_UPLOAD },
+    }),
+  )
   uploadSiteVisitPhotos(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
@@ -276,11 +282,13 @@ export class LeadsController {
     const longitude = body?.longitude !== undefined ? Number(body.longitude) : undefined;
     const accuracyMeters =
       body?.accuracyMeters !== undefined && body.accuracyMeters !== '' ? Number(body.accuracyMeters) : undefined;
-    return this.leadsService.uploadSiteVisitPhotos(id, files, req.user?.name, {
-      latitude,
-      longitude,
-      accuracyMeters,
-    });
+    return this.leadsService.uploadSiteVisitPhotos(
+      id,
+      files,
+      req.user?.name,
+      { latitude, longitude, accuracyMeters },
+      req.user?.username,
+    );
   }
 
   // Streams the raw image bytes for one photo — an authenticated route, not

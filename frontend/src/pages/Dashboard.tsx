@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -18,6 +18,9 @@ import {
   PackageSearch,
   PackageCheck,
   X,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -348,84 +351,120 @@ interface GlobalFiltersBarProps {
 // file-level comment above.
 function GlobalFiltersBar({ filters, onChange, executiveOptions, productOptions, currentYear }: GlobalFiltersBarProps) {
   const activeCount = Object.values(filters).filter(Boolean).length;
+  // Phones (below md): the dropdowns collapse behind a "Global Filters"
+  // toggle with an active count and Clear, same pattern as the list pages'
+  // FilterPanel. md+ is untouched: the toggle row is md:hidden and the
+  // dropdown wrapper is display:contents, so the dropdowns stay direct
+  // items of the original wrapping row.
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   return (
     <Card className="border-none shadow-sm">
-      <CardContent className="flex flex-wrap items-center gap-3 py-4">
-        <span className="text-sm font-medium text-slate-500">Global Filters</span>
-        <Select
-          value={filters.month ?? ""}
-          onChange={(e) => onChange({ ...filters, month: e.target.value ? Number(e.target.value) : undefined })}
-          className="w-36"
+      <CardContent className="flex flex-wrap items-center gap-3 py-4 max-md:flex-col max-md:items-stretch max-md:gap-2">
+        <span className="text-sm font-medium text-slate-500 max-md:hidden">Global Filters</span>
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <SlidersHorizontal className="mr-2 h-4 w-4" />
+            Global Filters
+            {activeCount > 0 && (
+              <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+                {activeCount}
+              </span>
+            )}
+            {open ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+          </Button>
+          {activeCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => onChange({})} className="text-slate-500">
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear
+            </Button>
+          )}
+        </div>
+        <div
+          id={panelId}
+          className={cn("contents max-md:[&>*]:w-full max-md:[&_select]:w-full", !open && "max-md:hidden")}
         >
-          <option value="">All Months</option>
-          {MONTH_NAMES.map((m, i) => (
-            <option key={m} value={i + 1}>
-              {m}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={filters.year ?? ""}
-          onChange={(e) => onChange({ ...filters, year: e.target.value ? Number(e.target.value) : undefined })}
-          className="w-24"
-        >
-          <option value="">All Years</option>
-          {yearOptions(currentYear).map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={filters.state ?? ""}
-          onChange={(e) => onChange({ ...filters, state: e.target.value || undefined })}
-          className="w-44"
-        >
-          <option value="">All States</option>
-          {INDIA_STATES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={filters.executive ?? ""}
-          onChange={(e) => onChange({ ...filters, executive: e.target.value || undefined })}
-          className="w-44"
-        >
-          <option value="">All Executives</option>
-          {executiveOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={filters.leadSource ?? ""}
-          onChange={(e) => onChange({ ...filters, leadSource: (e.target.value || undefined) as LeadSource | undefined })}
-          className="w-44"
-        >
-          <option value="">All Lead Sources</option>
-          {SOURCE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={filters.productId ?? ""}
-          onChange={(e) => onChange({ ...filters, productId: e.target.value || undefined })}
-          className="w-48"
-        >
-          <option value="">All Products</option>
-          {productOptions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
+          <Select
+            value={filters.month ?? ""}
+            onChange={(e) => onChange({ ...filters, month: e.target.value ? Number(e.target.value) : undefined })}
+            className="w-36"
+          >
+            <option value="">All Months</option>
+            {MONTH_NAMES.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={filters.year ?? ""}
+            onChange={(e) => onChange({ ...filters, year: e.target.value ? Number(e.target.value) : undefined })}
+            className="w-24"
+          >
+            <option value="">All Years</option>
+            {yearOptions(currentYear).map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={filters.state ?? ""}
+            onChange={(e) => onChange({ ...filters, state: e.target.value || undefined })}
+            className="w-44"
+          >
+            <option value="">All States</option>
+            {INDIA_STATES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={filters.executive ?? ""}
+            onChange={(e) => onChange({ ...filters, executive: e.target.value || undefined })}
+            className="w-44"
+          >
+            <option value="">All Executives</option>
+            {executiveOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={filters.leadSource ?? ""}
+            onChange={(e) => onChange({ ...filters, leadSource: (e.target.value || undefined) as LeadSource | undefined })}
+            className="w-44"
+          >
+            <option value="">All Lead Sources</option>
+            {SOURCE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={filters.productId ?? ""}
+            onChange={(e) => onChange({ ...filters, productId: e.target.value || undefined })}
+            className="w-48"
+          >
+            <option value="">All Products</option>
+            {productOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+        </div>
         {activeCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => onChange({})} className="text-slate-500">
+          <Button variant="ghost" size="sm" onClick={() => onChange({})} className="text-slate-500 max-md:hidden">
             <X className="mr-1 h-3.5 w-3.5" />
             Clear
           </Button>
@@ -608,11 +647,11 @@ export default function Dashboard() {
   }));
 
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         <Topbar title="Dashboard" />
-        <main className="flex-1 space-y-6 p-6">
+        <main className="app-shell-main space-y-6">
           {error && (
             <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <span className="flex items-center gap-2">

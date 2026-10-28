@@ -22,6 +22,7 @@ import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
@@ -217,14 +218,62 @@ export default function SalesOrderList() {
     await fetchSalesOrders();
   }
 
+  // Row actions, shared by the table's Actions cell and the mobile card.
+  function salesOrderActions(salesOrder: SalesOrder) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="View details"
+          onClick={() => navigate(`/sales-orders/${salesOrder.id}`)}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        {/* Bug fix (SC-012): this row action had no status
+            gate at all — SalesOrderDetails.tsx's own Edit
+            menu item is already disabled once a Sales Order
+            leaves DRAFT (see its isEditable), and
+            SalesOrderForm.tsx's load guard blocks the edit
+            route server-side-status-wise too, but this list
+            page's pencil button was left clickable for every
+            status including CANCELLED — QA correctly flagged
+            that as "Edit option available" on a cancelled
+            order. Disabled (not hidden) here to match the
+            Details page's own convention. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          title={
+            salesOrder.status === "DRAFT"
+              ? "Edit sales order"
+              : `This Sales Order is ${salesOrder.status === "CANCELLED" ? "cancelled" : "no longer in Draft status"} and can no longer be edited.`
+          }
+          disabled={salesOrder.status !== "DRAFT"}
+          onClick={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Delete sales order"
+          onClick={() => openDeleteDialog(salesOrder)}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex min-h-dvh bg-app-grid pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="app-shell bg-app-grid">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="app-shell-content">
         {/* Bug fix (TC-087): top-level Sidebar destination — see
             ComplaintList.tsx's identical fix for the full reasoning. */}
         <Topbar title="Sales Orders" />
-        <main className="flex-1 p-6">
+        <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <SalesOrderFiltersBar filters={filters} onChange={setFilters} />
           </div>
@@ -312,156 +361,162 @@ export default function SalesOrderList() {
             </div>
           )}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < salesOrders.length;
-                    }}
-                    checked={salesOrders.length > 0 && selectedIds.size === salesOrders.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all sales orders on this page"
-                  />
-                </TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("salesOrderNumber")}
-                  >
-                    Order Number
-                    {sortIcon("salesOrderNumber")}
-                  </button>
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                {/* Bug fix: lower-priority columns now progressively appear
-                    from md/lg/xl up instead of all nine always being
-                    rendered at once, which forced a horizontal scroll on
-                    anything narrower than a wide desktop monitor. */}
-                <TableHead className="hidden xl:table-cell">Quotation</TableHead>
-                {/* Additive: JEO-based tracking — staff identify orders by
-                    JEO number day-to-day (see SalesOrder.jobExecutionOrders
-                    type comment). */}
-                <TableHead className="hidden xl:table-cell">JEO</TableHead>
-                <TableHead className="hidden lg:table-cell">Sales Executive</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("grandTotal")}
-                  >
-                    Grand Total
-                    {sortIcon("grandTotal")}
-                  </button>
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center"
-                    onClick={() => toggleSort("deliveryDate")}
-                  >
-                    Delivery Date
-                    {sortIcon("deliveryDate")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Spinner /> Loading sales orders...
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ) : salesOrders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                    No sales orders found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                salesOrders.map((salesOrder) => (
-                  <TableRow
-                    key={salesOrder.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/sales-orders/${salesOrder.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+          <ResponsiveRecords
+            table={
+              <Table fillHeightOnMobile>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.has(salesOrder.id)}
-                        onChange={() => toggleSelected(salesOrder.id)}
-                        aria-label={`Select sales order ${salesOrder.salesOrderNumber}`}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < salesOrders.length;
+                        }}
+                        checked={salesOrders.length > 0 && selectedIds.size === salesOrders.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all sales orders on this page"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      {salesOrder.salesOrderNumber}
-                    </TableCell>
-                    <TableCell>
-                      <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
-                    <TableCell className="hidden xl:table-cell">{salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{salesOrder.createdBy ?? "—"}</TableCell>
-                    <TableCell>
-                      <SalesOrderStatusBadge status={salesOrder.status} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{formatCurrency(salesOrder.grandTotal)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{formatDate(salesOrder.deliveryDate)}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="View details"
-                          onClick={() => navigate(`/sales-orders/${salesOrder.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {/* Bug fix (SC-012): this row action had no status
-                            gate at all — SalesOrderDetails.tsx's own Edit
-                            menu item is already disabled once a Sales Order
-                            leaves DRAFT (see its isEditable), and
-                            SalesOrderForm.tsx's load guard blocks the edit
-                            route server-side-status-wise too, but this list
-                            page's pencil button was left clickable for every
-                            status including CANCELLED — QA correctly flagged
-                            that as "Edit option available" on a cancelled
-                            order. Disabled (not hidden) here to match the
-                            Details page's own convention. */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={
-                            salesOrder.status === "DRAFT"
-                              ? "Edit sales order"
-                              : `This Sales Order is ${salesOrder.status === "CANCELLED" ? "cancelled" : "no longer in Draft status"} and can no longer be edited.`
-                          }
-                          disabled={salesOrder.status !== "DRAFT"}
-                          onClick={() => navigate(`/sales-orders/${salesOrder.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Delete sales order"
-                          onClick={() => openDeleteDialog(salesOrder)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("salesOrderNumber")}
+                      >
+                        Order Number
+                        {sortIcon("salesOrderNumber")}
+                      </button>
+                    </TableHead>
+                    <TableHead>Customer</TableHead>
+                    {/* Bug fix: lower-priority columns now progressively appear
+                        from md/lg/xl up instead of all nine always being
+                        rendered at once, which forced a horizontal scroll on
+                        anything narrower than a wide desktop monitor. */}
+                    <TableHead className="hidden xl:table-cell">Quotation</TableHead>
+                    {/* Additive: JEO-based tracking — staff identify orders by
+                        JEO number day-to-day (see SalesOrder.jobExecutionOrders
+                        type comment). */}
+                    <TableHead className="hidden xl:table-cell">JEO</TableHead>
+                    <TableHead className="hidden lg:table-cell">Sales Executive</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("grandTotal")}
+                      >
+                        Grand Total
+                        {sortIcon("grandTotal")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button
+                        type="button"
+                        className="flex items-center"
+                        onClick={() => toggleSort("deliveryDate")}
+                      >
+                        Delivery Date
+                        {sortIcon("deliveryDate")}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Spinner /> Loading sales orders...
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : salesOrders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                        No sales orders found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    salesOrders.map((salesOrder) => (
+                      <TableRow
+                        key={salesOrder.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/sales-orders/${salesOrder.id}`)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(salesOrder.id)}
+                            onChange={() => toggleSelected(salesOrder.id)}
+                            aria-label={`Select sales order ${salesOrder.salesOrderNumber}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">
+                          {salesOrder.salesOrderNumber}
+                        </TableCell>
+                        <TableCell>
+                          <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{salesOrder.createdBy ?? "—"}</TableCell>
+                        <TableCell>
+                          <SalesOrderStatusBadge status={salesOrder.status} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{formatCurrency(salesOrder.grandTotal)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDate(salesOrder.deliveryDate)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">{salesOrderActions(salesOrder)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            }
+            mobile={
+              <MobileRecordList
+                rows={salesOrders}
+                getKey={(salesOrder) => salesOrder.id}
+                title={(salesOrder) => salesOrder.salesOrderNumber}
+                badge={(salesOrder) => <SalesOrderStatusBadge status={salesOrder.status} />}
+                subtitle={(salesOrder) => salesOrder.customer?.companyName ?? "—"}
+                meta={(salesOrder) =>
+                  `${formatCurrency(salesOrder.grandTotal)} · Delivery ${formatDate(salesOrder.deliveryDate)}`
+                }
+                fields={[
+                  { label: "Customer", render: (salesOrder) => salesOrder.customer?.companyName ?? "—" },
+                  { label: "Quotation", render: (salesOrder) => salesOrder.quotation?.quotationNumber ?? "—" },
+                  { label: "JEO", render: (salesOrder) => salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—" },
+                  { label: "Sales Executive", render: (salesOrder) => salesOrder.createdBy ?? "—" },
+                  { label: "Grand Total", render: (salesOrder) => formatCurrency(salesOrder.grandTotal) },
+                  { label: "Delivery Date", render: (salesOrder) => formatDate(salesOrder.deliveryDate) },
+                ]}
+                actions={salesOrderActions}
+                loading={loading}
+                loadingText="Loading sales orders..."
+                emptyText="No sales orders found."
+                selection={{
+                  selected: selectedIds,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  rowLabel: (salesOrder) => `Select sales order ${salesOrder.salesOrderNumber}`,
+                }}
+                sort={{
+                  options: [
+                    { value: "salesOrderNumber", label: "Order Number" },
+                    { value: "grandTotal", label: "Grand Total" },
+                    { value: "deliveryDate", label: "Delivery Date" },
+                  ],
+                  by: sortBy,
+                  order: sortOrder,
+                  onChange: (by, order) => {
+                    setSortBy(by as SortableColumn);
+                    setSortOrder(order);
+                  },
+                }}
+              />
+            }
+          />
 
           <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-sm text-muted-foreground">
