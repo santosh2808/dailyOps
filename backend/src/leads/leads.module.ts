@@ -5,6 +5,7 @@ import { LeadsController } from './leads.controller';
 import { LeadsService } from './leads.service';
 import { LeadFollowUpReminderService } from './lead-followup-reminder.service';
 import { LeadAccessService } from './lead-access.service';
+import { SiteVisitPhotoStorage } from './site-visit-photo-storage';
 
 @Module({
   imports: [MailerModule, WhatsAppModule],
@@ -13,7 +14,7 @@ import { LeadAccessService } from './lead-access.service';
   // exported) — its @Cron job runs on its own once ScheduleModule.forRoot()
   // (app.module.ts) bootstraps it; nothing else in the app calls it
   // directly.
-  providers: [LeadsService, LeadFollowUpReminderService, LeadAccessService],
+  providers: [LeadsService, LeadFollowUpReminderService, LeadAccessService, SiteVisitPhotoStorage],
   // Lead Management Phase 1: QuotationsService calls back into
   // LeadsService (Generate Quotation gating, the QUOTATION_SENT status
   // transition on Send Quotation) — see QuotationsModule's import of

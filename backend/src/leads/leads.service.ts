@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   LeadHistoryAction,
@@ -18,9 +19,9 @@ import {
 import { isEmail } from 'class-validator';
 import * as XLSX from 'xlsx';
 import { randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { SiteVisitPhotoStorage } from './site-visit-photo-storage';
 import { MailerService } from '../mailer/mailer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { getDefaultLanguageForState } from '../common/state-language-defaults';
@@ -236,6 +237,7 @@ export class LeadsService {
     private prisma: PrismaService,
     private mailerService: MailerService,
     private whatsAppService: WhatsAppService,
+    private siteVisitPhotoStorage: SiteVisitPhotoStorage,
   ) {}
 
   // Notifies a user directly when a Lead is assigned to them — manual
@@ -1811,15 +1813,14 @@ export class LeadsService {
   // job-execution-orders.service.ts) so the factory actually sees them,
   // not just the sales team.
   //
-  // Files live on local disk under LEAD_SITE_VISIT_PHOTOS_DIR (defaults to
-  // <backend cwd>/uploads/lead-site-visit-photos — override via env if you
-  // want them somewhere else, e.g. a mounted volume). Only metadata is in
-  // Postgres (LeadSiteVisitPhoto) — same "reference, not the blob"
-  // convention as LeadAiCallLog.recordingRef elsewhere in this schema.
-  private static readonly SITE_VISIT_PHOTOS_DIR =
-    process.env.LEAD_SITE_VISIT_PHOTOS_DIR?.trim() ||
-    join(process.cwd(), 'uploads', 'lead-site-visit-photos');
-
+  // Files go to SiteVisitPhotoStorage — the S3 bucket in TEST/production,
+  // a local folder in development (see site-visit-photo-storage.ts). Only
+  // metadata, including the GPS fix, is in Postgres (LeadSiteVisitPhoto) —
+  // same "reference, not the blob" convention as LeadAiCallLog.recordingRef.
+  // LeadSiteVisitPhoto.fileName holds the storage key
+  // `<uploader username>/<leadId>/<uuid>.<ext>` (browsable in S3 by person,
+  // then lead); rows from before S3 hold a bare `<uuid>.<ext>` and resolve to
+  // "not found" if their file was lost with an old container.
   private static readonly ALLOWED_PHOTO_MIME_TYPES = new Set([
     'image/jpeg',
     'image/png',
@@ -1828,7 +1829,30 @@ export class LeadsService {
     'image/heif',
   ]);
 
-  private static readonly MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
+  static readonly MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
+  static readonly MAX_PHOTOS_PER_UPLOAD = 10;
+
+  // Uploader's login username as a storage-path segment: lowercase, only
+  // [a-z0-9._-], so it's a safe S3 key / folder name. Usernames are unique,
+  // unlike display names. The full key is stored on the row, so a later
+  // username change never breaks finding the file.
+  static storageUserSegment(username?: string | null): string {
+    const slug = (username ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^[^a-z0-9]+/, '')
+      .slice(0, 64)
+      .replace(/[-._]+$/, '');
+    return slug || 'unknown-user';
+  }
+
+  private static readonly PHOTO_EXTENSION_BY_MIME: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+  };
 
   // Anti-fraud (user's own request: "i dont want them to fraud me they
   // visited") — latitude/longitude are required, not optional, on every
@@ -1838,11 +1862,17 @@ export class LeadsService {
   // request built by hand (bypassing the UI) can't skip location either.
   // See LeadSiteVisitPhoto's own schema comment for the honest limits of
   // what this does and doesn't prove.
+  //
+  // Order matters: every file is validated before any is stored; each file
+  // is stored before its row is written, and removed again if the row write
+  // fails — so a row (and its GPS) only ever exists for a stored file, and
+  // a failed upload leaves nothing behind.
   async uploadSiteVisitPhotos(
     id: string,
     files: Express.Multer.File[],
     actorName?: string,
     location?: { latitude?: number; longitude?: number; accuracyMeters?: number },
+    uploaderUsername?: string,
   ) {
     await this.findOne(id);
     if (!files || files.length === 0) {
@@ -1863,14 +1893,19 @@ export class LeadsService {
         'Location is required to upload site photos. Please allow location access on your device and try again.',
       );
     }
+    for (const file of files) {
+      if (!LeadsService.ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
+        throw new BadRequestException(
+          `"${file.originalname}" is not a supported image type (jpg, png, webp, heic only).`,
+        );
+      }
+      if (file.size > LeadsService.MAX_PHOTO_SIZE_BYTES) {
+        throw new BadRequestException(`"${file.originalname}" is larger than the 15MB limit per photo.`);
+      }
+    }
 
-    await fs.mkdir(LeadsService.SITE_VISIT_PHOTOS_DIR, { recursive: true });
-
-    // Explicitly typed (matching the select below exactly) rather than
-    // left as `const created = []` — TS's "evolving array" inference for
-    // an untyped empty array can widen to `never[]` across a for-of loop
-    // with an intervening await, which then rejects every created.push()
-    // below with "not assignable to parameter of type 'never'".
+    const store = this.siteVisitPhotoStorage.store;
+    const userSegment = LeadsService.storageUserSegment(uploaderUsername);
     const created: {
       id: string;
       originalName: string;
@@ -1882,61 +1917,66 @@ export class LeadsService {
       createdAt: Date;
     }[] = [];
     for (const file of files) {
-      if (!LeadsService.ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
-        throw new BadRequestException(
-          `"${file.originalname}" is not a supported image type (jpg, png, webp, heic only).`,
-        );
-      }
-      if (file.size > LeadsService.MAX_PHOTO_SIZE_BYTES) {
-        throw new BadRequestException(`"${file.originalname}" is larger than the 15MB limit per photo.`);
+      // Generated key — never derived from the browser-supplied filename
+      // beyond a plain extension, so nothing here is exposed to path or key
+      // injection. The streaming endpoint always sends the stored mimeType.
+      const originalExt = extname(file.originalname).toLowerCase();
+      const ext = /^\.[a-z0-9]{1,5}$/.test(originalExt)
+        ? originalExt
+        : LeadsService.PHOTO_EXTENSION_BY_MIME[file.mimetype];
+      const fileName = `${userSegment}/${id}/${randomUUID()}${ext}`;
+
+      try {
+        await store.save(fileName, file.buffer, file.mimetype);
+      } catch (error) {
+        this.logger.error(`Site visit photo save failed: ${fileName} → ${store.location}`, error as Error);
+        throw new ServiceUnavailableException({
+          code: 'PHOTO_STORAGE_UNAVAILABLE',
+          message: 'The photo could not be saved right now. Please try again.',
+        });
       }
 
-      // Generated filename — never derived from the browser-supplied
-      // originalname, so nothing here is exposed to path traversal or
-      // filename-collision issues. Extension kept only for on-disk
-      // readability; the streaming endpoint always sets its own
-      // Content-Type from the stored mimeType, never by sniffing the
-      // extension.
-      const ext = extname(file.originalname).slice(0, 10);
-      const fileName = `${randomUUID()}${ext}`;
-      await fs.writeFile(join(LeadsService.SITE_VISIT_PHOTOS_DIR, fileName), file.buffer);
-
-      const photo = await this.prisma.leadSiteVisitPhoto.create({
-        data: {
-          leadId: id,
-          fileName,
-          originalName: file.originalname,
-          mimeType: file.mimetype,
-          sizeBytes: file.size,
-          uploadedBy: actorName,
-          latitude,
-          longitude,
-          accuracyMeters: accuracyMeters ?? null,
-        },
-        select: {
-          id: true,
-          originalName: true,
-          mimeType: true,
-          sizeBytes: true,
-          latitude: true,
-          longitude: true,
-          accuracyMeters: true,
-          createdAt: true,
-        },
-      });
-      created.push(photo);
+      try {
+        const photo = await this.prisma.leadSiteVisitPhoto.create({
+          data: {
+            leadId: id,
+            fileName,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            sizeBytes: file.size,
+            uploadedBy: actorName,
+            latitude,
+            longitude,
+            accuracyMeters: accuracyMeters ?? null,
+          },
+          select: {
+            id: true,
+            originalName: true,
+            mimeType: true,
+            sizeBytes: true,
+            latitude: true,
+            longitude: true,
+            accuracyMeters: true,
+            createdAt: true,
+          },
+        });
+        created.push(photo);
+      } catch (error) {
+        await store
+          .remove(fileName)
+          .catch((cleanupError) => this.logger.error(`Orphaned site visit photo ${fileName}`, cleanupError as Error));
+        throw error;
+      }
     }
 
     return created;
   }
 
   // Streams the raw bytes for one photo. Deliberately its own endpoint
-  // rather than a globally static-served directory (see main.ts — this app
-  // has no static-asset serving anywhere else either) so it stays behind
-  // the same JwtAuthGuard/PermissionsGuard as every other Lead route;
+  // rather than a public bucket or static directory, so it stays behind the
+  // same JwtAuthGuard/PermissionsGuard as every other Lead route;
   // LeadDetails.tsx fetches it as an authenticated blob rather than a bare
-  // <img src>, since a plain <img> tag can't carry the Authorization
-  // header this endpoint requires.
+  // <img src>, since a plain <img> tag can't carry the Authorization header.
   async getSiteVisitPhotoFile(id: string, photoId: string) {
     const photo = await this.prisma.leadSiteVisitPhoto.findFirst({
       where: { id: photoId, leadId: id },
@@ -1944,8 +1984,10 @@ export class LeadsService {
     if (!photo) {
       throw new NotFoundException('Photo not found');
     }
-    const filePath = join(LeadsService.SITE_VISIT_PHOTOS_DIR, photo.fileName);
-    const buffer = await fs.readFile(filePath);
+    const buffer = await this.siteVisitPhotoStorage.store.read(photo.fileName);
+    if (!buffer) {
+      throw new NotFoundException('This photo file is no longer available.');
+    }
     return { buffer, mimeType: photo.mimeType, originalName: photo.originalName };
   }
 
@@ -1958,14 +2000,11 @@ export class LeadsService {
     }
     await this.prisma.leadSiteVisitPhoto.delete({ where: { id: photoId } });
     // Best-effort — the DB row (the source of truth for what the app shows)
-    // is already gone at this point regardless of whether the on-disk file
-    // actually existed or could be removed, so a stray file left behind by
-    // a failed unlink is a disk-cleanliness issue, not a correctness one.
-    try {
-      await fs.unlink(join(LeadsService.SITE_VISIT_PHOTOS_DIR, photo.fileName));
-    } catch {
-      // Ignore — see comment above.
-    }
+    // is already gone, so a file left behind by a failed delete is a
+    // storage-cleanliness issue, not a correctness one.
+    await this.siteVisitPhotoStorage.store
+      .remove(photo.fileName)
+      .catch((error) => this.logger.warn(`Could not delete site visit photo file ${photo.fileName}: ${String(error)}`));
     return { success: true };
   }
 
