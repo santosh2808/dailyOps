@@ -951,6 +951,7 @@ export class SalesOrdersService {
           phone: updated.customer.phone,
           templateName,
           bodyValues: [updated.customer.contactPerson, updated.salesOrderNumber, statusLabel],
+          useCase: 'SALES_ORDER_STATUS',
         });
       } catch (error) {
         this.logger.error(`Status-change WhatsApp failed for Sales Order ${updated.id} (${targetStatus})`, error);

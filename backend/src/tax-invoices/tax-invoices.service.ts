@@ -416,7 +416,7 @@ export class TaxInvoicesService {
 
   // Additive: WhatsApp Share via Interakt — see the identical method on
   // ProformaInvoicesService for the full rationale.
-  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+  async sendWhatsAppShare(id: string, sentBy?: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
     const invoice = await this.findOne(id);
     const phone = invoice.customer?.phone ?? null;
     const token = await this.getOrCreatePublicToken(id);
@@ -426,6 +426,9 @@ export class TaxInvoicesService {
       phone,
       templateName,
       bodyValues: [invoice.customer?.contactPerson || 'Customer', invoice.invoiceNumber, link],
+      useCase: 'TAX_INVOICE_SHARE',
+      documentId: invoice.id,
+      sentBy,
     });
     return { ...result, phone };
   }

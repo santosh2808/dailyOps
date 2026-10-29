@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
+import { useWhatsAppShare } from "@/hooks/useWhatsAppShare";
 import TaxInvoiceStatusBadge from "@/components/tax-invoices/TaxInvoiceStatusBadge";
 import ChangeTaxInvoiceStatusDialog from "@/components/tax-invoices/ChangeTaxInvoiceStatusDialog";
 import SendTaxInvoiceDialog from "@/components/tax-invoices/SendTaxInvoiceDialog";
@@ -65,6 +66,7 @@ export default function TaxInvoiceDetails() {
 
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const { sending: whatsAppSending, share: shareWhatsApp } = useWhatsAppShare();
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -206,29 +208,10 @@ export default function TaxInvoiceDetails() {
                         using a pre-approved template. */}
                     <DropdownMenuItem
                       icon={WhatsAppIcon}
-                      onSelect={async () => {
-                        try {
-                          const result = await sendTaxInvoiceWhatsApp(invoice.id);
-                          if (result.status === "SENT") {
-                            toast.success("WhatsApp message sent.");
-                          } else if (result.status === "SIMULATED") {
-                            // Bug fix (TC-094): see QuotationDetails.tsx's identical
-                            // fix — a green "success" toast for a message that was
-                            // never actually sent is misleading; use "info" instead.
-                            toast.info("WhatsApp message logged (Interakt not configured — no real message was sent).");
-                          } else {
-                            toast.error(
-                              result.errorMessage || "Could not send the WhatsApp message. Please try again.",
-                            );
-                          }
-                        } catch (err: any) {
-                          toast.error(
-                            err?.response?.data?.message || "Could not send the WhatsApp message. Please try again.",
-                          );
-                        }
-                      }}
+                      disabled={whatsAppSending}
+                      onSelect={() => shareWhatsApp(() => sendTaxInvoiceWhatsApp(invoice.id))}
                     >
-                      Share via WhatsApp
+                      {whatsAppSending ? "Sending…" : "Share via WhatsApp"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       icon={ExternalLink}

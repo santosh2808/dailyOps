@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import type { WhatsAppSendStatus } from "@/hooks/useWhatsAppShare";
 import type {
   EmailHistoryEntry,
   HangingStructureType,
@@ -137,7 +138,7 @@ export async function openJeoPdf(id: string) {
 // Distinct from sendJeoFactoryNotification() above, which targets the
 // internal Production Team rather than the customer.
 export interface WhatsAppSendResult {
-  status: "SENT" | "SIMULATED" | "FAILED";
+  status: WhatsAppSendStatus;
   errorMessage?: string;
   phone?: string | null;
 }

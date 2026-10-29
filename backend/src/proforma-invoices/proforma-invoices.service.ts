@@ -605,7 +605,7 @@ export class ProformaInvoicesService {
   // template's last body variable. INTERAKT_PROFORMA_INVOICE_TEMPLATE_NAME
   // must match a template already created and approved in Interakt (see
   // .env.example for the suggested wording to submit for approval).
-  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+  async sendWhatsAppShare(id: string, sentBy?: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
     const invoice = await this.findOne(id);
     const phone = invoice.customer?.phone ?? null;
     const token = await this.getOrCreatePublicToken(id);
@@ -615,6 +615,9 @@ export class ProformaInvoicesService {
       phone,
       templateName,
       bodyValues: [invoice.customer?.contactPerson || 'Customer', invoice.invoiceNumber, link],
+      useCase: 'PROFORMA_INVOICE_SHARE',
+      documentId: invoice.id,
+      sentBy,
     });
     return { ...result, phone };
   }

@@ -1079,19 +1079,22 @@ export class QuotationsService {
   // WhatsApp button once quotation.publicToken exists (i.e. it's been sent
   // via email at least once), so this should be unreachable in the normal
   // UI flow.
-  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+  async sendWhatsAppShare(id: string, sentBy?: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
     const quotation = await this.findOne(id);
     if (!quotation.publicToken) {
       return { status: 'FAILED', errorMessage: 'Send the quotation via email first to generate its secure link.' };
     }
     const phone = quotation.customer?.phone ?? quotation.lead?.phone ?? null;
-    const name = quotation.customer?.contactPerson ?? quotation.lead?.contactPerson ?? 'Customer';
+    const name = quotation.customer?.contactPerson || quotation.lead?.contactPerson || 'Customer';
     const link = `${frontendBaseUrl()}/quote/${quotation.publicToken}`;
     const templateName = process.env.INTERAKT_QUOTATION_TEMPLATE_NAME?.trim() || 'quotation_share';
     const result = await this.whatsAppService.sendTemplateMessage({
       phone,
       templateName,
       bodyValues: [name, quotation.quotationNumber, link],
+      useCase: 'QUOTATION_SHARE',
+      documentId: quotation.id,
+      sentBy,
     });
     return { ...result, phone };
   }
