@@ -93,7 +93,7 @@ export class ProformaInvoicesController {
   // to open a wa.me chat with).
   @Post(':id/whatsapp-send')
   @RequirePermission('ProformaInvoice', 'Edit')
-  sendWhatsApp(@Param('id') id: string) {
-    return this.proformaInvoicesService.sendWhatsAppShare(id);
+  sendWhatsApp(@Param('id') id: string, @Req() req: any) {
+    return this.proformaInvoicesService.sendWhatsAppShare(id, req.user?.name);
   }
 }

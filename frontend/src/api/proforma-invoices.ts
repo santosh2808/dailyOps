@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import type { WhatsAppSendStatus } from "@/hooks/useWhatsAppShare";
 import type {
   EmailHistoryEntry,
   PaginatedResponse,
@@ -128,7 +129,7 @@ export async function openProformaInvoicePdf(id: string) {
 // (or reuses) the invoice's public token and embeds the no-login PDF link
 // as a template variable.
 export interface WhatsAppSendResult {
-  status: "SENT" | "SIMULATED" | "FAILED";
+  status: WhatsAppSendStatus;
   errorMessage?: string;
   phone?: string | null;
 }

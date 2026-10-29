@@ -284,6 +284,7 @@ export class LeadsService {
         phone: user.phone,
         templateName,
         bodyValues: [user.name, lead.leadNumber, lead.companyName, lead.contactPerson, lead.phone],
+        useCase: 'LEAD_ASSIGNED',
       });
     }
   }
@@ -338,6 +339,7 @@ export class LeadsService {
         phone: lead.phone,
         templateName,
         bodyValues: [lead.contactPerson, lead.companyName, visitDate],
+        useCase: 'SITE_VISIT_SCHEDULED',
       });
     }
   }

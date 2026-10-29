@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
+import { useWhatsAppShare } from "@/hooks/useWhatsAppShare";
 import JeoStatusBadge from "@/components/job-execution-orders/JeoStatusBadge";
 import JeoPriorityBadge from "@/components/job-execution-orders/JeoPriorityBadge";
 import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
@@ -79,6 +80,7 @@ export default function JobExecutionOrderDetails() {
 
   const [jeo, setJeo] = useState<JobExecutionOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const { sending: whatsAppSending, share: shareWhatsApp } = useWhatsAppShare();
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -319,29 +321,10 @@ export default function JobExecutionOrderDetails() {
                         sent using a pre-approved template. */}
                     <DropdownMenuItem
                       icon={WhatsAppIcon}
-                      onSelect={async () => {
-                        try {
-                          const result = await sendJeoWhatsApp(jeo.id);
-                          if (result.status === "SENT") {
-                            toast.success("WhatsApp message sent.");
-                          } else if (result.status === "SIMULATED") {
-                            // Bug fix (TC-094): see QuotationDetails.tsx's identical
-                            // fix — a green "success" toast for a message that was
-                            // never actually sent is misleading; use "info" instead.
-                            toast.info("WhatsApp message logged (Interakt not configured — no real message was sent).");
-                          } else {
-                            toast.error(
-                              result.errorMessage || "Could not send the WhatsApp message. Please try again.",
-                            );
-                          }
-                        } catch (err: any) {
-                          toast.error(
-                            err?.response?.data?.message || "Could not send the WhatsApp message. Please try again.",
-                          );
-                        }
-                      }}
+                      disabled={whatsAppSending}
+                      onSelect={() => shareWhatsApp(() => sendJeoWhatsApp(jeo.id))}
                     >
-                      Share via WhatsApp (Customer)
+                      {whatsAppSending ? "Sending…" : "Share via WhatsApp (Customer)"}
                     </DropdownMenuItem>
                     <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
                       Resend to Factory

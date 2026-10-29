@@ -108,8 +108,8 @@ export class JobExecutionOrdersController {
   // (which notifies the internal Production Team, not the customer).
   @Post(':id/whatsapp-send')
   @RequirePermission('JEO', 'Update')
-  sendWhatsApp(@Param('id') id: string) {
-    return this.jobExecutionOrdersService.sendWhatsAppShare(id);
+  sendWhatsApp(@Param('id') id: string, @Req() req: any) {
+    return this.jobExecutionOrdersService.sendWhatsAppShare(id, req.user?.name);
   }
 
   // No delete endpoint — JobExecutionOrder has no deletedAt column (per the

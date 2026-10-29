@@ -83,7 +83,7 @@ export class TaxInvoicesController {
   // the customer's WhatsApp.
   @Post(':id/whatsapp-send')
   @RequirePermission('TaxInvoice', 'Edit')
-  sendWhatsApp(@Param('id') id: string) {
-    return this.taxInvoicesService.sendWhatsAppShare(id);
+  sendWhatsApp(@Param('id') id: string, @Req() req: any) {
+    return this.taxInvoicesService.sendWhatsAppShare(id, req.user?.name);
   }
 }

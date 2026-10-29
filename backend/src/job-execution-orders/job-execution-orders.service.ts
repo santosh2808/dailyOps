@@ -662,7 +662,7 @@ export class JobExecutionOrdersService {
   // identical method on ProformaInvoicesService for the full rationale.
   // Distinct from sendFactoryNotificationEmail(), which targets the
   // internal Production Team rather than the customer.
-  async sendWhatsAppShare(id: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
+  async sendWhatsAppShare(id: string, sentBy?: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
     const jeo = await this.findOne(id);
     const phone = jeo.customer?.phone ?? null;
     const token = await this.getOrCreatePublicToken(id);
@@ -672,6 +672,9 @@ export class JobExecutionOrdersService {
       phone,
       templateName,
       bodyValues: [jeo.customer?.contactPerson || 'Customer', jeo.jeoNumber, link],
+      useCase: 'JEO_SHARE',
+      documentId: jeo.id,
+      sentBy,
     });
     return { ...result, phone };
   }

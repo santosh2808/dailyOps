@@ -20,3 +20,19 @@ export function toInteraktPhoneParts(phone: string | null | undefined): Interakt
   if (digits.length === 11 && digits.startsWith('0')) return { countryCode: '+91', phoneNumber: digits.slice(1) };
   return null;
 }
+
+// AiSensy integration — AiSensy takes the destination as one string with
+// the country code ("+919876543210"). Stricter than the Interakt helper
+// above: it also requires an Indian mobile prefix (6–9), so a landline or
+// a mistyped number is rejected here instead of being charged as a failed
+// send by AiSensy.
+export function toAisensyDestination(phone: string | null | undefined): string | null {
+  const parts = toInteraktPhoneParts(phone);
+  if (!parts || !/^[6-9]\d{9}$/.test(parts.phoneNumber)) return null;
+  return `${parts.countryCode}${parts.phoneNumber}`;
+}
+
+// For logs only: "+91******3210".
+export function maskPhone(destination: string): string {
+  return destination.length > 4 ? `${destination.slice(0, 3)}${'*'.repeat(Math.max(destination.length - 7, 0))}${destination.slice(-4)}` : '****';
+}

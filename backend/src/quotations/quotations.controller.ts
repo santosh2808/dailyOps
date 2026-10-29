@@ -124,8 +124,8 @@ export class QuotationsController {
   // already emailed.
   @Post(':id/whatsapp-send')
   @RequirePermission('Quotation', 'Edit')
-  sendWhatsApp(@Param('id') id: string) {
-    return this.quotationsService.sendWhatsAppShare(id);
+  sendWhatsApp(@Param('id') id: string, @Req() req: any) {
+    return this.quotationsService.sendWhatsAppShare(id, req.user?.name);
   }
 
   // "Request Approval" button (requirement #8) — same permission as Edit,

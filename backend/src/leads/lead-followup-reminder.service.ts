@@ -109,6 +109,7 @@ export class LeadFollowUpReminderService {
             phone: user.phone,
             templateName,
             bodyValues: [user.name, lead.leadNumber, lead.companyName, lead.contactPerson, lead.phone],
+            useCase: 'LEAD_FOLLOWUP_REMINDER',
           });
         }
 
