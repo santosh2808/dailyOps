@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Plus, Eye, Pencil, Ban, RotateCcw } from "lucide-react";
+import { Search, Plus, Eye, Pencil, Ban, RotateCcw, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
 import ProductFormDialog from "@/components/products/ProductFormDialog";
 import ProductViewDialog from "@/components/products/ProductViewDialog";
 import DeactivateProductConfirmDialog from "@/components/products/DeactivateProductConfirmDialog";
+import DeleteProductConfirmDialog from "@/components/products/DeleteProductConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,6 +26,7 @@ import { getErrorMessage } from "@/lib/errors";
 import {
   createProduct,
   deactivateProduct,
+  deleteProductPermanently,
   getProductCategories,
   listProducts,
   reactivateProduct,
@@ -59,13 +61,17 @@ export default function Products() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ACTIVE");
+  // All by default (like the Users page): a deactivated product stays in
+  // view with its Inactive badge and Reactivate action instead of vanishing.
+  // Product dropdowns elsewhere still list active products only.
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const fetchCategories = useCallback(async () => {
@@ -163,6 +169,25 @@ export default function Products() {
     await fetchProducts();
   }
 
+  function openDeleteDialog(product: Product) {
+    setSelectedProduct(product);
+    setDeleteOpen(true);
+  }
+
+  async function handleDeleteConfirm() {
+    if (!selectedProduct) return;
+    await deleteProductPermanently(selectedProduct.id);
+    toast.success(`Product "${selectedProduct.name}" permanently deleted.`);
+    // Deleted the only row on a later page: step back (the page change
+    // refetches) instead of showing an empty page.
+    if (products.length === 1 && page > 1) {
+      setPage(page - 1);
+      await fetchCategories();
+    } else {
+      await Promise.all([fetchProducts(), fetchCategories()]);
+    }
+  }
+
   // Row actions, shared by the table's Actions cell and the mobile card.
   function productActions(product: Product) {
     return (
@@ -203,6 +228,19 @@ export default function Products() {
             onClick={() => openDeactivateDialog(product)}
           >
             <Ban className="h-4 w-4 text-destructive" />
+          </Button>
+        )}
+        {/* Permanent delete, separate from Deactivate — same layout as the
+            Users page's Delete icon, shown for active and inactive products.
+            The backend refuses for a product anything still uses. */}
+        {hasPermission("Product", "Delete") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Delete product"
+            onClick={() => openDeleteDialog(product)}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
         )}
       </>
@@ -387,6 +425,12 @@ export default function Products() {
         onOpenChange={setDeactivateOpen}
         product={selectedProduct}
         onConfirm={handleDeactivateConfirm}
+      />
+      <DeleteProductConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        product={selectedProduct}
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

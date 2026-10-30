@@ -66,4 +66,13 @@ export class ProductsController {
   deactivate(@Param('id') id: string) {
     return this.productsService.deactivate(id);
   }
+
+  // Permanent delete (Delete icon on the Products page). Same Product:Delete
+  // permission as Deactivate above, same pattern as DELETE
+  // /users/:id/permanent — a separate route so Deactivate is unchanged.
+  @Delete(':id/permanent')
+  @RequirePermission('Product', 'Delete')
+  hardDelete(@Param('id') id: string) {
+    return this.productsService.hardDelete(id);
+  }
 }
