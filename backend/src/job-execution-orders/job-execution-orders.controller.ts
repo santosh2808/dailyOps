@@ -78,7 +78,8 @@ export class JobExecutionOrdersController {
 
   // Explicit (re)send of the factory notification email — added as a bug
   // fix alongside update() above; previously the only send was an
-  // automatic, non-repeatable one inside create().
+  // automatic, non-repeatable one inside create(). Also resends the
+  // factory WhatsApp to the configured factory numbers.
   @Post(':id/send')
   @RequirePermission('JEO', 'Update')
   sendFactoryNotification(@Param('id') id: string, @Body() dto: SendJeoDto, @Req() req: any) {
@@ -101,15 +102,6 @@ export class JobExecutionOrdersController {
     const pdf = await this.jobExecutionOrdersService.getPdf(id, req.user?.name);
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
     res.send(pdf);
-  }
-
-  // Additive: WhatsApp Share via Interakt — sends the document directly to
-  // the customer's WhatsApp. Customer-facing, distinct from :id/send above
-  // (which notifies the internal Production Team, not the customer).
-  @Post(':id/whatsapp-send')
-  @RequirePermission('JEO', 'Update')
-  sendWhatsApp(@Param('id') id: string, @Req() req: any) {
-    return this.jobExecutionOrdersService.sendWhatsAppShare(id, req.user?.name);
   }
 
   // No delete endpoint — JobExecutionOrder has no deletedAt column (per the

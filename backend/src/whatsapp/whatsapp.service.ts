@@ -16,6 +16,9 @@ export interface WhatsAppSendOptions {
   // be recorded in WhatsAppMessage and protected against duplicates.
   documentId?: string;
   sentBy?: string;
+  // AiSensy's `userName` for use cases whose template doesn't carry the
+  // recipient's name (recipientNameParam: null), e.g. a factory contact.
+  recipientName?: string;
 }
 
 // SENT: Interakt accepted it. ACCEPTED: AiSensy accepted it — WhatsApp
@@ -41,7 +44,7 @@ const INTERAKT_SEND_URL = 'https://api.interakt.ai/v1/public/message/';
 // Additive: WhatsApp Share — real send via the company's Interakt account
 // (a WhatsApp Business API Solution Provider), replacing the earlier
 // click-to-chat (wa.me) links. Every outgoing WhatsApp document share
-// (Quotation/Proforma Invoice/Tax Invoice/JEO) goes through here.
+// (Quotation/Proforma Invoice/Tax Invoice) goes through here.
 //
 // Mirrors MailerService's own "Future Ready" convention exactly: with
 // INTERAKT_API_KEY unset (the default — no real credentials are available
@@ -83,6 +86,10 @@ export class WhatsAppService {
 
   async sendTemplateMessage(options: WhatsAppSendOptions): Promise<WhatsAppSendResult> {
     if (this.provider === 'aisensy') return this.sendViaAisensy(options);
+    if (WHATSAPP_USE_CASES[options.useCase]?.aisensyOnly) {
+      this.logger.log(`[SIMULATED WhatsApp] ${options.useCase} (AiSensy only — WHATSAPP_PROVIDER is not aisensy)`);
+      return { status: 'SIMULATED' };
+    }
 
     const { phone, templateName, bodyValues } = options;
     const languageCode = options.languageCode || process.env.INTERAKT_TEMPLATE_LANGUAGE?.trim() || 'en';
@@ -203,7 +210,10 @@ export class WhatsAppService {
         apiKey: this.aisensyApiKey,
         campaignName,
         destination,
-        userName: params.values[config.recipientNameParam],
+        userName:
+          config.recipientNameParam === null
+            ? options.recipientName?.trim() || 'DailyOps contact'
+            : params.values[config.recipientNameParam],
         templateParams: params.values,
       },
     );

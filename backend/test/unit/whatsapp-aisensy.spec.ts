@@ -10,16 +10,20 @@ import { QuotationsService } from '../../src/quotations/quotations.service';
 import { ProformaInvoicesService } from '../../src/proforma-invoices/proforma-invoices.service';
 import { TaxInvoicesService } from '../../src/tax-invoices/tax-invoices.service';
 import { JobExecutionOrdersService } from '../../src/job-execution-orders/job-execution-orders.service';
+import {
+  factoryWhatsAppRecipients,
+  MAX_FACTORY_WHATSAPP_RECIPIENTS,
+} from '../../src/job-execution-orders/factory-whatsapp-recipients';
 import { LeadsService } from '../../src/leads/leads.service';
 import { LeadFollowUpReminderService } from '../../src/leads/lead-followup-reminder.service';
 import { SalesOrdersService } from '../../src/sales-orders/sales-orders.service';
 
 const API_KEY = 'test-aisensy-key-123';
-const MANUAL_CAMPAIGNS = {
+const APPROVED_CAMPAIGNS = {
   AISENSY_QUOTATION_SHARE_CAMPAIGN: 'quotation_share_test',
   AISENSY_PROFORMA_INVOICE_SHARE_CAMPAIGN: 'proforma_share_test',
   AISENSY_TAX_INVOICE_SHARE_CAMPAIGN: 'tax_invoice_share_test',
-  AISENSY_JEO_SHARE_CAMPAIGN: 'jeo_share_test',
+  AISENSY_JEO_FACTORY_CAMPAIGN: 'jeo_factory_test',
 };
 // Not read by the code at all — set here to prove configuration alone
 // can't switch the automatic notifications on.
@@ -33,7 +37,8 @@ const ENV_KEYS = [
   'WHATSAPP_PROVIDER',
   'AISENSY_API_KEY',
   'INTERAKT_API_KEY',
-  ...Object.keys(MANUAL_CAMPAIGNS),
+  'FACTORY_WHATSAPP_RECIPIENTS',
+  ...Object.keys(APPROVED_CAMPAIGNS),
   ...Object.keys(AUTOMATIC_CAMPAIGNS),
 ];
 
@@ -94,7 +99,7 @@ describe('WhatsApp via AiSensy', () => {
     const prisma = mockPrisma();
     return { svc: new WhatsAppService(prisma), prisma, fetchImpl };
   };
-  const live = { WHATSAPP_PROVIDER: 'aisensy', AISENSY_API_KEY: API_KEY, ...MANUAL_CAMPAIGNS };
+  const live = { WHATSAPP_PROVIDER: 'aisensy', AISENSY_API_KEY: API_KEY, ...APPROVED_CAMPAIGNS };
 
   describe('disabled by default', () => {
     it('keeps the existing Interakt simulation when WHATSAPP_PROVIDER is unset', async () => {
@@ -107,14 +112,14 @@ describe('WhatsApp via AiSensy', () => {
     });
 
     it('treats an unknown provider as the existing Interakt path', async () => {
-      const { svc, fetchImpl } = make({ WHATSAPP_PROVIDER: 'aisnesy', AISENSY_API_KEY: API_KEY, ...MANUAL_CAMPAIGNS });
+      const { svc, fetchImpl } = make({ WHATSAPP_PROVIDER: 'aisnesy', AISENSY_API_KEY: API_KEY, ...APPROVED_CAMPAIGNS });
       await expect(svc.sendTemplateMessage(share())).resolves.toEqual({ status: 'SIMULATED' });
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(logs.join('\n')).toContain('Unknown WHATSAPP_PROVIDER');
     });
 
     it('simulates when the API key is missing', async () => {
-      const { svc, prisma, fetchImpl } = make({ WHATSAPP_PROVIDER: 'aisensy', ...MANUAL_CAMPAIGNS });
+      const { svc, prisma, fetchImpl } = make({ WHATSAPP_PROVIDER: 'aisensy', ...APPROVED_CAMPAIGNS });
       await expect(svc.sendTemplateMessage(share())).resolves.toEqual({ status: 'SIMULATED' });
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(prisma.whatsAppMessage.create).toHaveBeenCalledWith({
@@ -380,7 +385,7 @@ describe('existing WhatsApp callers under AiSensy', () => {
 
   beforeEach(() => {
     for (const k of ENV_KEYS) saved[k] = process.env[k];
-    Object.assign(process.env, { WHATSAPP_PROVIDER: 'aisensy', AISENSY_API_KEY: API_KEY, ...MANUAL_CAMPAIGNS, ...AUTOMATIC_CAMPAIGNS });
+    Object.assign(process.env, { WHATSAPP_PROVIDER: 'aisensy', AISENSY_API_KEY: API_KEY, ...APPROVED_CAMPAIGNS, ...AUTOMATIC_CAMPAIGNS });
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     fetchImpl = accepted();
@@ -437,19 +442,6 @@ describe('existing WhatsApp callers under AiSensy', () => {
       'tax_invoice_share_test',
       'TI-0001',
       '/api/v1/public/tax-invoices/tok/pdf',
-    ],
-    [
-      'JEO',
-      () => {
-        const svc = new JobExecutionOrdersService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, wa, {} as any);
-        jest.spyOn(svc, 'findOne').mockResolvedValue({ id: 'doc1', jeoNumber: 'JEO-0001', customer } as any);
-        jest.spyOn(svc, 'getOrCreatePublicToken').mockResolvedValue('tok');
-        return svc;
-      },
-      'JEO_SHARE',
-      'jeo_share_test',
-      'JEO-0001',
-      '/api/v1/public/job-execution-orders/tok/pdf',
     ],
   ])('%s share sends its own campaign and is recorded', async (_label, build, useCase, campaign, number, linkPath) => {
     const svc = build() as { sendWhatsAppShare(id: string, sentBy?: string): Promise<unknown> };
@@ -531,6 +523,162 @@ describe('existing WhatsApp callers under AiSensy', () => {
     expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ useCase: 'SALES_ORDER_STATUS' }));
     await expect(sendSpy.mock.results[0].value).resolves.toEqual({ status: 'SIMULATED' });
     expectSimulatedOnly();
+  });
+
+  describe('JEO factory WhatsApp', () => {
+    const jeo = {
+      id: 'jeo1',
+      jeoNumber: 'JEO-0001',
+      priority: 'HIGH',
+      salesOrder: { salesOrderNumber: 'SO-0001' },
+      customer: { ...customer, companyName: 'Acme Industries' },
+    };
+    const buildJeo = () => {
+      const svc = new JobExecutionOrdersService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, wa, {} as any);
+      jest.spyOn(svc, 'getOrCreatePublicToken').mockResolvedValue('tok');
+      return svc;
+    };
+    const notify = (svc: JobExecutionOrdersService) => (svc as any).notifyFactoryWhatsApp(jeo, 'Asha') as Promise<void>;
+
+    it('sends to each factory number, never to the customer', async () => {
+      process.env.FACTORY_WHATSAPP_RECIPIENTS = 'Krishna:9123456780, Ravi:9988776655';
+      await notify(buildJeo());
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const bodies = fetchImpl.mock.calls.map(([, init]) => JSON.parse(init.body));
+      expect(bodies.map((b) => [b.destination, b.userName])).toEqual([
+        ['+919123456780', 'Krishna'],
+        ['+919988776655', 'Ravi'],
+      ]);
+      expect(bodies.map((b) => b.destination)).not.toContain('+919876543210');
+      expect(bodies[0]).toMatchObject({ campaignName: 'jeo_factory_test' });
+      expect(bodies[0].templateParams.slice(0, 4)).toEqual(['JEO-0001', 'SO-0001', 'Acme Industries', 'High']);
+      expect(bodies[0].templateParams[4]).toMatch(/^https?:\/\/.+\/api\/v1\/public\/job-execution-orders\/tok\/pdf$/);
+      expect(prisma.whatsAppMessage.create.mock.calls[0][0].data).toMatchObject({
+        useCase: 'JEO_FACTORY_NOTIFICATION',
+        documentId: 'jeo1',
+        sentBy: 'Asha',
+      });
+    });
+
+    it('sends nothing when no factory numbers are configured', async () => {
+      delete process.env.FACTORY_WHATSAPP_RECIPIENTS;
+      const svc = buildJeo();
+      await notify(svc);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(svc.getOrCreatePublicToken).not.toHaveBeenCalled();
+    });
+
+    it('stays simulated without its campaign', async () => {
+      delete process.env.AISENSY_JEO_FACTORY_CAMPAIGN;
+      process.env.FACTORY_WHATSAPP_RECIPIENTS = 'Krishna:9123456780';
+      await notify(buildJeo());
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('never throws, even if the link cannot be created', async () => {
+      process.env.FACTORY_WHATSAPP_RECIPIENTS = 'Krishna:9123456780';
+      const svc = buildJeo();
+      jest.spyOn(svc, 'getOrCreatePublicToken').mockRejectedValue(new Error('db down'));
+      await expect(notify(svc)).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('a bad number does not stop the others', async () => {
+      process.env.FACTORY_WHATSAPP_RECIPIENTS = 'Desk:0401234567,Krishna:9123456780';
+      await notify(buildJeo());
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(sentBody().destination).toBe('+919123456780');
+    });
+
+    describe('Resend to Factory', () => {
+      let mailerMock: { send: jest.Mock };
+      let svc: JobExecutionOrdersService;
+      let notifySpy: jest.SpyInstance;
+
+      beforeEach(() => {
+        mailerMock = { send: jest.fn().mockResolvedValue({ status: 'SENT' }) };
+        svc = new JobExecutionOrdersService(
+          prisma,
+          mailerMock as any,
+          { render: jest.fn().mockResolvedValue(Buffer.from('pdf')) } as any,
+          {} as any,
+          { record: jest.fn().mockResolvedValue(undefined) } as any,
+          {} as any,
+          wa,
+          {} as any,
+        );
+        jest.spyOn(svc, 'findOne').mockResolvedValue(jeo as any);
+        jest.spyOn(svc as any, 'toPdfInput').mockReturnValue({});
+        // Never settles — proves the resend doesn't wait for the WhatsApp.
+        notifySpy = jest.spyOn(svc as any, 'notifyFactoryWhatsApp').mockReturnValue(new Promise(() => undefined));
+      });
+
+      it('also resends the WhatsApp, without waiting for it', async () => {
+        await expect(svc.sendFactoryNotification('jeo1', {}, 'Asha')).resolves.toMatchObject({ emailStatus: 'SENT' });
+        expect(notifySpy).toHaveBeenCalledWith(jeo, 'Asha');
+        expect(mailerMock.send).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not re-message the factory for a copy emailed to someone else', async () => {
+        await svc.sendFactoryNotification('jeo1', { recipientEmail: 'qa@example.com' }, 'Asha');
+        expect(mailerMock.send).toHaveBeenCalledTimes(1);
+        expect(notifySpy).not.toHaveBeenCalled();
+      });
+
+      it('does not send the WhatsApp if the email step fails', async () => {
+        mailerMock.send.mockRejectedValue(new Error('smtp down'));
+        await expect(svc.sendFactoryNotification('jeo1', {}, 'Asha')).rejects.toThrow('smtp down');
+        expect(notifySpy).not.toHaveBeenCalled();
+      });
+    });
+  });
+});
+
+describe('AiSensy-only use cases on the Interakt path', () => {
+  afterEach(() => {
+    delete process.env.INTERAKT_API_KEY;
+    jest.restoreAllMocks();
+  });
+
+  it('never sends the factory notification through Interakt, even with its key set', async () => {
+    process.env.INTERAKT_API_KEY = 'interakt-key';
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(accepted());
+    const svc = new WhatsAppService(mockPrisma());
+    const result = await svc.sendTemplateMessage(
+      share({ useCase: 'JEO_FACTORY_NOTIFICATION', bodyValues: ['J', 'S', 'C', 'P', 'L'] }),
+    );
+    expect(result).toEqual({ status: 'SIMULATED' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('factoryWhatsAppRecipients', () => {
+  it('parses names and numbers, skipping blanks and repeats', () => {
+    expect(factoryWhatsAppRecipients(' Krishna : 9123456780 ,,9988776655, Dup:9123456780')).toEqual({
+      recipients: [
+        { name: 'Krishna', phone: '9123456780' },
+        { name: 'Factory', phone: '9988776655' },
+      ],
+      dropped: 0,
+    });
+  });
+
+  it('treats the same number in different formats as one person', () => {
+    expect(factoryWhatsAppRecipients('Krishna:9876543210,Krishna2:+91 98765 43210').recipients).toEqual([
+      { name: 'Krishna', phone: '9876543210' },
+    ]);
+  });
+
+  it('is empty when unset', () => {
+    expect(factoryWhatsAppRecipients(undefined)).toEqual({ recipients: [], dropped: 0 });
+  });
+
+  it(`caps the list at ${MAX_FACTORY_WHATSAPP_RECIPIENTS}`, () => {
+    const raw = Array.from({ length: 12 }, (_, i) => `P${i}:91234567${String(i).padStart(2, '0')}`).join(',');
+    const { recipients, dropped } = factoryWhatsAppRecipients(raw);
+    expect(recipients).toHaveLength(MAX_FACTORY_WHATSAPP_RECIPIENTS);
+    expect(dropped).toBe(2);
   });
 });
 

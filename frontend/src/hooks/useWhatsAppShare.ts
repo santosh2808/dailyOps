@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 
-// Shared by the four "Share via WhatsApp" menu items (Quotation, Proforma
-// Invoice, Tax Invoice, JEO). Ignores repeat clicks while a send is in
+// Shared by the three "Share via WhatsApp" menu items (Quotation, Proforma
+// Invoice, Tax Invoice). Ignores repeat clicks while a send is in
 // flight (with AiSensy, the backend also refuses a repeat of the same
 // document to the same number for 2 minutes), and words each
 // outcome honestly: AiSensy's ACCEPTED only means the request was taken —
