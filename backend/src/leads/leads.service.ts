@@ -2041,14 +2041,32 @@ export class LeadsService {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Assigned also comes from the lead's actual owner, not only status
+    // history: assigning a lead that's already past New (e.g. an imported
+    // lead moved to Qualified, then assigned via Edit Lead) rightly leaves
+    // its status alone, so no ASSIGNED history row is ever written for it.
+    // Its time is then the first assignment on record.
+    const assignedInHistory = history.some((h) => h.newStatus === 'ASSIGNED');
+    const firstAssignment =
+      lead.assignedToUserId && !assignedInHistory
+        ? await this.prisma.leadAssignmentHistory.findFirst({
+            where: { leadId: id, newUser: { not: null } },
+            orderBy: { createdAt: 'asc' },
+            select: { createdAt: true },
+          })
+        : null;
+
     const firstReachedAt = (status: LeadStatus): Date | null => {
       if (status === 'NEW') return lead.createdAt;
       const entry = history.find((h) => h.newStatus === status);
-      return entry ? entry.createdAt : null;
+      if (entry) return entry.createdAt;
+      if (status === 'ASSIGNED') return firstAssignment?.createdAt ?? null;
+      return null;
     };
 
     const reached = new Set<LeadStatus>(['NEW', lead.status]);
     for (const h of history) reached.add(h.newStatus);
+    if (lead.assignedToUserId) reached.add('ASSIGNED');
 
     const stageLabels: Partial<Record<LeadStatus, string>> = {
       NEW: 'New',
