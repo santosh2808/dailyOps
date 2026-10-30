@@ -16,6 +16,7 @@ import GenerateChargesFields, {
   type GenerateCharges,
 } from "@/components/quotations/GenerateChargesFields";
 import AssignedToPicker from "@/components/leads/AssignedToPicker";
+import { useAuth } from "@/context/AuthContext";
 import PreviousLeadSelect from "@/components/leads/PreviousLeadSelect";
 import { PRIORITY_OPTIONS, SOURCE_OPTIONS } from "@/components/leads/leadOptions";
 import { INDIA_STATES } from "@/lib/indiaStates";
@@ -26,7 +27,7 @@ import { isPastDateInputValue, todayDateInputValue } from "@/lib/date";
 import { normalizePhone } from "@/lib/phone";
 import { scrollToFirstError } from "@/lib/scrollToFirstError";
 import { createLead, getLead, updateLead, type LeadPayload, type LeadProductPayload } from "@/api/leads";
-import type { LeadPriority, LeadSource } from "@/types";
+import type { LeadPriority, LeadSource, User } from "@/types";
 
 interface FormState {
   companyName: string;
@@ -87,10 +88,23 @@ function toDateInputValue(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
 
+// Mirrors the backend's mustSelfAssignNewLeads() (lead-visibility.ts), which
+// is authoritative — the server assigns a Sales Executive's new lead to them
+// whatever is sent; this only shows that on the form.
+const FULL_VISIBILITY_ROLES = new Set(["administrator", "salesmanager", "telecaller", "telecallers", "digitalmarketing", "digitalmarketer"]);
+const SELF_ASSIGN_ROLES = new Set(["salesexecutive", "salesexecutives"]);
+
+function mustSelfAssignNewLeads(user: User | null): boolean {
+  const roles = (user?.roles ?? []).map((r) => r.toLowerCase().replace(/[\s_-]+/g, ""));
+  return roles.some((r) => SELF_ASSIGN_ROLES.has(r)) && !roles.some((r) => FULL_VISIBILITY_ROLES.has(r));
+}
+
 export default function LeadForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const selfAssigned = !isEdit && mustSelfAssignNewLeads(user);
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [products, setProducts] = useState<LeadProductPayload[]>([]);
@@ -101,6 +115,10 @@ export default function LeadForm() {
   const [wasAssigned, setWasAssigned] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (selfAssigned && user) setForm((f) => ({ ...f, assignedToUserId: user.id }));
+  }, [selfAssigned, user]);
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -559,10 +577,17 @@ export default function LeadForm() {
 
                   <div className="space-y-2">
                     <Label>Assigned To{!isEdit || wasAssigned ? " *" : ""}</Label>
-                    <AssignedToPicker
-                      value={form.assignedToUserId || null}
-                      onChange={(userId) => update("assignedToUserId", userId ?? "")}
-                    />
+                    {selfAssigned ? (
+                      <>
+                        <Input value={`${user?.name ?? ""} (you)`} disabled />
+                        <p className="text-xs text-muted-foreground">New leads you create are assigned to you.</p>
+                      </>
+                    ) : (
+                      <AssignedToPicker
+                        value={form.assignedToUserId || null}
+                        onChange={(userId) => update("assignedToUserId", userId ?? "")}
+                      />
+                    )}
                     {errors.assignedToUserId && (
                       <p className="text-xs text-destructive">{errors.assignedToUserId}</p>
                     )}

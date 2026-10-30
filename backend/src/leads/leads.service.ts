@@ -32,7 +32,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
 import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
-import { canViewAllLeads, leadVisibilityWhere, type LeadViewer } from './lead-visibility';
+import { canViewAllLeads, leadVisibilityWhere, mustSelfAssignNewLeads, type LeadViewer } from './lead-visibility';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
@@ -496,7 +496,13 @@ export class LeadsService {
     return lead;
   }
 
-  async create(dto: CreateLeadDto, actorName?: string) {
+  async create(dto: CreateLeadDto, actorName?: string, creator?: LeadViewer) {
+    // A Sales Executive's lead is assigned to themselves, from the session —
+    // never from the request body, whatever it says (see
+    // mustSelfAssignNewLeads()).
+    if (mustSelfAssignNewLeads(creator)) {
+      dto = { ...dto, assignedToUserId: creator!.id! };
+    }
     // companyName is no longer mandatory on the DTO (some leads genuinely
     // have no company — an individual homeowner, or an early-stage inquiry),
     // but Lead.companyName stays a NOT NULL column (see schema.prisma) to

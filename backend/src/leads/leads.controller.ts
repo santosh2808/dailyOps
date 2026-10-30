@@ -163,7 +163,7 @@ export class LeadsController {
   @Post()
   @RequirePermission('Lead', 'Create')
   create(@Body() dto: CreateLeadDto, @Req() req: any) {
-    return this.leadsService.create(dto, req.user?.name);
+    return this.leadsService.create(dto, req.user?.name, req.user);
   }
 
   @Patch(':id')
