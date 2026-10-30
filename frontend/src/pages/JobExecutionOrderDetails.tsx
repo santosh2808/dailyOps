@@ -17,8 +17,6 @@ import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
-import { useWhatsAppShare } from "@/hooks/useWhatsAppShare";
 import JeoStatusBadge from "@/components/job-execution-orders/JeoStatusBadge";
 import JeoPriorityBadge from "@/components/job-execution-orders/JeoPriorityBadge";
 import { hangingStructureLabel } from "@/components/job-execution-orders/jeoOptions";
@@ -37,7 +35,6 @@ import {
   getJeoTimeline,
   getJobExecutionOrder,
   openJeoPdf,
-  sendJeoWhatsApp,
   updateJeoStatus,
   updateProductionChecklist,
 } from "@/api/job-execution-orders";
@@ -80,7 +77,6 @@ export default function JobExecutionOrderDetails() {
 
   const [jeo, setJeo] = useState<JobExecutionOrder | null>(null);
   const [loading, setLoading] = useState(true);
-  const { sending: whatsAppSending, share: shareWhatsApp } = useWhatsAppShare();
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -313,19 +309,8 @@ export default function JobExecutionOrderDetails() {
                     >
                       View PDF
                     </DropdownMenuItem>
-                    {/* Additive: WhatsApp Share via Interakt —
-                        customer-facing, unlike "Resend to Factory" right
-                        below (which emails the internal Production Team,
-                        not the customer). Same lazily-generated public
-                        link pattern as Proforma Invoice / Tax Invoice,
-                        sent using a pre-approved template. */}
-                    <DropdownMenuItem
-                      icon={WhatsAppIcon}
-                      disabled={whatsAppSending}
-                      onSelect={() => shareWhatsApp(() => sendJeoWhatsApp(jeo.id))}
-                    >
-                      {whatsAppSending ? "Sending…" : "Share via WhatsApp (Customer)"}
-                    </DropdownMenuItem>
+                    {/* A JEO is internal: it goes to the factory (email and
+                        WhatsApp), never to the customer. */}
                     <DropdownMenuItem icon={Send} onSelect={() => setSendOpen(true)}>
                       Resend to Factory
                     </DropdownMenuItem>

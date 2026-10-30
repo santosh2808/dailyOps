@@ -1,5 +1,4 @@
 import api from "@/lib/api";
-import type { WhatsAppSendStatus } from "@/hooks/useWhatsAppShare";
 import type {
   EmailHistoryEntry,
   HangingStructureType,
@@ -131,19 +130,4 @@ export async function openJeoPdf(id: string) {
   // Revoke after a delay rather than immediately — the new tab needs time
   // to actually load the blob URL before it's invalidated.
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-}
-
-// Additive: WhatsApp Share via Interakt — customer-facing, see the
-// identical helper in api/proforma-invoices.ts for the full rationale.
-// Distinct from sendJeoFactoryNotification() above, which targets the
-// internal Production Team rather than the customer.
-export interface WhatsAppSendResult {
-  status: WhatsAppSendStatus;
-  errorMessage?: string;
-  phone?: string | null;
-}
-
-export async function sendJeoWhatsApp(id: string) {
-  const res = await api.post<WhatsAppSendResult>(`/api/v1/job-execution-orders/${id}/whatsapp-send`);
-  return res.data;
 }

@@ -8,7 +8,7 @@ import {
 import { JeoStatus, Prisma, SalesOrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { WhatsAppService, type WhatsAppSendResult } from '../whatsapp/whatsapp.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { backendBaseUrl } from '../common/backend-base-url';
 import { assertForwardOnlyTransition } from '../common/status-transition.util';
 import { MINIMUM_ADVANCE_PERCENT } from '../sales-orders/dispatch-override-approvers';
@@ -44,6 +44,7 @@ import { UpdateJeoStatusDto } from './dto/update-jeo-status.dto';
 import { UpdateProductionChecklistDto } from './dto/update-production-checklist.dto';
 import { SendJeoDto } from './dto/send-jeo.dto';
 import { QueryJeoDto } from './dto/query-jeo.dto';
+import { factoryWhatsAppRecipients } from './factory-whatsapp-recipients';
 
 const JEO_NUMBER_PREFIX = 'JEO-';
 const JEO_NUMBER_PAD = 6;
@@ -412,6 +413,9 @@ export class JobExecutionOrdersService {
         // or automatic (both run through this one create() method) —
         // emails the Production Team with the JEO PDF attached.
         await this.sendFactoryNotificationEmail(created, actorName);
+        // Not awaited: JEO generation never waits on, or fails because of,
+        // the factory WhatsApp (see notifyFactoryWhatsApp()).
+        void this.notifyFactoryWhatsApp(created, actorName);
 
         return created;
       } catch (error) {
@@ -623,11 +627,10 @@ export class JobExecutionOrdersService {
     return this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
   }
 
-  // Additive: WhatsApp Share — customer-facing (jeo.customer), distinct
-  // from sendFactoryNotificationEmail() above which targets the internal
-  // Production Team. Same lazily-generated, non-expiring public token
-  // pattern as ProformaInvoicesService.getOrCreatePublicToken() (see its
-  // comment for the raw-SQL rationale).
+  // Public PDF link for the factory WhatsApp (notifyFactoryWhatsApp()).
+  // Same lazily-generated, non-expiring public token pattern as
+  // ProformaInvoicesService.getOrCreatePublicToken() (see its comment for
+  // the raw-SQL rationale).
   async getOrCreatePublicToken(id: string): Promise<string> {
     const rows = await this.prisma.$queryRaw<{ publicToken: string | null }[]>`
       SELECT "publicToken" FROM "JobExecutionOrder" WHERE id = ${id}
@@ -638,11 +641,15 @@ export class JobExecutionOrdersService {
     if (rows[0].publicToken) {
       return rows[0].publicToken;
     }
+    // COALESCE: if a concurrent call (e.g. the background factory WhatsApp
+    // and a Resend) stored a token first, keep it rather than replacing it
+    // — a replaced token would break links already sent.
     const token = crypto.randomBytes(24).toString('base64url');
-    await this.prisma.$executeRaw`
-      UPDATE "JobExecutionOrder" SET "publicToken" = ${token} WHERE id = ${id}
+    const saved = await this.prisma.$queryRaw<{ publicToken: string }[]>`
+      UPDATE "JobExecutionOrder" SET "publicToken" = COALESCE("publicToken", ${token}) WHERE id = ${id}
+      RETURNING "publicToken"
     `;
-    return token;
+    return saved[0]?.publicToken ?? token;
   }
 
   // The no-guard counterpart to getPdf(id) above, reached via publicToken
@@ -658,25 +665,51 @@ export class JobExecutionOrdersService {
     return this.getPdf(rows[0].id);
   }
 
-  // Additive: WhatsApp Share via Interakt — customer-facing, see the
-  // identical method on ProformaInvoicesService for the full rationale.
-  // Distinct from sendFactoryNotificationEmail(), which targets the
-  // internal Production Team rather than the customer.
-  async sendWhatsAppShare(id: string, sentBy?: string): Promise<WhatsAppSendResult & { phone?: string | null }> {
-    const jeo = await this.findOne(id);
-    const phone = jeo.customer?.phone ?? null;
-    const token = await this.getOrCreatePublicToken(id);
-    const link = `${backendBaseUrl()}/api/v1/public/job-execution-orders/${token}/pdf`;
-    const templateName = process.env.INTERAKT_JEO_TEMPLATE_NAME?.trim() || 'jeo_share';
-    const result = await this.whatsAppService.sendTemplateMessage({
-      phone,
-      templateName,
-      bodyValues: [jeo.customer?.contactPerson || 'Customer', jeo.jeoNumber, link],
-      useCase: 'JEO_SHARE',
-      documentId: jeo.id,
-      sentBy,
-    });
-    return { ...result, phone };
+  // The WhatsApp counterpart of the factory notification email: the JEO
+  // goes to the factory's own people (FACTORY_WHATSAPP_RECIPIENTS), never
+  // to the customer — a JEO is an internal document. Fired without await
+  // from create() and sendFactoryNotification(), so it never throws: every
+  // outcome is logged, and a failure is fixed with "Resend to Factory".
+  private async notifyFactoryWhatsApp(
+    jeo: Prisma.JobExecutionOrderGetPayload<{ include: typeof JEO_DETAIL_INCLUDE }>,
+    actorName?: string,
+  ): Promise<void> {
+    try {
+      const { recipients, dropped } = factoryWhatsAppRecipients();
+      if (dropped) {
+        this.logger.warn(`FACTORY_WHATSAPP_RECIPIENTS lists more numbers than allowed — ${dropped} ignored.`);
+      }
+      if (!recipients.length) {
+        this.logger.log(`[SIMULATED WhatsApp] JEO_FACTORY_NOTIFICATION for JEO ${jeo.jeoNumber} (FACTORY_WHATSAPP_RECIPIENTS not set)`);
+        return;
+      }
+      const token = await this.getOrCreatePublicToken(jeo.id);
+      const link = `${backendBaseUrl()}/api/v1/public/job-execution-orders/${token}/pdf`;
+      // Same wording as the app's priority badge ("Urgent", not "URGENT").
+      const priority = jeo.priority.charAt(0) + jeo.priority.slice(1).toLowerCase();
+      // Independent sends (separate duplicate-claim keys), so one slow or
+      // timed-out number doesn't hold up the rest.
+      await Promise.all(
+        recipients.map(async (recipient) => {
+          const result = await this.whatsAppService.sendTemplateMessage({
+            phone: recipient.phone,
+            templateName: 'jeo_factory_notification',
+            bodyValues: [jeo.jeoNumber, jeo.salesOrder.salesOrderNumber, jeo.customer.companyName, priority, link],
+            useCase: 'JEO_FACTORY_NOTIFICATION',
+            documentId: jeo.id,
+            sentBy: actorName,
+            recipientName: recipient.name,
+          });
+          if (result.status === 'FAILED' || result.status === 'UNKNOWN') {
+            this.logger.error(`Factory WhatsApp for JEO ${jeo.jeoNumber} to ${recipient.name}: ${result.status} — ${result.errorMessage}`);
+          } else if (result.status === 'DUPLICATE') {
+            this.logger.log(`Factory WhatsApp for JEO ${jeo.jeoNumber} to ${recipient.name} not resent: ${result.errorMessage}`);
+          }
+        }),
+      );
+    } catch (error) {
+      this.logger.error(`Factory WhatsApp failed for JEO ${jeo.id}: ${(error as Error)?.message ?? 'unknown error'}`);
+    }
   }
 
   private toPdfInput(
@@ -761,6 +794,12 @@ export class JobExecutionOrdersService {
     const result = await this.mailerService.send(
       await this.buildFactoryNotificationPayload(jeo, actorName, { to, cc: dto.ccEmails }),
     );
+    // A resend to the factory also resends its WhatsApp (not awaited, see
+    // create()). A copy emailed to some other recipientEmail doesn't
+    // re-message the factory.
+    if (!dto.recipientEmail?.trim()) {
+      void this.notifyFactoryWhatsApp(jeo, actorName);
+    }
 
     await this.auditLogService
       .record({
