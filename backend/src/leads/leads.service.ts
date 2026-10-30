@@ -562,6 +562,9 @@ export class LeadsService {
               ...leadData,
               companyName: companyName?.trim() || '',
               leadNumber,
+              // Created directly in DailyOps — the schema default (OTHER) is
+              // for paths that don't say where a lead came from.
+              source: leadData.source ?? LeadSource.DAILYOPS,
               // CreateLeadDto requires assignedToUserId (see its own
               // @IsUUID comment) — every lead made through the normal Create
               // Lead form already has an owner from the moment it exists, so
@@ -2535,8 +2538,9 @@ export class LeadsService {
       );
     }
 
-    // Blank cell -> sensible default (OTHER/NEW, matching the manual Create
-    // Lead form's defaults); a non-blank but unrecognized value is flagged
+    // Blank cell -> sensible default (OTHER/NEW — an imported lead's origin
+    // is unknown, unlike Create Lead, which defaults to DAILYOPS); a
+    // non-blank but unrecognized value is flagged
     // as invalid rather than silently defaulted, so bad data gets fixed
     // instead of quietly mis-imported.
     let source: LeadSource = LeadSource.OTHER;

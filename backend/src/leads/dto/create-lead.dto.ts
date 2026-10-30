@@ -153,7 +153,7 @@ export class CreateLeadDto {
   @IsEnum(LeadPriority)
   priority?: LeadPriority;
 
-  @ApiPropertyOptional({ enum: LeadSource, default: LeadSource.OTHER })
+  @ApiPropertyOptional({ enum: LeadSource, default: LeadSource.DAILYOPS })
   @IsOptional()
   @IsEnum(LeadSource)
   source?: LeadSource;

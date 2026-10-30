@@ -70,7 +70,7 @@ const emptyForm: FormState = {
   description: "",
   estimatedValue: "",
   priority: "MEDIUM",
-  source: "OTHER",
+  source: "DAILYOPS",
   expectedCloseDate: "",
   nextFollowUp: "",
   reminderNote: "",
