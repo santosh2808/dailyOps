@@ -280,6 +280,10 @@ enum LeadSource {
   META
   GOOGLE_ADS
   OTHER
+  // A lead entered directly in DailyOps (Create Lead) — the default there,
+  // still changeable on the form. Integrations never set it; imports only if
+  // a sheet's Source cell says "DailyOps".
+  DAILYOPS
 }
 
 // ===========================================================================

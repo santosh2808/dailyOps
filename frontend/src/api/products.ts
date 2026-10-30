@@ -58,6 +58,12 @@ export async function deactivateProduct(id: string) {
   return res.data;
 }
 
+// Permanent delete — see ProductsService.hardDelete(). Fails with a reason
+// (409) for a product anything still uses.
+export async function deleteProductPermanently(id: string) {
+  await api.delete(`/api/v1/products/${id}/permanent`);
+}
+
 export async function reactivateProduct(id: string) {
   const res = await api.patch<Product>(`/api/v1/products/${id}/reactivate`);
   return res.data;

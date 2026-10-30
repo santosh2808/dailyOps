@@ -337,6 +337,7 @@ export const LEAD_SOURCES = [
   "META",
   "GOOGLE_ADS",
   "OTHER",
+  "DAILYOPS",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
