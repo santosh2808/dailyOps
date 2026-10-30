@@ -27,8 +27,16 @@ export class AuthService {
     // isActive is new (Enterprise RBAC) — a deactivated ("deleted") user
     // from the Users screen can no longer log in. Pre-existing users are
     // unaffected: the column defaults to true.
+    // Only reached after the password matched, so this never tells a
+    // stranger whether a username exists. `code` lets the login screen show
+    // this instead of its generic wrong-credentials message.
     if (!user.isActive) {
-      throw new UnauthorizedException('This account has been deactivated');
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: 'ACCOUNT_DISABLED',
+        message: 'Your account has been disabled. Please contact your administrator.',
+      });
     }
 
     return user;

@@ -289,11 +289,15 @@ export default function LoginRobot() {
         // /change-password instead if this account still has
         // mustChangePassword set (e.g. first login as the seeded admin).
         setTimeout(() => navigate("/dashboard"), 1400);
-      } catch {
+      } catch (err) {
         btn.disabled = false;
-        toast.error("Incorrect username/email or password.");
+        // The server only says "disabled" once the password was right (see
+        // AuthService.validateUser()); anything else stays generic.
+        const data = (err as { response?: { data?: { code?: string; message?: string } } })?.response?.data;
+        const disabled = data?.code === "ACCOUNT_DISABLED" && !!data.message;
+        toast.error(disabled ? data!.message! : "Incorrect username/email or password.");
         setTimeout(() => {
-          say("Nope, that's not it. Try again?");
+          say(disabled ? "This account is disabled. Ask your administrator." : "Nope, that's not it. Try again?");
           setMood("watching");
         }, 380);
         form!.classList.remove("volt-shake");
