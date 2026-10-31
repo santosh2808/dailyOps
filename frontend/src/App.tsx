@@ -48,6 +48,7 @@ import LeadReassignments from "@/pages/LeadReassignments";
 import LeadAccessAudit from "@/pages/LeadAccessAudit";
 import PublicQuotation from "@/pages/PublicQuotation";
 import PublicApproval from "@/pages/PublicApproval";
+import PublicOrderTracking from "@/pages/PublicOrderTracking";
 import FormConfigurationPage from "@/pages/FormConfigurationPage";
 import ContentPostList from "@/pages/ContentPostList";
 import ContentPostEditor from "@/pages/ContentPostEditor";
@@ -75,6 +76,10 @@ export default function App() {
               neither of them has a DailyOps account, so no ProtectedRoute
               wrapper here either. */}
           <Route path="/approvals/:token" element={<PublicApproval />} />
+          {/* Customer order tracking — public, read-only page linked from the
+              sales order WhatsApp messages. No ProtectedRoute: the customer
+              has no DailyOps account. */}
+          <Route path="/track/:token" element={<PublicOrderTracking />} />
           <Route
             path="/change-password"
             element={

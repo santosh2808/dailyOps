@@ -1085,6 +1085,13 @@ model SalesOrder {
   // enforced User relation, consistent with how Lead.assignedTo avoids a
   // cross-module FK to the Users module.
   createdBy           String?
+  // Customer order tracking: the unguessable code in the /track/{token}
+  // link sent to the customer on WhatsApp. Read-only, non-expiring, shows
+  // order status only (no prices/addresses — see
+  // SalesOrdersService.getPublicTracking()). Set at create(); null for
+  // orders created before this field existed, which get one lazily the
+  // first time a link is needed (getOrCreateTrackingToken()).
+  trackingToken       String?          @unique
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   deletedAt           DateTime?

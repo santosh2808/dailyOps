@@ -97,4 +97,10 @@ describeDb('migrated database schema', () => {
     const idx = await db.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'WhatsAppMessage'`);
     expect(idx.rows.map((x) => x.indexdef).join('\n')).toMatch(/\("documentId", "useCase", destination, "createdAt"\)/);
   });
+
+  it('has the optional, unique sales order tracking token', async () => {
+    expect((await columns('SalesOrder')).get('trackingToken')?.is_nullable).toBe('YES');
+    const idx = await db.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'SalesOrder'`);
+    expect(idx.rows.map((x) => x.indexdef).join('\n')).toMatch(/CREATE UNIQUE INDEX .*\("trackingToken"\)/);
+  });
 });
