@@ -48,6 +48,18 @@ export function canViewAllLeads(viewer?: LeadViewer | null): boolean {
   return roles.some((r) => FULL_VISIBILITY_NORMALISED.has(normaliseRole(r)));
 }
 
+// A Sales Executive's new lead is always their own (Create Lead): they can
+// only see leads assigned to them, so assigning one elsewhere at creation
+// made it vanish from the creator straight away. Full-visibility roles win
+// for a user holding both, keeping their normal free choice. Reassigning
+// later still goes through the existing approval flow (update()).
+const SELF_ASSIGN_ON_CREATE_NORMALISED = new Set(['salesexecutive', 'salesexecutives']);
+
+export function mustSelfAssignNewLeads(viewer?: LeadViewer | null): boolean {
+  if (!viewer?.id || canViewAllLeads(viewer)) return false;
+  return (viewer.roles ?? []).some((r) => SELF_ASSIGN_ON_CREATE_NORMALISED.has(normaliseRole(r)));
+}
+
 export function leadVisibilityWhere(viewer?: LeadViewer | null): Prisma.LeadWhereInput {
   if (canViewAllLeads(viewer)) return {};
   // A restricted user with no id can match nothing.

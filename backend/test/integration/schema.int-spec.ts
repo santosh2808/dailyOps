@@ -80,4 +80,27 @@ describeDb('migrated database schema', () => {
     expect(defs).toMatch(/SalesOrder.*salesOrderNumber/);
     expect(defs).toMatch(/Quotation.*quotationNumber/);
   });
+
+  it('has the standalone WhatsApp message history used for duplicate-send protection', async () => {
+    const wa = await columns('WhatsAppMessage');
+    for (const c of ['provider', 'useCase', 'documentId', 'destination', 'status', 'createdAt']) {
+      expect(wa.get(c)?.is_nullable).toBe('NO');
+    }
+    for (const c of ['campaignName', 'errorMessage', 'sentBy']) {
+      expect(wa.get(c)?.is_nullable).toBe('YES');
+    }
+    const fks = await db.query(
+      `SELECT 1 FROM information_schema.table_constraints
+       WHERE table_name = 'WhatsAppMessage' AND constraint_type = 'FOREIGN KEY'`,
+    );
+    expect(fks.rowCount).toBe(0);
+    const idx = await db.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'WhatsAppMessage'`);
+    expect(idx.rows.map((x) => x.indexdef).join('\n')).toMatch(/\("documentId", "useCase", destination, "createdAt"\)/);
+  });
+
+  it('has the optional, unique sales order tracking token', async () => {
+    expect((await columns('SalesOrder')).get('trackingToken')?.is_nullable).toBe('YES');
+    const idx = await db.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'SalesOrder'`);
+    expect(idx.rows.map((x) => x.indexdef).join('\n')).toMatch(/CREATE UNIQUE INDEX .*\("trackingToken"\)/);
+  });
 });

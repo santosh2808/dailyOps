@@ -86,7 +86,8 @@ export default function SendSalesOrderDialog({
           <DialogDescription>
             Email <span className="font-medium text-slate-900">{salesOrder.salesOrderNumber}</span>{" "}
             to the customer with its current details — use this any time they need to see (or be
-            reminded of) the confirmed order.
+            reminded of) the confirmed order. When it goes to the customer's own email, they also get
+            the order tracking link on WhatsApp.
           </DialogDescription>
         </DialogHeader>
 

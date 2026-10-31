@@ -32,7 +32,7 @@ import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
 import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
-import { canViewAllLeads, leadVisibilityWhere, type LeadViewer } from './lead-visibility';
+import { canViewAllLeads, leadVisibilityWhere, mustSelfAssignNewLeads, type LeadViewer } from './lead-visibility';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
@@ -284,6 +284,7 @@ export class LeadsService {
         phone: user.phone,
         templateName,
         bodyValues: [user.name, lead.leadNumber, lead.companyName, lead.contactPerson, lead.phone],
+        useCase: 'LEAD_ASSIGNED',
       });
     }
   }
@@ -338,6 +339,7 @@ export class LeadsService {
         phone: lead.phone,
         templateName,
         bodyValues: [lead.contactPerson, lead.companyName, visitDate],
+        useCase: 'SITE_VISIT_SCHEDULED',
       });
     }
   }
@@ -494,7 +496,13 @@ export class LeadsService {
     return lead;
   }
 
-  async create(dto: CreateLeadDto, actorName?: string) {
+  async create(dto: CreateLeadDto, actorName?: string, creator?: LeadViewer) {
+    // A Sales Executive's lead is assigned to themselves, from the session —
+    // never from the request body, whatever it says (see
+    // mustSelfAssignNewLeads()).
+    if (mustSelfAssignNewLeads(creator)) {
+      dto = { ...dto, assignedToUserId: creator!.id! };
+    }
     // companyName is no longer mandatory on the DTO (some leads genuinely
     // have no company — an individual homeowner, or an early-stage inquiry),
     // but Lead.companyName stays a NOT NULL column (see schema.prisma) to
@@ -560,6 +568,9 @@ export class LeadsService {
               ...leadData,
               companyName: companyName?.trim() || '',
               leadNumber,
+              // Created directly in DailyOps — the schema default (OTHER) is
+              // for paths that don't say where a lead came from.
+              source: leadData.source ?? LeadSource.DAILYOPS,
               // CreateLeadDto requires assignedToUserId (see its own
               // @IsUUID comment) — every lead made through the normal Create
               // Lead form already has an owner from the moment it exists, so
@@ -2036,14 +2047,32 @@ export class LeadsService {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Assigned also comes from the lead's actual owner, not only status
+    // history: assigning a lead that's already past New (e.g. an imported
+    // lead moved to Qualified, then assigned via Edit Lead) rightly leaves
+    // its status alone, so no ASSIGNED history row is ever written for it.
+    // Its time is then the first assignment on record.
+    const assignedInHistory = history.some((h) => h.newStatus === 'ASSIGNED');
+    const firstAssignment =
+      lead.assignedToUserId && !assignedInHistory
+        ? await this.prisma.leadAssignmentHistory.findFirst({
+            where: { leadId: id, newUser: { not: null } },
+            orderBy: { createdAt: 'asc' },
+            select: { createdAt: true },
+          })
+        : null;
+
     const firstReachedAt = (status: LeadStatus): Date | null => {
       if (status === 'NEW') return lead.createdAt;
       const entry = history.find((h) => h.newStatus === status);
-      return entry ? entry.createdAt : null;
+      if (entry) return entry.createdAt;
+      if (status === 'ASSIGNED') return firstAssignment?.createdAt ?? null;
+      return null;
     };
 
     const reached = new Set<LeadStatus>(['NEW', lead.status]);
     for (const h of history) reached.add(h.newStatus);
+    if (lead.assignedToUserId) reached.add('ASSIGNED');
 
     const stageLabels: Partial<Record<LeadStatus, string>> = {
       NEW: 'New',
@@ -2533,8 +2562,9 @@ export class LeadsService {
       );
     }
 
-    // Blank cell -> sensible default (OTHER/NEW, matching the manual Create
-    // Lead form's defaults); a non-blank but unrecognized value is flagged
+    // Blank cell -> sensible default (OTHER/NEW — an imported lead's origin
+    // is unknown, unlike Create Lead, which defaults to DAILYOPS); a
+    // non-blank but unrecognized value is flagged
     // as invalid rather than silently defaulted, so bad data gets fixed
     // instead of quietly mis-imported.
     let source: LeadSource = LeadSource.OTHER;

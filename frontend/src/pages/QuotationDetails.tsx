@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { WhatsAppIcon } from "@/components/shared/WhatsAppIcon";
+import { useWhatsAppShare } from "@/hooks/useWhatsAppShare";
 import QuotationStatusBadge from "@/components/quotations/QuotationStatusBadge";
 import ChangeQuotationStatusDialog from "@/components/quotations/ChangeQuotationStatusDialog";
 import DeleteQuotationConfirmDialog from "@/components/quotations/DeleteQuotationConfirmDialog";
@@ -88,6 +89,7 @@ export default function QuotationDetails() {
 
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [loading, setLoading] = useState(true);
+  const { sending: whatsAppSending, share: shareWhatsApp } = useWhatsAppShare();
   const [error, setError] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -317,31 +319,10 @@ export default function QuotationDetails() {
                     {quotation.publicToken && (
                       <DropdownMenuItem
                         icon={WhatsAppIcon}
-                        onSelect={async () => {
-                          try {
-                            const result = await sendQuotationWhatsApp(quotation.id);
-                            if (result.status === "SENT") {
-                              toast.success("WhatsApp message sent.");
-                            } else if (result.status === "SIMULATED") {
-                              // Bug fix (TC-094): a green "success" checkmark toast
-                              // for a message that was never actually sent is
-                              // misleading, even with clarifying wording — use the
-                              // distinct "info" variant instead.
-                              toast.info("WhatsApp message logged (Interakt not configured — no real message was sent).");
-                            } else {
-                              toast.error(
-                                result.errorMessage || "Could not send the WhatsApp message. Please try again.",
-                              );
-                            }
-                          } catch (err: any) {
-                            toast.error(
-                              err?.response?.data?.message ||
-                                "Could not send the WhatsApp message. Please try again.",
-                            );
-                          }
-                        }}
+                        disabled={whatsAppSending}
+                        onSelect={() => shareWhatsApp(() => sendQuotationWhatsApp(quotation.id))}
                       >
-                        Share via WhatsApp
+                        {whatsAppSending ? "Sending…" : "Share via WhatsApp"}
                       </DropdownMenuItem>
                     )}
                     {/* Bug fix: once ACCEPTED, a Sales Order has already

@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import type { WhatsAppSendStatus } from "@/hooks/useWhatsAppShare";
 import type {
   EmailHistoryEntry,
   PaginatedResponse,
@@ -108,7 +109,7 @@ export async function openTaxInvoicePdf(id: string) {
 // Additive: WhatsApp Share via Interakt — see the identical helper in
 // api/proforma-invoices.ts for the full rationale.
 export interface WhatsAppSendResult {
-  status: "SENT" | "SIMULATED" | "FAILED";
+  status: WhatsAppSendStatus;
   errorMessage?: string;
   phone?: string | null;
 }

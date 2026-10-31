@@ -280,6 +280,10 @@ enum LeadSource {
   META
   GOOGLE_ADS
   OTHER
+  // A lead entered directly in DailyOps (Create Lead) — the default there,
+  // still changeable on the form. Integrations never set it; imports only if
+  // a sheet's Source cell says "DailyOps".
+  DAILYOPS
 }
 
 // ===========================================================================
@@ -1081,6 +1085,13 @@ model SalesOrder {
   // enforced User relation, consistent with how Lead.assignedTo avoids a
   // cross-module FK to the Users module.
   createdBy           String?
+  // Customer order tracking: the unguessable code in the /track/{token}
+  // link sent to the customer on WhatsApp. Read-only, non-expiring, shows
+  // order status only (no prices/addresses — see
+  // SalesOrdersService.getPublicTracking()). Set at create(); null for
+  // orders created before this field existed, which get one lazily the
+  // first time a link is needed (getOrCreateTrackingToken()).
+  trackingToken       String?          @unique
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   deletedAt           DateTime?
@@ -2320,6 +2331,34 @@ model EmailHistory {
   @@index([leadId])
   @@index([complaintId])
   @@index([approvalRequestId])
+}
+
+// AiSensy integration — one row per WhatsApp send attempt made through
+// AiSensy (only the four manual document shares are recorded). Additive and
+// standalone on purpose: documentId is the Quotation/ProformaInvoice/
+// TaxInvoice/JobExecutionOrder id implied by useCase, kept without a foreign
+// key so no existing model changes. Also backs duplicate-send protection
+// (see WhatsAppService.claim()). Template parameters are not stored — they
+// include the document's secure public link.
+model WhatsAppMessage {
+  id           String   @id @default(uuid())
+  provider     String
+  // WhatsAppUseCase, e.g. QUOTATION_SHARE (see whatsapp-use-cases.ts).
+  useCase      String
+  documentId   String
+  // E.164, e.g. +919876543210.
+  destination  String
+  campaignName String?
+  // PENDING (claimed, request in progress), ACCEPTED (AiSensy accepted it —
+  // not a delivery receipt), UNKNOWN (no confirmation either way), FAILED,
+  // or SIMULATED (AiSensy not configured — nothing sent).
+  status       String
+  errorMessage String?
+  sentBy       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([documentId, useCase, destination, createdAt])
 }
 
 // Configurable Approval Matrix engine (requirement #9) — "No hardcoding."

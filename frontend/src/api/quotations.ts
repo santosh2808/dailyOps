@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import type { WhatsAppSendStatus } from "@/hooks/useWhatsAppShare";
 import type {
   EmailHistoryEntry,
   HangingStructureType,
@@ -159,7 +160,7 @@ export async function sendQuotation(id: string, payload: SendQuotationPayload) {
 // the customer's WhatsApp using a pre-approved template, reusing the same
 // secure /quote/:token link already emailed by sendQuotation() above.
 export interface WhatsAppSendResult {
-  status: "SENT" | "SIMULATED" | "FAILED";
+  status: WhatsAppSendStatus;
   errorMessage?: string;
   phone?: string | null;
 }

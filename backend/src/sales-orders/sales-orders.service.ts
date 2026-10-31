@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, SalesOrderStatus } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +15,8 @@ import { mergeCc } from '../mailer/default-cc-emails';
 import { SalesOrderPdfService } from '../pdf/sales-order-pdf.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { frontendBaseUrl } from '../common/frontend-base-url';
+import { SimpleRateLimiter } from '../common/simple-rate-limiter';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { UpdateSalesOrderStatusDto } from './dto/update-sales-order-status.dto';
@@ -72,6 +74,31 @@ const SALES_ORDER_STATUS_LABELS: Record<SalesOrderStatus, string> = {
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',
 };
+
+// Customer order tracking (/track/{token}): what the public page may show —
+// order number, dates and status steps only. Deliberately no prices,
+// items, addresses, phone numbers or staff names, since the link is sent
+// over WhatsApp and can be forwarded.
+export interface SalesOrderTrackingView {
+  salesOrderNumber: string;
+  orderDate: Date;
+  deliveryDate: Date | null;
+  status: SalesOrderStatus;
+  statusLabel: string;
+  cancelledAt: Date | null;
+  steps: { status: SalesOrderStatus; label: string; done: boolean; at: Date | null }[];
+}
+
+// 24 random bytes, base64url — the same strength as the other public
+// document links. The pattern lets malformed tokens be refused without a
+// database lookup.
+const newTrackingToken = () => randomBytes(24).toString('base64url');
+const TRACKING_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32}$/;
+
+// What a customer sees for each status; DRAFT is internal wording, so the
+// first step reads "Order Placed" instead.
+const trackingLabel = (status: SalesOrderStatus) =>
+  status === 'DRAFT' ? 'Order Placed' : SALES_ORDER_STATUS_LABELS[status];
 
 // One EmailTemplate key per customer-relevant status, so each can be
 // customized independently from the Email Templates admin screen — same
@@ -197,6 +224,7 @@ interface ComputedTotals {
 @Injectable()
 export class SalesOrdersService {
   private readonly logger = new Logger(SalesOrdersService.name);
+  private readonly trackingRateLimiter = new SimpleRateLimiter(30, 60_000);
 
   constructor(
     private prisma: PrismaService,
@@ -347,6 +375,7 @@ export class SalesOrdersService {
             specialInstructions: dto.specialInstructions,
             remarks: dto.remarks,
             createdBy,
+            trackingToken: newTrackingToken(),
             subtotal: totals.subtotal,
             // QA bug fix ("Quotation -> Sales Order Pricing" FAIL): this used
             // to be hardcoded to 0 unconditionally — discounting still
@@ -381,6 +410,9 @@ export class SalesOrdersService {
         // run through this one create() method), never a separate step the
         // user has to remember to trigger.
         await this.sendOrderConfirmationEmail(created, createdBy);
+        // The WhatsApp counterpart, with the order tracking link. Not
+        // awaited, so creating the order never waits on AiSensy.
+        void this.notifyCustomerTrackingWhatsApp(created, 'SALES_ORDER_CREATED', createdBy);
 
         return created;
       } catch (error) {
@@ -779,6 +811,16 @@ export class SalesOrdersService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
+    // Send (and every resend) also WhatsApps the customer the tracking link,
+    // after the email, without waiting for it — unless the email was
+    // redirected away from the customer's address on file (a copy for
+    // someone else). Repeat clicks within the duplicate window send nothing
+    // new.
+    const customerEmail = salesOrder.customer.email?.trim().toLowerCase();
+    if (!customerEmail || !to || to.trim().toLowerCase() === customerEmail) {
+      void this.notifyCustomerTrackingWhatsApp(salesOrder, 'SALES_ORDER_CREATED', actorName);
+    }
+
     return { ...salesOrder, emailStatus: result.status };
   }
 
@@ -951,11 +993,121 @@ export class SalesOrdersService {
           phone: updated.customer.phone,
           templateName,
           bodyValues: [updated.customer.contactPerson, updated.salesOrderNumber, statusLabel],
+          useCase: 'SALES_ORDER_STATUS',
         });
       } catch (error) {
         this.logger.error(`Status-change WhatsApp failed for Sales Order ${updated.id} (${targetStatus})`, error);
       }
     }
+
+    // Dispatched is the one status update that also gets the AiSensy
+    // tracking WhatsApp (the shared status message above stays Interakt
+    // only), not awaited for the same reason as at create().
+    if (targetStatus === 'DISPATCHED') {
+      void this.notifyCustomerTrackingWhatsApp(updated, 'SALES_ORDER_DISPATCHED', actorName);
+    }
+  }
+
+  // Customer WhatsApp with the order tracking link — on creation, on Send
+  // to Customer, and on Dispatched. Fired without await, so it never throws: every outcome is
+  // logged, and the order itself is never affected by a failed send.
+  private async notifyCustomerTrackingWhatsApp(
+    order: Prisma.SalesOrderGetPayload<{ include: typeof SALES_ORDER_DETAIL_INCLUDE }>,
+    useCase: 'SALES_ORDER_CREATED' | 'SALES_ORDER_DISPATCHED',
+    actorName?: string,
+  ): Promise<void> {
+    try {
+      if (!order.customer.phone.trim()) {
+        this.logger.log(`${useCase} WhatsApp not sent for Sales Order ${order.salesOrderNumber}: customer has no phone number`);
+        return;
+      }
+      const token = order.trackingToken ?? (await this.getOrCreateTrackingToken(order.id));
+      const result = await this.whatsAppService.sendTemplateMessage({
+        phone: order.customer.phone,
+        // Interakt template name — unused, both use cases are AiSensy only.
+        templateName: useCase.toLowerCase(),
+        bodyValues: [order.customer.contactPerson.trim() || 'Customer', order.salesOrderNumber, `${frontendBaseUrl()}/track/${token}`],
+        useCase,
+        documentId: order.id,
+        sentBy: actorName,
+      });
+      if (result.status === 'FAILED' || result.status === 'UNKNOWN') {
+        this.logger.error(`${useCase} WhatsApp for Sales Order ${order.salesOrderNumber}: ${result.status} — ${result.errorMessage}`);
+      } else if (result.status === 'DUPLICATE') {
+        this.logger.log(`${useCase} WhatsApp for Sales Order ${order.salesOrderNumber} not resent: ${result.errorMessage}`);
+      }
+    } catch (error) {
+      this.logger.error(`${useCase} WhatsApp failed for Sales Order ${order.id}: ${(error as Error)?.message ?? 'unknown error'}`);
+    }
+  }
+
+  // Orders created before tracking existed have no token yet. The update
+  // only fills an empty token, so two concurrent callers end up with the
+  // same one and a link already sent is never replaced.
+  private async getOrCreateTrackingToken(id: string): Promise<string> {
+    await this.prisma.salesOrder.updateMany({ where: { id, trackingToken: null }, data: { trackingToken: newTrackingToken() } });
+    const order = await this.prisma.salesOrder.findUnique({ where: { id }, select: { trackingToken: true } });
+    if (!order?.trackingToken) {
+      throw new Error(`Sales Order ${id} no longer exists, so no tracking link was created`);
+    }
+    return order.trackingToken;
+  }
+
+  // GET /api/v1/public/sales-orders/track/:token — see
+  // PublicSalesOrdersController. Read-only and live: the steps are rebuilt
+  // from the status-change audit trail on every request. A step's date is
+  // null when no audit entry exists for it (the audit write is
+  // best-effort), but done/current always follow the order's real status.
+  async getPublicTracking(token: string, clientKey: string): Promise<SalesOrderTrackingView> {
+    if (!this.trackingRateLimiter.check(`track:${clientKey}`)) {
+      throw new BadRequestException('Too many requests. Please try again in a moment.');
+    }
+    const order = TRACKING_TOKEN_PATTERN.test(token)
+      ? await this.prisma.salesOrder.findFirst({
+          where: { trackingToken: token, deletedAt: null },
+          select: { id: true, salesOrderNumber: true, orderDate: true, deliveryDate: true, status: true, createdAt: true },
+        })
+      : null;
+    if (!order) {
+      throw new NotFoundException('Invalid tracking link');
+    }
+
+    const changes = await this.prisma.auditLog.findMany({
+      where: { module: 'SalesOrder', recordId: order.id, action: 'Status Changed' },
+      select: { oldValue: true, newValue: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const reachedAt = new Map<SalesOrderStatus, Date>();
+    let statusBeforeCancel: SalesOrderStatus | undefined;
+    for (const change of changes) {
+      const to = (change.newValue as { status?: SalesOrderStatus } | null)?.status;
+      if (!to) continue;
+      if (!reachedAt.has(to)) reachedAt.set(to, change.createdAt);
+      if (to === 'CANCELLED') statusBeforeCancel = (change.oldValue as { status?: SalesOrderStatus } | null)?.status;
+    }
+
+    const cancelled = order.status === 'CANCELLED';
+    // A cancelled order shows how far it got before cancellation.
+    const progressIndex = Math.max(SALES_ORDER_SEQUENCE.indexOf(cancelled ? statusBeforeCancel ?? 'DRAFT' : order.status), 0);
+    return {
+      salesOrderNumber: order.salesOrderNumber,
+      orderDate: order.orderDate,
+      deliveryDate: order.deliveryDate,
+      status: order.status,
+      statusLabel: trackingLabel(order.status),
+      cancelledAt: cancelled ? reachedAt.get('CANCELLED') ?? null : null,
+      steps: SALES_ORDER_SEQUENCE.map((status, index) => {
+        const done = index <= progressIndex;
+        return {
+          status,
+          label: trackingLabel(status),
+          done,
+          // "Order Placed" is when the order was entered, not orderDate,
+          // which staff can type in — so the step dates stay in sequence.
+          at: !done ? null : status === 'DRAFT' ? order.createdAt : reachedAt.get(status) ?? null,
+        };
+      }),
+    };
   }
 
   // Shared advance-vs-required lookup — used by both updateStatus()'s gate

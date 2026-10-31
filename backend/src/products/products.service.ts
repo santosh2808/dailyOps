@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -131,5 +131,73 @@ export class ProductsService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  // Permanent delete — a separate action from deactivate() above (the
+  // Deactivate button), offered only for a product nothing uses yet.
+  // Leads, quotations, sales orders and tax invoices are business history,
+  // and website form mappings/routing rules are live configuration, so any
+  // reference blocks the delete with the reason; nothing cascades. Routing
+  // rules matter here because their FK is ON DELETE SET NULL — the database
+  // alone would silently drop the product from them.
+  //
+  // The row lock makes check-then-delete safe: inserting a row that
+  // references this product needs a lock that conflicts with FOR UPDATE, so
+  // nothing can start using it between the check and the delete.
+  async hardDelete(id: string) {
+    const product = await this.findOne(id);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Product" WHERE id = ${id} FOR UPDATE`;
+        // Deleted by someone else since findOne() above (e.g. two admins
+        // clicking Delete at once) — answer 404, not a 500 from delete().
+        if (locked.length === 0) {
+          throw new NotFoundException('Product not found');
+        }
+        // Sequential on purpose: an interactive transaction runs one query
+        // at a time on its connection anyway. Line items are counted per
+        // parent record ("2 quotations", not "3 quotation lines").
+        const where = { productId: id };
+        const countParents = async (rows: Promise<unknown[]>) => (await rows).length;
+        const usage: [number, string, string][] = [
+          [await countParents(tx.leadProduct.findMany({ where, distinct: ['leadId'], select: { leadId: true } })), 'lead', 'leads'],
+          [
+            await countParents(tx.quotationItem.findMany({ where, distinct: ['quotationId'], select: { quotationId: true } })),
+            'quotation',
+            'quotations',
+          ],
+          [
+            await countParents(tx.salesOrderItem.findMany({ where, distinct: ['salesOrderId'], select: { salesOrderId: true } })),
+            'sales order',
+            'sales orders',
+          ],
+          [
+            await countParents(tx.taxInvoiceItem.findMany({ where, distinct: ['taxInvoiceId'], select: { taxInvoiceId: true } })),
+            'tax invoice',
+            'tax invoices',
+          ],
+          [await tx.formWebsiteProduct.count({ where }), 'website form product mapping', 'website form product mappings'],
+          [await tx.formSubjectRoute.count({ where }), 'website form routing rule', 'website form routing rules'],
+        ];
+        const uses = usage.filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+        if (uses.length > 0) {
+          throw new ConflictException(
+            `"${product.name}" can't be permanently deleted because it is used in ${uses.join(', ')}. ` +
+              'Deactivate it instead to hide it from new records.',
+          );
+        }
+        return tx.product.delete({ where: { id } });
+      });
+    } catch (error) {
+      // Backstop: a reference the check above doesn't know about yet still
+      // fails safely at the database (ON DELETE RESTRICT).
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new ConflictException(
+          `"${product.name}" can't be permanently deleted because other records still use it. ` +
+            'Deactivate it instead to hide it from new records.',
+        );
+      }
+      throw error;
+    }
   }
 }
