@@ -5,6 +5,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ApprovalRequestsModule } from '../approval-requests/approval-requests.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { SalesOrdersController } from './sales-orders.controller';
+import { PublicSalesOrdersController } from './public-sales-orders.controller';
 import { SalesOrdersService } from './sales-orders.service';
 
 @Module({
@@ -16,7 +17,7 @@ import { SalesOrdersService } from './sales-orders.service';
   // attachment (see SalesOrdersService.getPdf()/sendOrderConfirmationEmail()
   // /sendSalesOrder()).
   imports: [MailerModule, PdfModule, AuditLogModule, ApprovalRequestsModule, WhatsAppModule],
-  controllers: [SalesOrdersController],
+  controllers: [SalesOrdersController, PublicSalesOrdersController],
   providers: [SalesOrdersService],
   // Exported so QuotationsModule can inject SalesOrdersService directly and
   // call createFromQuotation() when a Quotation is approved — see

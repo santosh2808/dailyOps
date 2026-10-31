@@ -24,6 +24,8 @@ const APPROVED_CAMPAIGNS = {
   AISENSY_PROFORMA_INVOICE_SHARE_CAMPAIGN: 'proforma_share_test',
   AISENSY_TAX_INVOICE_SHARE_CAMPAIGN: 'tax_invoice_share_test',
   AISENSY_JEO_FACTORY_CAMPAIGN: 'jeo_factory_test',
+  AISENSY_SALES_ORDER_CREATED_CAMPAIGN: 'so_created_test',
+  AISENSY_SALES_ORDER_DISPATCHED_CAMPAIGN: 'so_dispatched_test',
 };
 // Not read by the code at all — set here to prove configuration alone
 // can't switch the automatic notifications on.
@@ -516,13 +518,93 @@ describe('existing WhatsApp callers under AiSensy', () => {
     const sendSpy = jest.spyOn(wa, 'sendTemplateMessage');
     await (svc as any).notifyCustomerStatusChange(
       { id: 'so1', salesOrderNumber: 'SO-1', customer },
-      'DISPATCHED',
-      'READY_FOR_DISPATCH',
+      'PRODUCTION_STARTED',
+      'CONFIRMED',
       'Asha',
     );
+    expect(sendSpy).toHaveBeenCalledTimes(1);
     expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ useCase: 'SALES_ORDER_STATUS' }));
     await expect(sendSpy.mock.results[0].value).resolves.toEqual({ status: 'SIMULATED' });
     expectSimulatedOnly();
+  });
+
+  describe('sales order tracking WhatsApp', () => {
+    const TOKEN = 'T'.repeat(32);
+    const order = { id: 'so1', salesOrderNumber: 'SO-0001', trackingToken: TOKEN, customer };
+    const buildSo = () => new SalesOrdersService(prisma, mailer as any, {} as any, {} as any, {} as any, wa);
+    const notify = (svc: SalesOrdersService, o: object, useCase: string) =>
+      (svc as any).notifyCustomerTrackingWhatsApp(o, useCase, 'Asha') as Promise<void>;
+    // The status-change path fires the tracking WhatsApp without awaiting
+    // it; this waits for that send to finish.
+    const statusChange = async (svc: SalesOrdersService, to: string, from: string) => {
+      const spy = jest.spyOn(svc as any, 'notifyCustomerTrackingWhatsApp');
+      await (svc as any).notifyCustomerStatusChange(order, to, from, 'Asha');
+      await Promise.all(spy.mock.results.map((r) => r.value));
+      return spy;
+    };
+
+    it('order placed: sends the tracking link to the customer', async () => {
+      await notify(buildSo(), order, 'SALES_ORDER_CREATED');
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const body = sentBody();
+      expect(body).toMatchObject({ campaignName: 'so_created_test', destination: '+919876543210', userName: 'Ravi Kumar' });
+      expect(body.templateParams.slice(0, 2)).toEqual(['Ravi Kumar', 'SO-0001']);
+      expect(body.templateParams[2]).toMatch(new RegExp(`^https?://.+/track/${TOKEN}$`));
+      expect(prisma.whatsAppMessage.create.mock.calls[0][0].data).toMatchObject({
+        useCase: 'SALES_ORDER_CREATED',
+        documentId: 'so1',
+        sentBy: 'Asha',
+      });
+    });
+
+    it('dispatched: sends its own campaign; the shared status message stays simulated', async () => {
+      const svc = buildSo();
+      const sendSpy = jest.spyOn(wa, 'sendTemplateMessage');
+      const spy = await statusChange(svc, 'DISPATCHED', 'READY_FOR_DISPATCH');
+      expect(spy).toHaveBeenCalledWith(order, 'SALES_ORDER_DISPATCHED', 'Asha');
+      expect(sendSpy.mock.calls.map(([o]) => o.useCase)).toEqual(['SALES_ORDER_STATUS', 'SALES_ORDER_DISPATCHED']);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(sentBody()).toMatchObject({ campaignName: 'so_dispatched_test', destination: '+919876543210' });
+    });
+
+    it.each([
+      ['another status', 'CONFIRMED', 'DRAFT'],
+      ['a no-op status change', 'DISPATCHED', 'DISPATCHED'],
+    ])('does not send the tracking WhatsApp for %s', async (_label, to, from) => {
+      const spy = await statusChange(buildSo(), to, from);
+      expect(spy).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('gives an order created before tracking existed a token first', async () => {
+      prisma.salesOrder = {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue({ trackingToken: 'N'.repeat(32) }),
+      };
+      await notify(buildSo(), { ...order, trackingToken: null }, 'SALES_ORDER_DISPATCHED');
+      expect(prisma.salesOrder.updateMany).toHaveBeenCalledWith({
+        where: { id: 'so1', trackingToken: null },
+        data: { trackingToken: expect.stringMatching(/^[A-Za-z0-9_-]{32}$/) },
+      });
+      expect(sentBody().templateParams[2]).toMatch(new RegExp(`/track/${'N'.repeat(32)}$`));
+    });
+
+    it('sends nothing to a customer with no phone number', async () => {
+      await expect(notify(buildSo(), { ...order, customer: { ...customer, phone: ' ' } }, 'SALES_ORDER_CREATED')).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('stays simulated without its campaign', async () => {
+      delete process.env.AISENSY_SALES_ORDER_CREATED_CAMPAIGN;
+      await notify(buildSo(), order, 'SALES_ORDER_CREATED');
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('never throws, even if the link cannot be created', async () => {
+      prisma.salesOrder = { updateMany: jest.fn().mockRejectedValue(new Error('db down')) };
+      await expect(notify(buildSo(), { ...order, trackingToken: null }, 'SALES_ORDER_CREATED')).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
   });
 
   describe('JEO factory WhatsApp', () => {
@@ -635,19 +717,34 @@ describe('existing WhatsApp callers under AiSensy', () => {
 });
 
 describe('AiSensy-only use cases on the Interakt path', () => {
+  const saved: Record<string, string | undefined> = {};
+
+  // Start from no WhatsApp settings, whatever the local .env has.
+  beforeEach(() => {
+    for (const k of ENV_KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
   afterEach(() => {
-    delete process.env.INTERAKT_API_KEY;
+    for (const k of ENV_KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
     jest.restoreAllMocks();
   });
 
-  it('never sends the factory notification through Interakt, even with its key set', async () => {
+  it.each([
+    ['JEO_FACTORY_NOTIFICATION', ['J', 'S', 'C', 'P', 'L']],
+    ['SALES_ORDER_CREATED', ['N', 'S', 'L']],
+    ['SALES_ORDER_DISPATCHED', ['N', 'S', 'L']],
+  ] as [WhatsAppUseCase, string[]][])('never sends %s through Interakt, even with its key set', async (useCase, bodyValues) => {
     process.env.INTERAKT_API_KEY = 'interakt-key';
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(accepted());
     const svc = new WhatsAppService(mockPrisma());
-    const result = await svc.sendTemplateMessage(
-      share({ useCase: 'JEO_FACTORY_NOTIFICATION', bodyValues: ['J', 'S', 'C', 'P', 'L'] }),
-    );
+    const result = await svc.sendTemplateMessage(share({ useCase, bodyValues }));
     expect(result).toEqual({ status: 'SIMULATED' });
     expect(fetchSpy).not.toHaveBeenCalled();
   });

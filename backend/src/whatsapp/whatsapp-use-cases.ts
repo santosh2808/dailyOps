@@ -5,16 +5,20 @@
 //
 // Only the use cases with a campaign variable can send for real, and only
 // once AISENSY_API_KEY and that variable are both set: the three manual
-// customer document shares, and the JEO notification to the factory's own
-// numbers (sent automatically when a JEO is generated). The four automatic
-// customer/staff notifications have no campaign variable on purpose: they
-// stay simulated under AiSensy until a later, separately approved change
-// gives them one — configuration alone can never switch them on.
+// customer document shares, the JEO notification to the factory's own
+// numbers (sent automatically when a JEO is generated), and the two sales
+// order tracking messages to the customer (order placed, dispatched). The
+// four older automatic customer/staff notifications have no campaign
+// variable on purpose: they stay simulated under AiSensy until a later,
+// separately approved change gives them one — configuration alone can
+// never switch them on.
 export type WhatsAppUseCase =
   | 'QUOTATION_SHARE'
   | 'PROFORMA_INVOICE_SHARE'
   | 'TAX_INVOICE_SHARE'
   | 'JEO_FACTORY_NOTIFICATION'
+  | 'SALES_ORDER_CREATED'
+  | 'SALES_ORDER_DISPATCHED'
   | 'LEAD_ASSIGNED'
   | 'LEAD_FOLLOWUP_REMINDER'
   | 'SITE_VISIT_SCHEDULED'
@@ -47,6 +51,19 @@ export const WHATSAPP_USE_CASES: Record<WhatsAppUseCase, WhatsAppUseCaseConfig> 
     campaignEnv: 'AISENSY_JEO_FACTORY_CAMPAIGN',
     paramCount: 5,
     recipientNameParam: null,
+    aisensyOnly: true,
+  },
+  // {{1}} customer name / {{2}} sales order number / {{3}} tracking link.
+  SALES_ORDER_CREATED: {
+    campaignEnv: 'AISENSY_SALES_ORDER_CREATED_CAMPAIGN',
+    paramCount: 3,
+    recipientNameParam: 0,
+    aisensyOnly: true,
+  },
+  SALES_ORDER_DISPATCHED: {
+    campaignEnv: 'AISENSY_SALES_ORDER_DISPATCHED_CAMPAIGN',
+    paramCount: 3,
+    recipientNameParam: 0,
     aisensyOnly: true,
   },
   LEAD_ASSIGNED: { campaignEnv: null, paramCount: 5, recipientNameParam: 0 },
