@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 // stacked full-width. Controls keep their own desktop widths (w-40 etc.);
 // the [&>*] / [&_select] overrides below stretch them on phones only, so
 // callers don't need per-control responsive classes. Native <select>s are
-// kept on purpose: the OS renders their option list, which can't be
-// clipped by an overflow container or run off the viewport.
+// kept on purpose: Select's option list is fixed to the viewport, so it
+// can't be clipped by an overflow container or run off the screen.
 //
 // mobileActions (optional, below md only): the page's main action + ⋮ menu
 // (MobileActionBar layout="inline"), placed on the right of the Filters
