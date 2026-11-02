@@ -20,6 +20,7 @@ import ComplaintFiltersBar, {
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
@@ -547,8 +548,8 @@ export default function ComplaintList() {
               {/* Bug fix (TC-061): page-size selector — resets to page 1 on change. */}
               <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
                 Rows per page
-                <select
-                  className="flex h-8 rounded-md border border-input bg-background px-2 text-sm"
+                <Select
+                  className="h-8 w-auto py-0 pl-2"
                   value={pageSize}
                   onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 >
@@ -557,7 +558,7 @@ export default function ComplaintList() {
                       {size}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <Button
                 variant="outline"

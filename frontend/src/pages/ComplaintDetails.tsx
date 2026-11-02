@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import ComplaintStatusBadge from "@/components/complaints/ComplaintStatusBadge";
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
@@ -425,9 +426,8 @@ export default function ComplaintDetails() {
                           </p>
                           <div className="space-y-2">
                             <Label htmlFor="invoice-item-select">Line Item (optional)</Label>
-                            <select
+                            <Select
                               id="invoice-item-select"
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                               value={selectedItemId}
                               onChange={(e) => setSelectedItemId(e.target.value)}
                             >
@@ -437,7 +437,7 @@ export default function ComplaintDetails() {
                                   {item.productName} — Qty {item.quantity}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                           <Button onClick={handleLinkInvoice} disabled={linking}>
                             {linking && <Spinner className="mr-2 h-4 w-4" />}

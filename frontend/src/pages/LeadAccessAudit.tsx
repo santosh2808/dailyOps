@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
@@ -82,8 +83,8 @@ export default function LeadAccessAudit() {
               Who opened, exported, copied or printed lead data. Copy and print are recorded from the browser; a
               screenshot or a photo of the screen can't be detected.
             </p>
-            <select
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            <Select
+              className="h-9 w-auto py-0 pl-2"
               value={days}
               onChange={(e) => {
                 setDays(Number(e.target.value));
@@ -93,7 +94,7 @@ export default function LeadAccessAudit() {
               <option value={7}>Last 7 days</option>
               <option value={30}>Last 30 days</option>
               <option value={90}>Last 90 days</option>
-            </select>
+            </Select>
           </div>
 
           <section>
@@ -223,8 +224,8 @@ export default function LeadAccessAudit() {
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900">Activity log</h2>
-              <select
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              <Select
+                className="h-8 w-auto py-0 pl-2"
                 value={action}
                 onChange={(e) => {
                   setAction(e.target.value);
@@ -236,7 +237,7 @@ export default function LeadAccessAudit() {
                     {a || "All actions"}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <ResponsiveRecords
               table={
