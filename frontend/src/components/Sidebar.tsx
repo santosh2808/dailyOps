@@ -237,6 +237,24 @@ const bottomNavItems: NavItem[] = [
   { label: "Quotations", to: "/quotations", icon: FileText, permission: { module: "Quotation", action: "View" } },
 ];
 
+// Every nav destination, for isShadowed() below.
+const ALL_NAV_PATHS = [...topNavItems, ...NAV_GROUPS.flatMap((group) => group.items), ...bottomNavItems].map(
+  (item) => item.to,
+);
+
+// NavLink's prefix match lights up a parent item on a sibling's page too —
+// "Leads" (/leads) on Lead Reassignments (/leads/reassignments), "Quotations"
+// on Quotation Approvals — and `end` can't fix it, since the parent must
+// stay active on its own detail pages (/leads/:id). So the most specific
+// item wins: a link isn't shown active while another nav item, nested
+// under its path, matches the current page.
+function isShadowed(to: string, pathname: string) {
+  return ALL_NAV_PATHS.some(
+    (other) =>
+      other.startsWith(`${to}/`) && (pathname === other || pathname.startsWith(`${other}/`)),
+  );
+}
+
 function navLinkClasses(isActive: boolean) {
   return cn(
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -338,7 +356,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-3 overflow-y-auto">
         {visibleTopNavItems.map(({ label, to, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive && !isShadowed(to, location.pathname))}>
             <Icon className="h-4 w-4" />
             {label}
           </NavLink>
@@ -362,7 +380,7 @@ export default function Sidebar() {
             {openGroups[group.key] && (
               <div className="mt-1 space-y-1 pl-6">
                 {group.items.map(({ label, to, icon: Icon, end }) => (
-                  <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
+                  <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive && !isShadowed(to, location.pathname))}>
                     <Icon className="h-4 w-4" />
                     {label}
                   </NavLink>
@@ -373,7 +391,7 @@ export default function Sidebar() {
         ))}
 
         {visibleBottomNavItems.map(({ label, to, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive)}>
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive && !isShadowed(to, location.pathname))}>
             <Icon className="h-4 w-4" />
             {label}
           </NavLink>
