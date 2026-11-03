@@ -12,7 +12,7 @@ function makeService() {
   };
   const svc = new QuotationsService(
     prisma as any, {} as any, {} as any, {} as any, {} as any,
-    {} as any, {} as any, {} as any, {} as any, {} as any,
+    {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
   );
   const compute = (...args: unknown[]) => (svc as any).computeTotals(...args);
   return { compute };

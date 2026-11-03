@@ -677,6 +677,50 @@ async function main() {
         '<p>{{approverName}} approved your request:</p><p><b>{{actionSummary}}</b></p>' +
         '<p>However, applying it failed: {{resultError}}. Please contact IT/Santosh directly.</p>',
     },
+    // Emails that accompany the in-app notifications (NotificationsService)
+    // — same text as src/notifications/notification-emails.ts, which is the
+    // fallback when these rows don't exist. {{recipientName}} and {{link}}
+    // are filled in for every email.
+    {
+      key: 'LEAD_REASSIGNMENT_REQUESTED',
+      name: 'Lead Reassignment Requested (to approvers)',
+      subject: 'Reassignment requested for Lead {{leadNumber}}',
+      bodyHtml:
+        '<p>Hi {{recipientName}},</p>' +
+        '<p>{{requestedBy}} has asked to move Lead {{leadNumber}} from {{fromUser}} to {{toUser}}. ' +
+        'It stays with {{fromUser}} until the request is approved.</p>' +
+        '<p><a href="{{link}}">Review the request in DailyOps</a></p>',
+    },
+    {
+      key: 'LEAD_REASSIGNMENT_DECIDED',
+      name: 'Lead Reassignment Approved / Rejected (to requester)',
+      subject: 'Reassignment of Lead {{leadNumber}} {{decision}}',
+      bodyHtml:
+        '<p>Hi {{recipientName}},</p>' +
+        '<p>{{decidedBy}} {{decision}} your request to move Lead {{leadNumber}} to {{toUser}}.</p>' +
+        '<p>{{decisionNote}}</p>' +
+        '<p><a href="{{link}}">Open DailyOps</a></p>',
+    },
+    {
+      key: 'QUOTATION_APPROVAL_REQUESTED',
+      name: 'Quotation Approval Requested (to approvers)',
+      subject: 'Approval requested for Quotation {{quotationNumber}}',
+      bodyHtml:
+        '<p>Hi {{recipientName}},</p>' +
+        '<p>{{requestedBy}} has asked for approval of Quotation {{quotationNumber}} ({{customerCompany}}).</p>' +
+        '<p>Reason: {{reason}}</p>' +
+        '<p><a href="{{link}}">Review the request in DailyOps</a></p>',
+    },
+    {
+      key: 'QUOTATION_APPROVAL_DECIDED',
+      name: 'Quotation Approval Approved / Rejected (to requester)',
+      subject: 'Approval for Quotation {{quotationNumber}} {{decision}}',
+      bodyHtml:
+        '<p>Hi {{recipientName}},</p>' +
+        '<p>{{decidedBy}} {{decision}} your approval request for Quotation {{quotationNumber}}.</p>' +
+        '<p>{{decisionNote}}</p>' +
+        '<p><a href="{{link}}">Open the quotation</a></p>',
+    },
   ];
   for (const template of emailTemplateSeed) {
     await prisma.emailTemplate.upsert({

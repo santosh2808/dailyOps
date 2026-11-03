@@ -64,6 +64,7 @@ describe('LeadAccessService (audit log)', () => {
 describe('Lead reassignment approval', () => {
   const existing: any = {
     id: 'lead-1',
+    leadNumber: 'L-1',
     status: 'ASSIGNED',
     assignedToUserId: 'u-exec',
     assignedToUser: { name: 'Esha Exec' },
@@ -95,9 +96,10 @@ describe('Lead reassignment approval', () => {
       },
       $transaction: jest.fn((cb: any) => cb(tx)),
     };
-    const svc: any = new (LeadsService as any)(prisma);
+    const notifications = { notifyUsers: jest.fn(), notifyPermissionHolders: jest.fn() };
+    const svc: any = new (LeadsService as any)(prisma, {}, {}, {}, notifications);
     svc.findOne = jest.fn().mockResolvedValue(existing);
-    return { svc, prisma, leadUpdate, reqCreate };
+    return { svc, prisma, leadUpdate, reqCreate, notifications };
   }
 
   it('Sales Executive reassigning gets a pending request; the lead keeps its owner', async () => {
@@ -139,7 +141,7 @@ describe('Lead reassignment approval', () => {
 
   it('approve applies the assignment as the approver; a decided request cannot be decided again', async () => {
     const { svc, prisma } = make();
-    const pending = { id: 'req-1', leadId: 'lead-1', toUserId: 'u-other', status: 'PENDING' };
+    const pending = { id: 'req-1', leadId: 'lead-1', toUserId: 'u-other', status: 'PENDING', lead: { leadNumber: 'L-1' } };
     prisma.leadReassignmentRequest.findUnique.mockResolvedValueOnce(pending).mockResolvedValue({ ...pending, status: 'APPROVED' });
     prisma.leadReassignmentRequest.updateMany.mockResolvedValue({ count: 1 });
     const apply = jest.spyOn(svc, 'update').mockResolvedValue({} as any);
@@ -156,7 +158,14 @@ describe('Lead reassignment approval', () => {
 
   it('reject leaves the lead untouched and logs it on the timeline', async () => {
     const { svc, prisma } = make();
-    const pending = { id: 'req-1', leadId: 'lead-1', toUserId: 'u-other', toUserName: 'Olive Other', status: 'PENDING' };
+    const pending = {
+      id: 'req-1',
+      leadId: 'lead-1',
+      toUserId: 'u-other',
+      toUserName: 'Olive Other',
+      status: 'PENDING',
+      lead: { leadNumber: 'L-1' },
+    };
     prisma.leadReassignmentRequest.findUnique.mockResolvedValue(pending);
     prisma.leadReassignmentRequest.updateMany.mockResolvedValue({ count: 1 });
     const apply = jest.spyOn(svc, 'update');
@@ -167,10 +176,89 @@ describe('Lead reassignment approval', () => {
 
   it('if applying an approved reassignment fails, the request goes back to pending', async () => {
     const { svc, prisma } = make();
-    prisma.leadReassignmentRequest.findUnique.mockResolvedValue({ id: 'req-1', leadId: 'lead-1', toUserId: 'u-other', status: 'PENDING' });
+    prisma.leadReassignmentRequest.findUnique.mockResolvedValue({
+      id: 'req-1',
+      leadId: 'lead-1',
+      toUserId: 'u-other',
+      status: 'PENDING',
+      lead: { leadNumber: 'L-1' },
+    });
     prisma.leadReassignmentRequest.updateMany.mockResolvedValue({ count: 1 });
     jest.spyOn(svc, 'update').mockRejectedValue(new Error('boom'));
     await expect(svc.decideReassignment('req-1', true, manager)).rejects.toThrow('boom');
     expect(prisma.leadReassignmentRequest.update.mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
+  describe('notifications', () => {
+    it('a request notifies everyone who can approve it, except the requester', async () => {
+      const { svc, notifications } = make();
+      await svc.update('lead-1', { assignedToUserId: 'u-other' }, exec.name, exec);
+      expect(notifications.notifyPermissionHolders).toHaveBeenCalledWith(
+        'Lead',
+        'Approve',
+        expect.objectContaining({
+          type: 'LEAD_REASSIGNMENT_REQUESTED',
+          title: 'Reassignment requested for L-1',
+          body: 'Esha Exec asked to move it to Olive Other.',
+          link: '/leads/reassignments',
+        }),
+        'u-exec',
+        expect.objectContaining({
+          templateKey: 'LEAD_REASSIGNMENT_REQUESTED',
+          vars: { leadNumber: 'L-1', requestedBy: 'Esha Exec', fromUser: 'Esha Exec', toUser: 'Olive Other' },
+          mailerLink: { module: 'Lead', leadId: 'lead-1' },
+        }),
+      );
+    });
+
+    it('a direct reassignment by a manager notifies no approvers', async () => {
+      const { svc, notifications } = make();
+      await svc.update('lead-1', { assignedToUserId: 'u-other' }, manager.name, manager);
+      expect(notifications.notifyPermissionHolders).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [true, 'LEAD_REASSIGNMENT_APPROVED', 'Reassignment of L-1 approved', '/leads'],
+      [false, 'LEAD_REASSIGNMENT_REJECTED', 'Reassignment of L-1 rejected', '/leads/lead-1'],
+    ])('a decision (approve=%p) notifies the requester', async (approve, type, title, link) => {
+      const { svc, prisma, notifications } = make();
+      prisma.leadReassignmentRequest.findUnique.mockResolvedValue({
+        id: 'req-1',
+        leadId: 'lead-1',
+        toUserId: 'u-other',
+        toUserName: 'Olive Other',
+        requestedByUserId: 'u-exec',
+        status: 'PENDING',
+        lead: { leadNumber: 'L-1' },
+      });
+      prisma.leadReassignmentRequest.updateMany.mockResolvedValue({ count: 1 });
+      jest.spyOn(svc, 'update').mockResolvedValue({} as any);
+      await svc.decideReassignment('req-1', approve, manager, 'ok');
+      expect(notifications.notifyUsers).toHaveBeenCalledWith(
+        ['u-exec'],
+        expect.objectContaining({ type, title, link, body: expect.stringContaining('Note: ok') }),
+        'u-mgr',
+        expect.objectContaining({
+          templateKey: 'LEAD_REASSIGNMENT_DECIDED',
+          vars: expect.objectContaining({ decision: approve ? 'approved' : 'rejected', decisionNote: 'Note: ok' }),
+        }),
+      );
+    });
+
+    it('nobody is told about a decision that failed to apply', async () => {
+      const { svc, prisma, notifications } = make();
+      prisma.leadReassignmentRequest.findUnique.mockResolvedValue({
+        id: 'req-1',
+        leadId: 'lead-1',
+        toUserId: 'u-other',
+        requestedByUserId: 'u-exec',
+        status: 'PENDING',
+        lead: { leadNumber: 'L-1' },
+      });
+      prisma.leadReassignmentRequest.updateMany.mockResolvedValue({ count: 1 });
+      jest.spyOn(svc, 'update').mockRejectedValue(new Error('boom'));
+      await expect(svc.decideReassignment('req-1', true, manager)).rejects.toThrow('boom');
+      expect(notifications.notifyUsers).not.toHaveBeenCalled();
+    });
   });
 });

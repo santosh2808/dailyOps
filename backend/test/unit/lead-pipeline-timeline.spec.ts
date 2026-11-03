@@ -10,7 +10,7 @@ function setup(lead: Record<string, unknown>, history: { newStatus: string; crea
       findFirst: jest.fn().mockResolvedValue(firstAssignment ? { createdAt: firstAssignment } : null),
     },
   };
-  const svc = new LeadsService(prisma, {} as any, {} as any, {} as any);
+  const svc = new LeadsService(prisma, {} as any, {} as any, {} as any, {} as any);
   jest.spyOn(svc, 'findOne').mockResolvedValue({ id: 'l1', createdAt: CREATED, assignedToUserId: null, ...lead } as any);
   return { svc, prisma };
 }

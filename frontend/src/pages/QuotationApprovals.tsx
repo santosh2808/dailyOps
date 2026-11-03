@@ -21,6 +21,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { decideQuotationApproval, listQuotationApprovalRequests } from "@/api/quotations";
 import type { QuotationApprovalRequest } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications } from "@/context/NotificationsContext";
 
 // Requirement #9's "reusable approval engine" surfaces here as the
 // Approvals inbox: every QuotationApprovalRequest the Approval Matrix (or
@@ -47,6 +48,7 @@ export default function QuotationApprovals() {
   // page any other way (direct URL, browser back/forward) still can't see
   // action buttons they have no permission to use.
   const { hasPermission } = useAuth();
+  const { refresh: refreshNotifications } = useNotifications();
   const canApprove = hasPermission("Quotation", "Approve");
   const [statusFilter, setStatusFilter] = useState<string>("PENDING");
   const [requests, setRequests] = useState<QuotationApprovalRequest[]>([]);
@@ -79,6 +81,8 @@ export default function QuotationApprovals() {
       await decideQuotationApproval(requestId, approve);
       toast.success(approve ? "Quotation approved." : "Quotation rejected.");
       await fetchRequests();
+      // The sidebar's pending count just dropped.
+      refreshNotifications();
     } catch (err: any) {
       const message =
         err?.response?.data?.message || "Could not record this decision. Please try again.";
