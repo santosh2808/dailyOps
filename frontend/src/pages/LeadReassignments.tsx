@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
+import { useNotifications } from "@/context/NotificationsContext";
 import { getErrorMessage } from "@/lib/errors";
 import { decideLeadReassignment, listLeadReassignmentRequests } from "@/api/leads";
 import type { LeadReassignmentRequest, LeadReassignmentStatus } from "@/types";
@@ -26,6 +27,7 @@ export default function LeadReassignments() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const { refresh: refreshNotifications } = useNotifications();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,6 +54,8 @@ export default function LeadReassignments() {
           : `Request for ${row.lead.leadNumber} rejected.`,
       );
       await load();
+      // The sidebar's pending count just dropped.
+      refreshNotifications();
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not record the decision."));
     } finally {

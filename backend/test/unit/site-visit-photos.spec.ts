@@ -29,7 +29,7 @@ function setup(opts: { save?: jest.Mock; create?: jest.Mock; read?: jest.Mock } 
       delete: jest.fn().mockResolvedValue({}),
     },
   };
-  const svc = new LeadsService(prisma, {} as any, {} as any, { store } as any);
+  const svc = new LeadsService(prisma, {} as any, {} as any, { store } as any, {} as any);
   jest.spyOn(svc, 'findOne').mockResolvedValue({ id: 'lead-1' } as any);
   jest.spyOn((svc as any).logger, 'error').mockImplementation(() => undefined);
   return { svc, store, prisma };

@@ -72,7 +72,8 @@ describe('InboundLeadsService', () => {
       },
     };
     const leads: any = { createFromAdLead: jest.fn().mockResolvedValue({ lead: { id: 'L1', leadNumber: 'LD-1' } }) };
-    return { svc: new InboundLeadsService(prisma, leads), prisma, leads };
+    const notifications: any = { notifyPermissionHolders: jest.fn() };
+    return { svc: new InboundLeadsService(prisma, leads, notifications), prisma, leads, notifications };
   }
 
   it('creates a lead and records the event', async () => {
@@ -81,6 +82,32 @@ describe('InboundLeadsService', () => {
     expect(out).toBe('created');
     expect(leads.createFromAdLead).toHaveBeenCalledWith(expect.objectContaining({ source: 'GOOGLE_ADS', name: 'X' }));
     expect(prisma.inboundLeadEvent.upsert.mock.calls[0][0].create.status).toBe('CREATED');
+  });
+
+  it('a new ad lead notifies the people who assign leads', async () => {
+    const { svc, notifications } = build();
+    await svc.handleGoogle({
+      lead_id: 'g1',
+      user_column_data: [
+        { column_id: 'FULL_NAME', string_value: 'Ravi' },
+        { column_id: 'COMPANY_NAME', string_value: 'Acme' },
+      ],
+    });
+    expect(notifications.notifyPermissionHolders).toHaveBeenCalledWith('Lead', 'Approve', {
+      type: 'NEW_UNASSIGNED_LEAD',
+      title: 'New lead LD-1 from Google Ads lead form',
+      body: 'Ravi · Acme — unassigned.',
+      link: '/leads/L1',
+    });
+  });
+
+  it('a duplicate or failed delivery notifies nobody', async () => {
+    const { svc, leads, notifications } = build();
+    leads.createFromAdLead.mockResolvedValueOnce({ lead: { id: 'L0', leadNumber: 'LD-0' }, duplicateOf: true });
+    await svc.handleGoogle({ lead_id: 'g2' });
+    leads.createFromAdLead.mockRejectedValueOnce(new Error('boom'));
+    await svc.handleGoogle({ lead_id: 'g3' });
+    expect(notifications.notifyPermissionHolders).not.toHaveBeenCalled();
   });
 
   it('skips an already processed external id', async () => {

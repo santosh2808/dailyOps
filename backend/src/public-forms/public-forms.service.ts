@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { LeadsService } from '../leads/leads.service';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { FormSchema, FormSchemaValidatorService } from './form-schema-validator.service';
 import { CreatePublicFormSubmissionDto } from './dto/create-public-form-submission.dto';
 
@@ -47,6 +48,7 @@ export class PublicFormsService {
     private formSchemaValidatorService: FormSchemaValidatorService,
     private leadsService: LeadsService,
     private complaintsService: ComplaintsService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -184,6 +186,7 @@ export class PublicFormsService {
           });
 
           let leadId: string | undefined;
+          let leadNumber: string | undefined;
           let complaintId: string | undefined;
 
           if (route.destinationType === 'LEAD') {
@@ -205,6 +208,7 @@ export class PublicFormsService {
               tx,
             );
             leadId = lead.id;
+            leadNumber = lead.leadNumber;
           } else {
             const complaint = await this.complaintsService.createFromWebFormIntake(
               {
@@ -231,8 +235,17 @@ export class PublicFormsService {
             data: { status: 'PROCESSED', leadId, complaintId },
           });
 
-          return { referenceNumber, leadId, complaintId };
+          return { referenceNumber, leadId, leadNumber, complaintId };
         });
+
+        // After the commit, so a rolled-back submission never notifies
+        // anyone; not awaited, like the emails below (it never throws).
+        if (result.leadId && result.leadNumber) {
+          void this.notifyWebLead(
+            { id: result.leadId, leadNumber: result.leadNumber },
+            { name, company, subjectLabel: route.subjectLabel, assignedUserId: route.assignedUserId },
+          );
+        }
 
         // Never blocks the public response — the public caller only ever
         // gets back { referenceNumber }, regardless of whether either email
@@ -325,6 +338,24 @@ export class PublicFormsService {
       return b.priority - a.priority;
     });
     return candidates[0];
+  }
+
+  // In-app notification for a website lead that no salesperson is routed
+  // to: the people who assign leads (Lead.Approve) are told, since it
+  // otherwise waits unnoticed. A routed lead needs nothing here — its
+  // salesperson already gets the WEB_SUBMISSION_ASSIGNED email. Never
+  // throws (see NotificationsService). Complaints are not covered here.
+  private async notifyWebLead(
+    lead: { id: string; leadNumber: string },
+    input: { name: string; company?: string; subjectLabel: string; assignedUserId?: string | null },
+  ) {
+    if (input.assignedUserId) return;
+    await this.notificationsService.notifyPermissionHolders('Lead', 'Approve', {
+      type: 'NEW_UNASSIGNED_LEAD',
+      title: `New website lead ${lead.leadNumber}`,
+      body: `${[input.name, input.company].filter(Boolean).join(' · ')} — ${input.subjectLabel}. Unassigned.`,
+      link: `/leads/${lead.id}`,
+    });
   }
 
   private async sendSubmissionNotifications(input: {

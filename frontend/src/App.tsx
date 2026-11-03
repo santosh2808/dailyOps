@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
 import { OfflineSiteVisitPhotoQueueProvider } from "@/context/OfflineSiteVisitPhotoQueueContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Toaster from "@/components/ui/toaster";
@@ -62,6 +63,9 @@ export default function App() {
             keeps retrying in the background regardless of which page the
             rep navigates to afterwards. */}
         <OfflineSiteVisitPhotoQueueProvider>
+        {/* The Topbar bell's and Sidebar badges' shared poll — see
+            NotificationsContext. */}
+        <NotificationsProvider>
         <SidebarProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -519,6 +523,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </SidebarProvider>
+        </NotificationsProvider>
         </OfflineSiteVisitPhotoQueueProvider>
       </AuthProvider>
       <Toaster />

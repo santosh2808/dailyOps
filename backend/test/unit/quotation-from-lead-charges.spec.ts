@@ -10,7 +10,7 @@ function makeService(lead: any) {
   const leadsService = { getLeadForQuotationGeneration: jest.fn().mockResolvedValue(lead) };
   const svc: any = new QuotationsService(
     prisma as any, {} as any, {} as any, {} as any, {} as any,
-    {} as any, {} as any, {} as any, leadsService as any, {} as any,
+    {} as any, {} as any, {} as any, leadsService as any, {} as any, {} as any,
   );
   const totals = jest.fn().mockResolvedValue({
     subtotal: 0, gstPercent: 18, installationCharge: 0, transportationCharge: 0,

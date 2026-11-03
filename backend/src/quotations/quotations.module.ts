@@ -8,6 +8,7 @@ import { PdfModule } from '../pdf/pdf.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { LeadsModule } from '../leads/leads.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { QuotationsController } from './quotations.controller';
 import { PublicQuotationsController } from './public-quotations.controller';
 import { QuotationsService } from './quotations.service';
@@ -31,6 +32,8 @@ import { QuotationsService } from './quotations.service';
     AuditLogModule,
     LeadsModule,
     WhatsAppModule,
+    // In-app notifications for approval requests and their outcome.
+    NotificationsModule,
   ],
   // PublicQuotationsController: Customer Quotation Acceptance workflow's
   // unauthenticated /api/v1/public/quotations/:token routes. Shares this

@@ -29,7 +29,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
+import { useNotifications } from "@/context/NotificationsContext";
 import { cn } from "@/lib/utils";
+import type { NotificationSummary } from "@/types";
 
 interface NavItem {
   label: string;
@@ -46,6 +48,9 @@ interface NavItem {
   // otherwise show active at once. Set true for an item whose `to` is also
   // the parent segment of other items in the same group.
   end?: boolean;
+  // Shows how many requests on this page await a decision (from
+  // NotificationsContext's poll; only ever present for users who can open it).
+  badge?: keyof NotificationSummary["pending"];
 }
 
 const topNavItems: NavItem[] = [
@@ -81,6 +86,7 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/leads/reassignments",
         icon: CheckSquare,
         permission: { module: "Lead", action: "Approve" },
+        badge: "leadReassignments",
       },
       {
         label: "Sales Orders",
@@ -100,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
         to: "/quotations/approvals",
         icon: CheckSquare,
         permission: { module: "Quotation", action: "Approve" },
+        badge: "quotationApprovals",
       },
     ],
   },
@@ -255,6 +262,14 @@ function isShadowed(to: string, pathname: string) {
   );
 }
 
+function CountBadge({ count }: { count: number }) {
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-none text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function navLinkClasses(isActive: boolean) {
   return cn(
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -268,6 +283,11 @@ export default function Sidebar() {
   const { hasPermission } = useAuth();
   const { isOpen, close } = useSidebar();
   const location = useLocation();
+  const { summary } = useNotifications();
+
+  function badgeCount(item: NavItem) {
+    return item.badge ? summary?.pending[item.badge] ?? 0 : 0;
+  }
 
   function visible(item: NavItem) {
     return !item.permission || hasPermission(item.permission.module, item.permission.action);
@@ -372,6 +392,9 @@ export default function Sidebar() {
             >
               <group.icon className="h-4 w-4" />
               <span className="flex-1 text-left">{group.label}</span>
+              {!openGroups[group.key] && group.items.some((item) => badgeCount(item) > 0) && (
+                <CountBadge count={group.items.reduce((sum, item) => sum + badgeCount(item), 0)} />
+              )}
               <ChevronDown
                 className={cn("h-4 w-4 transition-transform", openGroups[group.key] && "rotate-180")}
               />
@@ -379,12 +402,17 @@ export default function Sidebar() {
 
             {openGroups[group.key] && (
               <div className="mt-1 space-y-1 pl-6">
-                {group.items.map(({ label, to, icon: Icon, end }) => (
-                  <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive && !isShadowed(to, location.pathname))}>
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </NavLink>
-                ))}
+                {group.items.map((item) => {
+                  const { label, to, icon: Icon, end } = item;
+                  const count = badgeCount(item);
+                  return (
+                    <NavLink key={to} to={to} end={end} className={({ isActive }) => navLinkClasses(isActive && !isShadowed(to, location.pathname))}>
+                      <Icon className="h-4 w-4" />
+                      {label}
+                      {count > 0 && <CountBadge count={count} />}
+                    </NavLink>
+                  );
+                })}
               </div>
             )}
           </div>

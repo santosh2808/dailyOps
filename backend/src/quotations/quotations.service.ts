@@ -30,12 +30,15 @@ import { DecideQuotationApprovalDto } from './dto/decide-quotation-approval.dto'
 import { SendQuotationDto } from './dto/send-quotation.dto';
 import { AcceptPublicQuotationDto } from './dto/accept-public-quotation.dto';
 import { RejectPublicQuotationDto } from './dto/reject-public-quotation.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { notificationEmailTemplate } from '../notifications/notification-emails';
 
 // Passed by the controller from the JWT payload (req.user) — never trusted
 // from the request body. `roles` drives the Approval Matrix / Administrator
 // override checks below; `name` is the existing actor-display-name
 // convention used everywhere else in this codebase.
 export interface QuotationActor {
+  id?: string;
   name?: string;
   roles?: string[];
 }
@@ -291,6 +294,7 @@ export class QuotationsService {
     private auditLogService: AuditLogService,
     private leadsService: LeadsService,
     private whatsAppService: WhatsAppService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async findAll(query: QueryQuotationDto, viewer?: LeadViewer) {
@@ -814,6 +818,7 @@ export class QuotationsService {
       data: {
         quotationId: id,
         requestedBy: actor.name,
+        requestedByUserId: actor.id,
         reason: dto.reason,
         discountPercent,
         belowMinPrice,
@@ -829,6 +834,30 @@ export class QuotationsService {
         newValue: { discountPercent, belowMinPrice, reason: dto.reason },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
+
+    // Everyone who can decide it (Quotation.Approve — the Quotation
+    // Approvals page's own permission), in the app and by email.
+    await this.notificationsService.notifyPermissionHolders(
+      'Quotation',
+      'Approve',
+      {
+        type: 'QUOTATION_APPROVAL_REQUESTED',
+        title: `Approval requested for ${quotation.quotationNumber}`,
+        body: `${actor.name ?? 'A user'} asked for approval${dto.reason ? `: ${dto.reason}` : '.'}`,
+        link: '/quotations/approvals',
+      },
+      actor.id,
+      {
+        ...notificationEmailTemplate('QUOTATION_APPROVAL_REQUESTED'),
+        vars: {
+          quotationNumber: quotation.quotationNumber,
+          requestedBy: actor.name ?? 'A user',
+          customerCompany: quotation.customer?.companyName ?? quotation.lead?.companyName ?? 'customer not set',
+          reason: dto.reason || 'None given',
+        },
+        mailerLink: { module: 'Quotation', quotationId: id },
+      },
+    );
 
     return request;
   }
@@ -850,7 +879,10 @@ export class QuotationsService {
     dto: DecideQuotationApprovalDto,
     actor: QuotationActor = {},
   ) {
-    const request = await this.prisma.quotationApprovalRequest.findUnique({ where: { id: requestId } });
+    const request = await this.prisma.quotationApprovalRequest.findUnique({
+      where: { id: requestId },
+      include: { quotation: { select: { quotationNumber: true } } },
+    });
     if (!request) {
       throw new NotFoundException('Approval request not found');
     }
@@ -887,11 +919,37 @@ export class QuotationsService {
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
+    // Tells whoever asked (in the app and by email), once the decision has
+    // fully taken effect.
+    const notifyRequester = () =>
+      this.notificationsService.notifyUsers(
+        [request.requestedByUserId],
+        {
+          type: dto.approve ? 'QUOTATION_APPROVAL_APPROVED' : 'QUOTATION_APPROVAL_REJECTED',
+          title: `Approval for ${request.quotation.quotationNumber} ${dto.approve ? 'granted' : 'rejected'}`,
+          body: `Decided by ${actor.name ?? 'an approver'}${dto.remarks ? `: ${dto.remarks}` : '.'}`,
+          link: `/quotations/${request.quotationId}`,
+        },
+        actor.id,
+        {
+          ...notificationEmailTemplate('QUOTATION_APPROVAL_DECIDED'),
+          vars: {
+            quotationNumber: request.quotation.quotationNumber,
+            decision: dto.approve ? 'approved' : 'rejected',
+            decidedBy: actor.name ?? 'An approver',
+            decisionNote: dto.remarks ? `Remarks: ${dto.remarks}` : '',
+          },
+          mailerLink: { module: 'Quotation', quotationId: request.quotationId },
+        },
+      );
+
     if (!dto.approve) {
+      await notifyRequester();
       return { status: 'REJECTED' as const };
     }
 
     const { quotation, salesOrder } = await this.performAccept(request.quotationId, actor.name);
+    await notifyRequester();
     return { status: 'APPROVED' as const, quotation, salesOrder };
   }
 
@@ -1618,21 +1676,31 @@ export class QuotationsService {
   // resolves to an email, MailerService.send() already handles a missing
   // recipient gracefully (status FAILED, visible in Email History) rather
   // than throwing — this never blocks the customer's Accept/Reject action.
+  // The same person also gets an in-app notification (the Topbar bell).
   private async notifyInternalOfDecision(
     quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
     decision: 'ACCEPTED' | 'REJECTED',
   ) {
-    let recipientEmail: string | undefined;
+    let recipient: { id: string; email: string | null } | null = null;
     if (quotation.lead?.assignedToUserId) {
-      const assignee = await this.prisma.user.findUnique({ where: { id: quotation.lead.assignedToUserId } });
-      recipientEmail = assignee?.email ?? undefined;
+      recipient = await this.prisma.user.findUnique({ where: { id: quotation.lead.assignedToUserId } });
     }
-    if (!recipientEmail && quotation.sentBy) {
-      const sender = await this.prisma.user.findFirst({ where: { name: quotation.sentBy } });
-      recipientEmail = sender?.email ?? undefined;
+    if (!recipient?.email && quotation.sentBy) {
+      recipient = (await this.prisma.user.findFirst({ where: { name: quotation.sentBy } })) ?? recipient;
     }
+    const recipientEmail = recipient?.email ?? undefined;
 
     const companyName = quotation.customer?.companyName ?? quotation.lead?.companyName ?? 'the customer';
+
+    await this.notificationsService.notifyUsers([recipient?.id], {
+      type: decision === 'ACCEPTED' ? 'QUOTATION_ACCEPTED_BY_CUSTOMER' : 'QUOTATION_REJECTED_BY_CUSTOMER',
+      title: `Customer ${decision === 'ACCEPTED' ? 'accepted' : 'rejected'} ${quotation.quotationNumber}`,
+      body:
+        decision === 'ACCEPTED'
+          ? `${companyName} accepted it${quotation.acceptedByName ? ` (${quotation.acceptedByName})` : ''}.`
+          : `${companyName} rejected it${quotation.rejectionReason ? `: ${quotation.rejectionReason}` : '.'}`,
+      link: `/quotations/${quotation.id}`,
+    });
 
     await this.mailerService
       .send({

@@ -410,7 +410,7 @@ describe('existing WhatsApp callers under AiSensy', () => {
     [
       'quotation',
       () => {
-        const svc = new QuotationsService(prisma, ...([{}, {}, {}, {}, {}, {}, {}, {}] as [any, any, any, any, any, any, any, any]), wa);
+        const svc = new QuotationsService(prisma, ...([{}, {}, {}, {}, {}, {}, {}, {}] as [any, any, any, any, any, any, any, any]), wa, {} as any);
         jest.spyOn(svc, 'findOne').mockResolvedValue({ id: 'doc1', publicToken: 'tok', quotationNumber: 'Q-0001', customer } as any);
         return svc;
       },
@@ -458,7 +458,7 @@ describe('existing WhatsApp callers under AiSensy', () => {
   });
 
   it('quotation share falls back to "Customer" when the contact name is blank', async () => {
-    const svc = new QuotationsService(prisma, ...([{}, {}, {}, {}, {}, {}, {}, {}] as [any, any, any, any, any, any, any, any]), wa);
+    const svc = new QuotationsService(prisma, ...([{}, {}, {}, {}, {}, {}, {}, {}] as [any, any, any, any, any, any, any, any]), wa, {} as any);
     jest
       .spyOn(svc, 'findOne')
       .mockResolvedValue({ id: 'doc1', publicToken: 'tok', quotationNumber: 'Q-0001', customer: { ...customer, contactPerson: '' } } as any);
@@ -473,7 +473,7 @@ describe('existing WhatsApp callers under AiSensy', () => {
 
   it('lead assigned stays simulated', async () => {
     prisma.user = { findUnique: jest.fn().mockResolvedValue({ name: 'Asha', email: null, phone: '9123456780' }) };
-    const svc = new LeadsService(prisma, mailer as any, wa, {} as any);
+    const svc = new LeadsService(prisma, mailer as any, wa, {} as any, { notifyUsers: jest.fn() } as any);
     const sendSpy = jest.spyOn(wa, 'sendTemplateMessage');
     await (svc as any).notifyLeadAssigned('u1', { id: 'l1', leadNumber: 'L-1', title: 't', companyName: 'Acme', contactPerson: 'Ravi', phone: '9876543210' });
     expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ useCase: 'LEAD_ASSIGNED' }));
@@ -482,7 +482,7 @@ describe('existing WhatsApp callers under AiSensy', () => {
   });
 
   it('site visit scheduled stays simulated', async () => {
-    const svc = new LeadsService(prisma, mailer as any, wa, {} as any);
+    const svc = new LeadsService(prisma, mailer as any, wa, {} as any, { notifyUsers: jest.fn() } as any);
     const sendSpy = jest.spyOn(wa, 'sendTemplateMessage');
     await (svc as any).notifySiteVisitScheduled({
       id: 'l1', leadNumber: 'L-1', companyName: 'Acme', contactPerson: 'Ravi', email: null, phone: '9876543210',

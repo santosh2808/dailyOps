@@ -3,6 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { MailerModule } from '../mailer/mailer.module';
 import { LeadsModule } from '../leads/leads.module';
 import { ComplaintsModule } from '../complaints/complaints.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PublicFormsController } from './public-forms.controller';
 import { PublicFormsService } from './public-forms.service';
 import { FormSchemaValidatorService } from './form-schema-validator.service';
@@ -17,6 +18,7 @@ import { FormSchemaValidatorService } from './form-schema-validator.service';
     MailerModule,
     LeadsModule,
     ComplaintsModule,
+    NotificationsModule,
   ],
   controllers: [PublicFormsController],
   providers: [PublicFormsService, FormSchemaValidatorService],
