@@ -25,6 +25,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { listTaxInvoices } from "@/api/tax-invoices";
 import type { TaxInvoice } from "@/types";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 const PAGE_SIZE = 20;
 
@@ -227,7 +228,7 @@ export default function TaxInvoiceList() {
                           <TruncatedText text={invoice.customer?.companyName ?? "—"} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{invoice.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
-                        <TableCell className="hidden md:table-cell">{invoice.jeo?.jeoNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{invoice.jeo ? jeoDisplayNumber(invoice.jeo.jeoNumber) : "—"}</TableCell>
                         <TableCell>
                           <TaxInvoiceStatusBadge status={invoice.status} />
                         </TableCell>
@@ -253,7 +254,7 @@ export default function TaxInvoiceList() {
                 fields={[
                   { label: "Customer", render: (invoice) => invoice.customer?.companyName ?? "—" },
                   { label: "Sales Order", render: (invoice) => invoice.salesOrder?.salesOrderNumber ?? "—" },
-                  { label: "JEO", render: (invoice) => invoice.jeo?.jeoNumber ?? "—" },
+                  { label: "JEO", render: (invoice) => (invoice.jeo ? jeoDisplayNumber(invoice.jeo.jeoNumber) : "—") },
                   { label: "Grand Total", render: (invoice) => formatCurrency(invoice.grandTotal) },
                   { label: "Invoice Date", render: (invoice) => formatDate(invoice.invoiceDate) },
                 ]}

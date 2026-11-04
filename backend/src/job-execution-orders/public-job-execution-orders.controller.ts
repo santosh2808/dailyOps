@@ -16,8 +16,24 @@ export class PublicJobExecutionOrdersController {
 
   @Get(':token/pdf')
   async getPdf(@Param('token') token: string, @Res() res: Response) {
-    const pdf = await this.jobExecutionOrdersService.getPublicPdf(token);
-    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="job-execution-order.pdf"' });
+    const { pdf, filename } = await this.jobExecutionOrdersService.getPublicPdf(token);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${filename}"` });
+    res.send(pdf);
+  }
+
+  // The in-app "View PDF" link (JobExecutionOrdersController's
+  // :id/pdf-link). No login: the signed, short-lived token in the path is
+  // the authorization. The trailing file name is what the browser names a
+  // download; it isn't trusted — the response is always this JEO's.
+  @Get(':id/view/:token/:filename')
+  async getPdfViaLink(@Param('id') id: string, @Param('token') token: string, @Res() res: Response) {
+    const { pdf, filename } = await this.jobExecutionOrdersService.getPdfViaLink(id, token);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'private, no-store',
+      'Referrer-Policy': 'no-referrer',
+    });
     res.send(pdf);
   }
 }

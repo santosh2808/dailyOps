@@ -37,6 +37,7 @@ import {
   type InvoiceLookupResult,
 } from "@/api/complaints";
 import type { Complaint, ComplaintStatus, EmailHistoryEntry } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -560,7 +561,7 @@ export default function ComplaintDetails() {
                           className="text-left text-srm-green hover:underline"
                           onClick={() => navigate(`/job-execution-orders/${complaint.jeo!.id}`)}
                         >
-                          {complaint.jeo.jeoNumber}
+                          {jeoDisplayNumber(complaint.jeo.jeoNumber)}
                         </button>
                       ) : null
                     }

@@ -27,6 +27,7 @@ import {
   updateProformaInvoiceStatus,
 } from "@/api/proforma-invoices";
 import type { EmailHistoryEntry, ProformaInvoice, ProformaInvoiceStatus } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -155,7 +156,7 @@ export default function ProformaInvoiceDetails() {
                         className="underline underline-offset-2"
                         onClick={() => navigate(`/job-execution-orders/${invoice.jeo!.id}`)}
                       >
-                        {invoice.jeo.jeoNumber}
+                        {jeoDisplayNumber(invoice.jeo.jeoNumber)}
                       </button>
                     ) : (
                       "—"
