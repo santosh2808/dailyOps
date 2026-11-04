@@ -176,7 +176,7 @@ const DEFAULT_COMMERCIAL_TERMS: Required<
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const LOGO_SPYRO = path.join(ASSETS_DIR, 'logo-spyro-fans.png');
 const LOGO_SR = path.join(ASSETS_DIR, 'logo-smart-rotamach.jpg');
-const PRODUCT_PHOTO = path.join(ASSETS_DIR, 'hvls-fan-photo.jpg');
+const PRODUCT_PHOTO = path.join(ASSETS_DIR, 'hvls-fan-photo.png');
 
 const PAGE_MARGIN = 45;
 const GREEN = '#4b8f29';
@@ -229,7 +229,7 @@ export class QuotationPdfService {
     for (const [label, filePath] of [
       ['logo-spyro-fans.png', LOGO_SPYRO],
       ['logo-smart-rotamach.jpg', LOGO_SR],
-      ['hvls-fan-photo.jpg', PRODUCT_PHOTO],
+      ['hvls-fan-photo.png', PRODUCT_PHOTO],
     ] as const) {
       this.logger.log(`${label} -> ${filePath} (exists: ${fs.existsSync(filePath)})`);
     }
