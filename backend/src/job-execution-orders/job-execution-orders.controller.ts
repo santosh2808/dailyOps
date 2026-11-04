@@ -99,9 +99,18 @@ export class JobExecutionOrdersController {
   @Get(':id/pdf')
   @RequirePermission('JEO', 'View')
   async getPdf(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
-    const pdf = await this.jobExecutionOrdersService.getPdf(id, req.user?.name);
-    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${id}.pdf"` });
+    const { pdf, filename } = await this.jobExecutionOrdersService.getPdf(id, req.user?.name);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${filename}"` });
     res.send(pdf);
+  }
+
+  // A short-lived link the app opens in a new tab instead of a blob, so the
+  // browser's PDF viewer downloads it as "JEO <number>.pdf" — see
+  // jeo-pdf-link.ts.
+  @Post(':id/pdf-link')
+  @RequirePermission('JEO', 'View')
+  createPdfLink(@Param('id') id: string, @Req() req: any) {
+    return this.jobExecutionOrdersService.createPdfLink(id, req.user?.name);
   }
 
   // No delete endpoint — JobExecutionOrder has no deletedAt column (per the

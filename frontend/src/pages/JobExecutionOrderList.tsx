@@ -26,6 +26,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 const PAGE_SIZE = 20;
 
@@ -223,7 +224,7 @@ export default function JobExecutionOrderList() {
                         className="cursor-pointer"
                         onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
                       >
-                        <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
+                        <TableCell className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</TableCell>
                         <TableCell>
                           <TruncatedText text={jeo.customer?.companyName ?? "—"} />
                         </TableCell>
@@ -249,7 +250,7 @@ export default function JobExecutionOrderList() {
               <MobileRecordList
                 rows={jeos}
                 getKey={(jeo) => jeo.id}
-                title={(jeo) => jeo.jeoNumber}
+                title={(jeo) => jeoDisplayNumber(jeo.jeoNumber)}
                 badge={(jeo) => <JeoStatusBadge status={jeo.status} />}
                 subtitle={(jeo) => jeo.customer?.companyName ?? "—"}
                 meta={(jeo) =>

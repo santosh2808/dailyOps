@@ -15,6 +15,7 @@ import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { STATUS_OPTIONS } from "./jeoOptions";
 import type { JeoStatus, JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 interface ChangeJeoStatusDialogProps {
   open: boolean;
@@ -69,7 +70,7 @@ export default function ChangeJeoStatusDialog({
         <DialogHeader>
           <DialogTitle>Change JEO Status</DialogTitle>
           <DialogDescription>
-            Update the status for <span className="font-medium text-slate-900">{jeo.jeoNumber}</span>.
+            Update the status for <span className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</span>.
           </DialogDescription>
         </DialogHeader>
 

@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import PDFDocument = require('pdfkit');
 import type { HangingStructureType } from '@prisma/client';
 import type { ProductTechnicalSpec } from '../products/dto/create-product.dto';
+import { jeoDisplayNumber } from '../common/jeo-number';
 
 // Display labels for HangingStructureType — mirrors
 // frontend/src/components/job-execution-orders/jeoOptions.ts's
@@ -211,7 +212,7 @@ export class JeoPdfService {
 
   private drawCoverLetter(doc: PDFKit.PDFDocument, jeo: JeoPdfInput, contentLeft: number, contentWidth: number): void {
     doc.font('Helvetica-Bold').fontSize(16).fillColor('black');
-    doc.text(`INTERNAL JOB EXECUTION ORDER ${jeo.jeoNumber.replace(/^JEO-/, '')}`, contentLeft, doc.y, {
+    doc.text(`INTERNAL JOB EXECUTION ORDER ${jeoDisplayNumber(jeo.jeoNumber).replace(/^JEO-/, '')}`, contentLeft, doc.y, {
       width: contentWidth,
       align: 'center',
     });

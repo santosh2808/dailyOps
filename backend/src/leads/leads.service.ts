@@ -37,6 +37,7 @@ import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 import { INDIA_STATES } from '../common/india-states';
+import { jeoDisplayNumber } from '../common/jeo-number';
 import { NotificationsService } from '../notifications/notifications.service';
 import { notificationEmailTemplate } from '../notifications/notification-emails';
 
@@ -1810,7 +1811,7 @@ export class LeadsService {
             entries.push({
               id: `jeo-${jeo.jeoNumber}`,
               action: 'JEO_GENERATED' as LeadHistoryAction,
-              description: `Job Execution Order ${jeo.jeoNumber} generated`,
+              description: `Job Execution Order ${jeoDisplayNumber(jeo.jeoNumber)} generated`,
               performedBy: null,
               createdAt: jeo.createdAt,
             });

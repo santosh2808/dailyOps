@@ -31,6 +31,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { STATUS_OPTIONS } from "@/components/job-execution-orders/jeoOptions";
 import { getProductionDashboard, updateJeoStatus } from "@/api/job-execution-orders";
 import type { JeoDashboardResponse, JeoStatus, JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 type DashboardCountKey = keyof Omit<JeoDashboardResponse, "activeOrders">;
 
@@ -217,7 +218,7 @@ export default function ProductionDashboard() {
                               className="cursor-pointer"
                               onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
                             >
-                              <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
+                              <TableCell className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</TableCell>
                               <TableCell>{jeo.customer?.companyName ?? "—"}</TableCell>
                               <TableCell>{jeo.salesOrder?.salesOrderNumber ?? "—"}</TableCell>
                               <TableCell className="max-w-[220px] truncate" title={products}>
@@ -240,7 +241,7 @@ export default function ProductionDashboard() {
                   <MobileRecordList
                     rows={data?.activeOrders ?? []}
                     getKey={(jeo) => jeo.id}
-                    title={(jeo) => jeo.jeoNumber}
+                    title={(jeo) => jeoDisplayNumber(jeo.jeoNumber)}
                     badge={(jeo) => <JeoStatusBadge status={jeo.status} />}
                     subtitle={(jeo) => jeo.customer?.companyName ?? "—"}
                     meta={(jeo) =>

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 // QA fix (JEO Number field): a searchable dropdown over Job Execution
 // Orders (by JEO number or customer name), replacing SalesOrderPicker as the
@@ -64,7 +65,7 @@ export default function JeoPicker({ value, selectedJeo, onChange }: JeoPickerPro
     setOpen(false);
   }
 
-  const displayValue = open ? search : selectedJeo?.jeoNumber ?? "";
+  const displayValue = open ? search : (selectedJeo ? jeoDisplayNumber(selectedJeo.jeoNumber) : "");
 
   return (
     <div className="relative" ref={containerRef}>
@@ -108,7 +109,7 @@ export default function JeoPicker({ value, selectedJeo, onChange }: JeoPickerPro
                 }`}
                 onClick={() => handleSelect(jeo)}
               >
-                <span className="font-medium text-slate-900">{jeo.jeoNumber}</span>
+                <span className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</span>
                 <span className="text-xs text-muted-foreground">
                   {jeo.customer?.companyName ?? jeo.salesOrder?.customer?.companyName ?? "—"}
                 </span>

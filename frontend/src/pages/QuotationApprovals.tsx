@@ -26,13 +26,34 @@ import { useNotifications } from "@/context/NotificationsContext";
 // Requirement #9's "reusable approval engine" surfaces here as the
 // Approvals inbox: every QuotationApprovalRequest the Approval Matrix (or
 // the below-minimum-price hard floor) has ever produced, with Approve /
-// Reject actions. Deciding "Approve" only moves the quotation to ACCEPTED
-// (see QuotationsService.decideApprovalRequest()/performAccept()) — per the
+// Reject actions. Approving a request "to accept" only moves the quotation
+// to ACCEPTED; approving one "to send" only approves its pricing, so the
+// requester can then send it (see QuotationsService.decideApprovalRequest())
+// — per the
 // QA bug-fix pass (TC-088), it no longer auto-creates a Sales Order; that's
 // now always the separate "Create Sales Order" action on Quotation/Customer
 // Details, same as every other acceptance route.
 
 const STATUS_FILTERS = ["PENDING", "APPROVED", "REJECTED", ""] as const;
+
+function purposeLabel(request: QuotationApprovalRequest) {
+  return request.purpose === "SEND" ? "To send to customer" : "To accept";
+}
+
+// Why the current user can't decide this request, or null if they can.
+// Mirrors QuotationsService.decideApprovalRequest(): Administrator, or the
+// role the request needs (`requiredApprover`, from the server). Only here
+// so nobody tries and fails — the server still enforces it.
+function decideBlockedReason(request: QuotationApprovalRequest, roles: string[]) {
+  const required = request.requiredApprover;
+  if (!required || roles.includes("Administrator") || roles.includes(required)) return null;
+  if (required === "Administrator") {
+    return request.belowMinPrice
+      ? "Only an Administrator can approve or reject this — the price is below the minimum allowed."
+      : "Only an Administrator can approve or reject this discount.";
+  }
+  return `Only a ${required} or an Administrator can approve or reject this discount.`;
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
@@ -47,7 +68,8 @@ export default function QuotationApprovals() {
   // of the Approve/Reject buttons themselves, so a user who reaches this
   // page any other way (direct URL, browser back/forward) still can't see
   // action buttons they have no permission to use.
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const userRoles = user?.roles ?? [];
   const { refresh: refreshNotifications } = useNotifications();
   const canApprove = hasPermission("Quotation", "Approve");
   const [statusFilter, setStatusFilter] = useState<string>("PENDING");
@@ -78,8 +100,14 @@ export default function QuotationApprovals() {
     setDecidingId(requestId);
     setError("");
     try {
-      await decideQuotationApproval(requestId, approve);
-      toast.success(approve ? "Quotation approved." : "Quotation rejected.");
+      const result = await decideQuotationApproval(requestId, approve);
+      toast.success(
+        !approve
+          ? "Quotation rejected."
+          : result.purpose === "SEND"
+            ? "Pricing approved. The quotation can now be sent."
+            : "Quotation approved.",
+      );
       await fetchRequests();
       // The sidebar's pending count just dropped.
       refreshNotifications();
@@ -95,37 +123,48 @@ export default function QuotationApprovals() {
 
   // Row actions (or the "by <decider>" note once decided), shared by the
   // table's Actions cell and the mobile card.
-  function approvalActions(request: QuotationApprovalRequest) {
+  // `showNote`: the mobile card spells out why the buttons are disabled —
+  // there's no hover on a phone to show the tooltip.
+  function approvalActions(request: QuotationApprovalRequest, showNote = false) {
+    const blockedReason = decideBlockedReason(request, userRoles);
     return (
       <>
         {request.status === "PENDING" && canApprove ? (
-          <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Approve"
-              disabled={decidingId === request.id}
-              onClick={() => handleDecide(request.id, true)}
-            >
-              {decidingId === request.id ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Reject"
-              disabled={decidingId === request.id}
-              onClick={() => handleDecide(request.id, false)}
-            >
-              {decidingId === request.id ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <XCircle className="h-4 w-4 text-destructive" />
-              )}
-            </Button>
+          <div className="flex flex-col items-end gap-1">
+            {/* The tooltip sits on a wrapper: browsers don't show a disabled button's own title. */}
+            <div className="flex justify-end gap-1" title={blockedReason ?? undefined}>
+              <Button
+                variant="ghost"
+                size="icon"
+                title={blockedReason ? undefined : "Approve"}
+                aria-label={blockedReason ? `Approve — ${blockedReason}` : "Approve"}
+                disabled={decidingId === request.id || !!blockedReason}
+                onClick={() => handleDecide(request.id, true)}
+              >
+                {decidingId === request.id ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                title={blockedReason ? undefined : "Reject"}
+                aria-label={blockedReason ? `Reject — ${blockedReason}` : "Reject"}
+                disabled={decidingId === request.id || !!blockedReason}
+                onClick={() => handleDecide(request.id, false)}
+              >
+                {decidingId === request.id ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-destructive" />
+                )}
+              </Button>
+            </div>
+            {showNote && blockedReason && (
+              <p className="text-right text-xs text-muted-foreground">{blockedReason}</p>
+            )}
           </div>
         ) : (
           <div className="text-right text-xs text-muted-foreground">
@@ -198,6 +237,9 @@ export default function QuotationApprovals() {
                       >
                         <TableCell className="font-medium text-slate-900">
                           {request.quotation?.quotationNumber ?? request.quotationId}
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {purposeLabel(request)}
+                          </span>
                         </TableCell>
                         <TableCell>{request.quotation?.customer?.companyName ?? "—"}</TableCell>
                         <TableCell className="max-w-xs truncate">{request.reason || "—"}</TableCell>
@@ -251,6 +293,7 @@ export default function QuotationApprovals() {
                 meta={(request) => `${request.requestedBy || "—"} · ${formatDateTime(request.requestedAt)}`}
                 fields={[
                   { label: "Customer", render: (request) => request.quotation?.customer?.companyName ?? "—" },
+                  { label: "For", render: purposeLabel },
                   { label: "Reason", render: (request) => request.reason || "—" },
                   {
                     label: "Discount %",
@@ -269,7 +312,7 @@ export default function QuotationApprovals() {
                       <Eye className="mr-1 h-4 w-4" />
                       Open quotation
                     </Button>
-                    {approvalActions(request)}
+                    {approvalActions(request, true)}
                   </>
                 )}
                 loading={loading}

@@ -45,6 +45,7 @@ import type {
   JobExecutionOrder,
   ProductionChecklist,
 } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 type ChecklistKey = keyof Omit<ProductionChecklist, "id" | "jeoId" | "completedAt">;
 
@@ -238,7 +239,7 @@ export default function JobExecutionOrderDetails() {
             <div className="mx-auto max-w-4xl space-y-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <h2 className="truncate text-xl font-semibold text-slate-900">{jeo.jeoNumber}</h2>
+                  <h2 className="truncate text-xl font-semibold text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</h2>
                   <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {jeo.customer?.companyName ?? "Unknown customer"}
                   </p>

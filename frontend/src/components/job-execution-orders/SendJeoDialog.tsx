@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
 import { sendJeoFactoryNotification, type SendJeoResult } from "@/api/job-execution-orders";
 import type { JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 // Review-then-send flow, same pattern as SendTaxInvoiceDialog. The factory
 // notification used to be a one-shot automatic email at generation time —
@@ -72,7 +73,7 @@ export default function SendJeoDialog({ open, onOpenChange, jeo, onSent }: SendJ
         <DialogHeader>
           <DialogTitle>Resend to Factory</DialogTitle>
           <DialogDescription>
-            Email <span className="font-medium text-slate-900">{jeo.jeoNumber}</span> to the
+            Email <span className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</span> to the
             Production Team as a PDF attachment. Leave the recipient blank to use the default
             factory notification address.
           </DialogDescription>

@@ -35,7 +35,9 @@ const JEO_SEQUENCE: JeoStatus[] = ['PENDING', 'MATERIAL_READY', 'ASSEMBLY_STARTE
 import { MailerService } from '../mailer/mailer.service';
 import { mergeCc } from '../mailer/default-cc-emails';
 import { JeoPdfService } from '../pdf/jeo-pdf.service';
-import { StateSeriesCodesService } from '../state-series-codes/state-series-codes.service';
+import { SERIES_BLOCK_SIZE, StateSeriesCodesService } from '../state-series-codes/state-series-codes.service';
+import { jeoDisplayNumber, jeoPdfFilename } from '../common/jeo-number';
+import { createJeoPdfLinkToken, verifyJeoPdfLinkToken } from './jeo-pdf-link';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
 import { CreateJeoDto } from './dto/create-jeo.dto';
@@ -46,9 +48,10 @@ import { SendJeoDto } from './dto/send-jeo.dto';
 import { QueryJeoDto } from './dto/query-jeo.dto';
 import { factoryWhatsAppRecipients } from './factory-whatsapp-recipients';
 
-const JEO_NUMBER_PREFIX = 'JEO-';
-const JEO_NUMBER_PAD = 6;
 const MAX_JEO_NUMBER_ATTEMPTS = 5;
+// Sales Order numbers are SO-<year>-<zero-padded sequence> (see
+// SalesOrdersService.generateSalesOrderNumber()).
+const SALES_ORDER_NUMBER = /^SO-(\d{4})-(\d+)$/;
 
 // Whitelisted so `sortBy` from the query string can never be used to sort by
 // an arbitrary/unindexed or sensitive column.
@@ -195,6 +198,7 @@ export class JobExecutionOrdersService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
+    const searchedJeoNumber = search?.match(/^JEO\s+(\S.*)$/i)?.[1];
 
     const where: Prisma.JobExecutionOrderWhereInput = {
       ...(query.status ? { status: query.status } : {}),
@@ -213,6 +217,9 @@ export class JobExecutionOrdersService {
         ? {
             OR: [
               { jeoNumber: { contains: search, mode: 'insensitive' } },
+              // Screens show "JEO 4004" for JEO-2026-4004, so "JEO 4004"
+              // (as typed from the screen) is also matched by its number.
+              ...(searchedJeoNumber ? [{ jeoNumber: { contains: searchedJeoNumber, mode: 'insensitive' as const } }] : []),
               { salesOrder: { salesOrderNumber: { contains: search, mode: 'insensitive' } } },
               { customer: { companyName: { contains: search, mode: 'insensitive' } } },
               { customer: { contactPerson: { contains: search, mode: 'insensitive' } } },
@@ -373,7 +380,7 @@ export class JobExecutionOrdersService {
     // salesOrder.items (see schema.prisma comment). Only priority,
     // assignedTo, and remarks come from the request body.
     for (let attempt = 1; attempt <= MAX_JEO_NUMBER_ATTEMPTS; attempt++) {
-      const jeoNumber = await this.generateJeoNumber(salesOrder.customer.state);
+      const jeoNumber = await this.generateJeoNumber(salesOrder);
       try {
         const created = await this.prisma.jobExecutionOrder.create({
           data: {
@@ -420,7 +427,17 @@ export class JobExecutionOrdersService {
         return created;
       } catch (error) {
         if (this.isJeoNumberConflict(error) && attempt < MAX_JEO_NUMBER_ATTEMPTS) {
-          continue; // Another request took this number first — retry with a fresh one.
+          // Another request took this number first. If that was a JEO for
+          // this same Sales Order (a double submit), stop here rather than
+          // retrying into a second active JEO with a "-2" number.
+          const concurrent = await this.prisma.jobExecutionOrder.findFirst({
+            where: { salesOrderId: salesOrder.id, status: { not: 'COMPLETED' } },
+            select: { id: true },
+          });
+          if (concurrent) {
+            throw new ConflictException('An active Job Execution Order already exists for this Sales Order.');
+          }
+          continue; // Retry with a fresh number.
         }
         throw error;
       }
@@ -622,9 +639,35 @@ export class JobExecutionOrdersService {
   // Branded PDF (replicates "JEO 5478.doc") — used both for the standalone
   // GET :id/pdf download and internally by sendFactoryNotificationEmail()'s
   // attachment, so the emailed copy and the on-demand download always match.
-  async getPdf(id: string, actorName?: string): Promise<Buffer> {
+  // `filename` is the JEO number as people see it, e.g. "JEO 4004.pdf" —
+  // see common/jeo-number.ts.
+  async getPdf(id: string, actorName?: string): Promise<{ pdf: Buffer; filename: string }> {
     const jeo = await this.findOne(id);
-    return this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+    const pdf = await this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
+    return { pdf, filename: jeoPdfFilename(jeo.jeoNumber) };
+  }
+
+  // A browser-viewable link to this JEO's PDF for the logged-in viewer —
+  // see jeo-pdf-link.ts for why the app opens this rather than a blob.
+  async createPdfLink(id: string, viewerName?: string): Promise<{ url: string }> {
+    const jeo = await this.prisma.jobExecutionOrder.findUnique({ where: { id }, select: { jeoNumber: true } });
+    if (!jeo) {
+      throw new NotFoundException('Job execution order not found');
+    }
+    const token = createJeoPdfLinkToken(id, viewerName);
+    return {
+      url: `/api/v1/public/job-execution-orders/${id}/view/${token}/${encodeURIComponent(jeoPdfFilename(jeo.jeoNumber))}`,
+    };
+  }
+
+  // The PDF behind createPdfLink(), exactly as the logged-in :id/pdf route
+  // renders it for that viewer.
+  async getPdfViaLink(id: string, token: string): Promise<{ pdf: Buffer; filename: string }> {
+    const verified = verifyJeoPdfLinkToken(token, id);
+    if (!verified) {
+      throw new NotFoundException('This link has expired. Open the PDF again from DailyOps.');
+    }
+    return this.getPdf(id, verified.viewerName);
   }
 
   // Public PDF link for the factory WhatsApp (notifyFactoryWhatsApp()).
@@ -655,7 +698,7 @@ export class JobExecutionOrdersService {
   // The no-guard counterpart to getPdf(id) above, reached via publicToken
   // instead of the record's own id/JWT — see PublicJobExecutionOrdersController.
   // No actorName (anonymous customer, not a logged-in staff member).
-  async getPublicPdf(token: string): Promise<Buffer> {
+  async getPublicPdf(token: string): Promise<{ pdf: Buffer; filename: string }> {
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "JobExecutionOrder" WHERE "publicToken" = ${token}
     `;
@@ -680,7 +723,7 @@ export class JobExecutionOrdersService {
         this.logger.warn(`FACTORY_WHATSAPP_RECIPIENTS lists more numbers than allowed — ${dropped} ignored.`);
       }
       if (!recipients.length) {
-        this.logger.log(`[SIMULATED WhatsApp] JEO_FACTORY_NOTIFICATION for JEO ${jeo.jeoNumber} (FACTORY_WHATSAPP_RECIPIENTS not set)`);
+        this.logger.log(`[SIMULATED WhatsApp] JEO_FACTORY_NOTIFICATION for JEO ${jeoDisplayNumber(jeo.jeoNumber)} (FACTORY_WHATSAPP_RECIPIENTS not set)`);
         return;
       }
       const token = await this.getOrCreatePublicToken(jeo.id);
@@ -694,7 +737,7 @@ export class JobExecutionOrdersService {
           const result = await this.whatsAppService.sendTemplateMessage({
             phone: recipient.phone,
             templateName: 'jeo_factory_notification',
-            bodyValues: [jeo.jeoNumber, jeo.salesOrder.salesOrderNumber, jeo.customer.companyName, priority, link],
+            bodyValues: [jeoDisplayNumber(jeo.jeoNumber), jeo.salesOrder.salesOrderNumber, jeo.customer.companyName, priority, link],
             useCase: 'JEO_FACTORY_NOTIFICATION',
             documentId: jeo.id,
             sentBy: actorName,
@@ -760,10 +803,10 @@ export class JobExecutionOrdersService {
     const pdf = await this.jeoPdfService.render(this.toPdfInput(jeo, actorName));
     return {
       templateKey: 'JEO_NOTIFICATION',
-      fallbackSubject: `New Job Execution Order ${jeo.jeoNumber}`,
+      fallbackSubject: `New Job Execution Order ${jeoDisplayNumber(jeo.jeoNumber)}`,
       fallbackBodyHtml: `<p>A new Job Execution Order {{jeoNumber}} has been generated for Sales Order {{salesOrderNumber}} (Customer: {{customerName}}). Priority: {{priority}}.</p>`,
       vars: {
-        jeoNumber: jeo.jeoNumber,
+        jeoNumber: jeoDisplayNumber(jeo.jeoNumber),
         salesOrderNumber: jeo.salesOrder.salesOrderNumber,
         customerName: jeo.customer.companyName,
         priority: jeo.priority,
@@ -775,7 +818,7 @@ export class JobExecutionOrdersService {
       // other missing-recipient case).
       to: overrides?.to ?? process.env.FACTORY_NOTIFICATION_EMAIL,
       cc: mergeCc(overrides?.cc),
-      attachments: [{ filename: `${jeo.jeoNumber}.pdf`, content: pdf }],
+      attachments: [{ filename: jeoPdfFilename(jeo.jeoNumber), content: pdf }],
       actorName,
       link: { module: 'JEO', jobExecutionOrderId: jeo.id },
     };
@@ -957,31 +1000,62 @@ export class JobExecutionOrdersService {
     return this.findOne(id);
   }
 
-  // State-wise JEO numbering: if the customer's state has a configured
-  // series (Administration -> State Series Codes — e.g. Telangana 4000,
-  // Andhra Pradesh 5000...), the JEO number is just that series' next
-  // plain number ("4001", "5002", ...). States with no configured series
-  // (or a customer with no state set at all) fall back to the original
-  // global JEO-YYYY-NNNNNN scheme unchanged — so nothing breaks for a
-  // state nobody's added a code for yet, and existing historical
-  // JEO-YYYY-NNNNNN numbers are never touched.
-  private async generateJeoNumber(state?: string | null): Promise<string> {
-    if (state) {
-      const claimed = await this.stateSeriesCodesService.claimNextNumber(state);
-      if (claimed !== null) {
-        return String(claimed);
-      }
+  // State-wise JEO numbering, matched to the Sales Order: the state's
+  // series plus the Sales Order's own sequence number, so SO-2026-000004
+  // for a Telangana (4000) customer gets JEO-2026-4004, shown as "4004"
+  // (see common/jeo-number.ts). The year comes from the Sales Order, not
+  // today's date, so a December order generated in January still matches.
+  // A state with no series yet is given the next free one
+  // (StateSeriesCodesService.seriesForState()). Refused, never guessed:
+  // a customer with no state, or a Sales Order sequence beyond what a
+  // series block holds (it would run into the next state's numbers).
+  // Historical JEOs keep their numbers (JEO-YYYY-NNNNNN, or plain "4008").
+  private async generateJeoNumber(salesOrder: {
+    salesOrderNumber: string;
+    customer: { state: string | null };
+  }): Promise<string> {
+    const parsed = SALES_ORDER_NUMBER.exec(salesOrder.salesOrderNumber);
+    if (!parsed) {
+      throw new BadRequestException(
+        `Sales Order ${salesOrder.salesOrderNumber} isn't in the SO-YYYY-NNNNNN format, so a matching JEO number can't be made.`,
+      );
     }
+    const year = Number(parsed[1]);
+    const sequence = Number(parsed[2]);
+    if (!salesOrder.customer.state?.trim()) {
+      throw new BadRequestException(
+        "This customer has no state set. Set the customer's state first — the JEO number comes from the state's series.",
+      );
+    }
+    if (sequence < 1 || sequence >= SERIES_BLOCK_SIZE) {
+      throw new BadRequestException(
+        `Sales Order ${salesOrder.salesOrderNumber} is beyond the ${SERIES_BLOCK_SIZE - 1} numbers each state's JEO series holds, so its JEO number would run into another state's series. Contact the administrator to extend the numbering.`,
+      );
+    }
+    const series = await this.stateSeriesCodesService.seriesForState(salesOrder.customer.state);
+    const number = series.seriesStart + sequence;
+    const base = `JEO-${year}-${number}`;
 
-    const year = new Date().getFullYear();
-    const yearPrefix = `${JEO_NUMBER_PREFIX}${year}-`;
-    const last = await this.prisma.jobExecutionOrder.findFirst({
-      where: { jeoNumber: { startsWith: yearPrefix } },
-      orderBy: { jeoNumber: 'desc' },
+    // Taken already: an earlier JEO for this Sales Order (a new one after
+    // the previous was completed gets -2, -3...), or — this year only — an
+    // older plain-numbered JEO that would look identical on screen.
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const nextYearStart = new Date(Date.UTC(year + 1, 0, 1));
+    const taken = await this.prisma.jobExecutionOrder.findMany({
+      where: {
+        OR: [
+          { jeoNumber: base },
+          { jeoNumber: { startsWith: `${base}-` } },
+          { jeoNumber: String(number), createdAt: { gte: yearStart, lt: nextYearStart } },
+        ],
+      },
       select: { jeoNumber: true },
     });
-    const lastSeq = last ? parseInt(last.jeoNumber.replace(yearPrefix, ''), 10) || 0 : 0;
-    return `${yearPrefix}${String(lastSeq + 1).padStart(JEO_NUMBER_PAD, '0')}`;
+    if (taken.length === 0) return base;
+    const highestSuffix = Math.max(
+      ...taken.map((row) => (row.jeoNumber.startsWith(`${base}-`) ? Number(row.jeoNumber.slice(base.length + 1)) || 1 : 1)),
+    );
+    return `${base}-${highestSuffix + 1}`;
   }
 
   private isJeoNumberConflict(error: unknown): boolean {

@@ -120,4 +120,11 @@ describeDb('migrated database schema', () => {
     expect(fk.rows.map((r) => r.delete_rule)).toEqual(['CASCADE']);
     expect((await columns('QuotationApprovalRequest')).get('requestedByUserId')?.is_nullable).toBe('YES');
   });
+
+  it('records what a quotation approval request is for and the exact prices, existing requests defaulting to ACCEPT', async () => {
+    const r = await columns('QuotationApprovalRequest');
+    expect(r.get('purpose')?.is_nullable).toBe('NO');
+    expect(r.get('purpose')?.column_default).toMatch(/'ACCEPT'/);
+    expect(r.get('pricingKey')?.is_nullable).toBe('YES');
+  });
 });
