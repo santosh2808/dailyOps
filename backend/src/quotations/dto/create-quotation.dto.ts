@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { QuotationStatus, TransportScope } from '@prisma/client';
+import { TransportScope } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -34,10 +34,11 @@ export class CreateQuotationDto {
   @IsUUID()
   leadId?: string;
 
-  @ApiPropertyOptional({ enum: QuotationStatus, default: QuotationStatus.DRAFT })
-  @IsOptional()
-  @IsEnum(QuotationStatus)
-  status?: QuotationStatus;
+  // No `status` here: a new quotation is always DRAFT, and status only ever
+  // changes through the routes that apply the approval rules (status
+  // change, send, approval decisions, the customer's link). Accepting it
+  // here let anyone with Create/Edit set ACCEPTED directly. An unknown
+  // `status` in the body is stripped by the global whitelist pipe.
 
   @ApiPropertyOptional({ type: [QuotationItemInputDto] })
   @IsOptional()

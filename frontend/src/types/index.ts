@@ -912,6 +912,12 @@ export interface QuotationApprovalRequest {
   reason?: string | null;
   discountPercent?: number | null;
   belowMinPrice: boolean;
+  // SEND: approving it lets the quotation be sent; ACCEPT: approving it
+  // accepts the quotation.
+  purpose: "ACCEPT" | "SEND";
+  // The role that may decide it, besides Administrator (always
+  // "Administrator" for a below-minimum price). Sent by the inbox list.
+  requiredApprover?: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   decidedBy?: string | null;
   decidedAt?: string | null;

@@ -48,7 +48,6 @@ export interface QuotationPayload {
   // generateQuotationFromLead() below.
   customerId?: string;
   leadId?: string;
-  status?: QuotationStatus;
   items?: QuotationItemPayload[];
   gstPercent?: number;
   // Additive: real currency amounts feeding into grandTotal. Omit
@@ -100,8 +99,11 @@ export async function generateQuotationFromLead(
   return res.data;
 }
 
+// publicLinkWithdrawn: the quotation was SENT/VIEWED and the new prices
+// need approval, so the customer's link was withdrawn and it is back to
+// READY (QuotationsService.update()).
 export async function updateQuotation(id: string, payload: Partial<QuotationPayload>) {
-  const res = await api.patch<Quotation>(`/api/v1/quotations/${id}`, payload);
+  const res = await api.patch<Quotation & { publicLinkWithdrawn?: boolean }>(`/api/v1/quotations/${id}`, payload);
   return res.data;
 }
 
@@ -195,8 +197,15 @@ export async function openQuotationPdf(id: string) {
   setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-export async function requestQuotationApproval(id: string, reason?: string) {
-  const res = await api.post<QuotationApprovalRequest>(`/api/v1/quotations/${id}/request-approval`, { reason });
+// ACCEPT: approving it accepts the quotation. SEND: approving it lets the
+// quotation be sent to the customer (QuotationsService.requestApproval()).
+export type QuotationApprovalPurpose = "ACCEPT" | "SEND";
+
+export async function requestQuotationApproval(id: string, reason?: string, purpose: QuotationApprovalPurpose = "ACCEPT") {
+  const res = await api.post<QuotationApprovalRequest>(`/api/v1/quotations/${id}/request-approval`, {
+    reason,
+    purpose,
+  });
   return res.data;
 }
 
@@ -208,7 +217,11 @@ export async function listQuotationApprovalRequests(status?: string) {
 }
 
 export async function decideQuotationApproval(requestId: string, approve: boolean, remarks?: string) {
-  const res = await api.patch<UpdateQuotationStatusResult & { status: string }>(
+  const res = await api.patch<{
+    status: "APPROVED" | "REJECTED";
+    purpose?: QuotationApprovalPurpose;
+    quotation?: Quotation | null;
+  }>(
     `/api/v1/quotations/approval-requests/${requestId}/decide`,
     { approve, remarks },
   );

@@ -95,8 +95,8 @@ export class QuotationsController {
 
   @Patch(':id')
   @RequirePermission('Quotation', 'Edit')
-  update(@Param('id') id: string, @Body() dto: UpdateQuotationDto) {
-    return this.quotationsService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateQuotationDto, @Req() req: any) {
+    return this.quotationsService.update(id, dto, actorFrom(req));
   }
 
   // Status transitions (including moving a quotation to ACCEPTED) are

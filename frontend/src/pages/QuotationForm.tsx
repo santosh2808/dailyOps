@@ -461,8 +461,14 @@ export default function QuotationForm() {
     setSubmitting(true);
     try {
       if (isEdit && id) {
-        await updateQuotation(id, payload);
-        toast.success("Quotation updated successfully.");
+        const updated = await updateQuotation(id, payload);
+        if (updated.publicLinkWithdrawn) {
+          toast.info(
+            "Quotation updated. The new prices need approval, so the customer's link was withdrawn — request approval, then send it again.",
+          );
+        } else {
+          toast.success("Quotation updated successfully.");
+        }
         navigate(`/quotations/${id}`);
       } else {
         const created = await createQuotation(payload);
@@ -566,7 +572,8 @@ export default function QuotationForm() {
                       })}`
                     : ""}
                   {existingSentInfo.status === "VIEWED" ? " and has already viewed it" : ""}. Changes you save here
-                  won't reach the customer's copy until you resend the quotation.
+                  won't reach the customer's copy until you resend the quotation. If the new prices need
+                  approval, saving withdraws the customer's link until they're approved and resent.
                 </div>
               )}
               <Card>

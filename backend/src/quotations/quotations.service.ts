@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, HangingStructureType, TransportScope } from '@prisma/client';
+import { Prisma, HangingStructureType, QuotationStatus, TransportScope } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
@@ -42,6 +42,26 @@ export interface QuotationActor {
   name?: string;
   roles?: string[];
 }
+
+// The structured 400 body returned when the Approval Matrix / minimum price
+// blocks accepting or sending (see approvalBlock()); the frontend shows it
+// with "Request Approval".
+type QuotationApprovalBlock =
+  | {
+      code: 'PRICE_BELOW_MINIMUM';
+      message: string;
+      items: {
+        productId: string;
+        productName: string;
+        enteredPrice: number;
+        minimumPrice: number | null;
+        difference: number;
+      }[];
+    }
+  | { code: 'APPROVAL_REQUIRED'; message: string; discountPercent: number; requiredRole: string };
+
+// Statuses in which the customer's public link can still be accepted.
+const LIVE_LINK_STATUSES: QuotationStatus[] = ['SENT', 'VIEWED'];
 
 // Techno-Commercial Offer PDF template: switched quotation numbering to
 // match the customer-supplied reference format "SR|SPYRO|QTN|<seq>|<year>"
@@ -439,7 +459,6 @@ export class QuotationsService {
             quotationNumber,
             customerId: dto.customerId,
             leadId: dto.leadId,
-            status: dto.status,
             subtotal: totals.subtotal,
             gstPercent: totals.gstPercent,
             installationCharge: totals.installationCharge,
@@ -485,7 +504,7 @@ export class QuotationsService {
     throw new Error('Failed to generate a unique quotation number');
   }
 
-  async update(id: string, dto: UpdateQuotationDto) {
+  async update(id: string, dto: UpdateQuotationDto, actor: QuotationActor = {}) {
     const existing = await this.findOne(id);
 
     // Bug fix: once a quotation is ACCEPTED, it can no longer be edited.
@@ -548,16 +567,15 @@ export class QuotationsService {
         )
       : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const { quotation, linkWithdrawn } = await this.prisma.$transaction(async (tx) => {
       if (dto.items) {
         await tx.quotationItem.deleteMany({ where: { quotationId: id } });
       }
 
-      return tx.quotation.update({
+      const updated = await tx.quotation.update({
         where: { id },
         data: {
           customerId: dto.customerId,
-          status: dto.status,
           validUntil:
             dto.validUntil !== undefined
               ? dto.validUntil
@@ -587,7 +605,42 @@ export class QuotationsService {
         },
         include: QUOTATION_DETAIL_INCLUDE,
       });
+
+      // The customer's link must never offer prices that still need
+      // approval: re-pricing a quotation they can currently accept, beyond
+      // what the editor may set themselves (or an approval already
+      // covers), withdraws the link — back to READY, to be approved and
+      // sent again. Same rule as sendQuotation().
+      if (
+        totals &&
+        updated.publicToken &&
+        LIVE_LINK_STATUSES.includes(existing.status) &&
+        (await this.pricingNeedsApproval(updated, actor.roles ?? [], tx))
+      ) {
+        const withdrawn = await tx.quotation.update({
+          where: { id },
+          data: { status: 'READY', publicToken: null, tokenExpiresAt: null },
+          include: QUOTATION_DETAIL_INCLUDE,
+        });
+        return { quotation: withdrawn, linkWithdrawn: true };
+      }
+      return { quotation: updated, linkWithdrawn: false };
     });
+
+    if (!linkWithdrawn) {
+      return quotation;
+    }
+    await this.auditLogService
+      .record({
+        module: 'Quotation',
+        recordId: id,
+        action: 'Status Changed',
+        actorName: actor.name,
+        oldValue: { status: existing.status },
+        newValue: { status: 'READY', publicLinkInvalidated: true, reason: 'Prices changed and need approval' },
+      })
+      .catch((error) => this.logger.error('AuditLog record failed', error));
+    return { ...quotation, publicLinkWithdrawn: true };
   }
 
   // Required Workflow: Lead -> Quotation -> Quotation Approved -> Convert
@@ -655,7 +708,7 @@ export class QuotationsService {
       // DailyOps now matches that: Convert to Customer only becomes
       // necessary later, at Create Sales Order time.
       await this.assertCanAccept(existing, actor.roles ?? []);
-      const { quotation, salesOrder } = await this.performAccept(id, actor.name);
+      const { quotation, salesOrder } = await this.performAccept(id, actor.name, existing.status);
       return { ...quotation, salesOrder };
     }
 
@@ -733,15 +786,33 @@ export class QuotationsService {
     quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
     actorRoles: string[],
   ) {
+    const block = await this.approvalBlock(quotation, actorRoles);
+    if (block) {
+      throw new BadRequestException(block);
+    }
+  }
+
+  // Why `actorRoles` may not accept (or, `forSending`, send) this
+  // quotation's pricing themselves — the structured 400 body the frontend
+  // shows with "Request Approval" — or null if they may. Sending differs
+  // only in that the Approval Matrix's base bracket (the one a 0% discount
+  // falls in — "Sales Executive" in the seeded matrix) needs no approval:
+  // that's ordinary list pricing, and every role that sends quotations
+  // must be able to send it.
+  private async approvalBlock(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+    actorRoles: string[],
+    { forSending = false }: { forSending?: boolean } = {},
+  ): Promise<QuotationApprovalBlock | null> {
     if (actorRoles.includes('Administrator')) {
-      return;
+      return null;
     }
 
     const belowMinItems = quotation.items.filter(
       (item) => item.product.minPrice != null && item.unitPrice < item.product.minPrice,
     );
     if (belowMinItems.length > 0) {
-      throw new BadRequestException({
+      return {
         code: 'PRICE_BELOW_MINIMUM',
         message:
           'One or more items are priced below the minimum allowed price. Update the price or submit an approval request.',
@@ -752,19 +823,82 @@ export class QuotationsService {
           minimumPrice: item.product.minPrice,
           difference: Math.round(((item.product.minPrice ?? 0) - item.unitPrice) * 100) / 100,
         })),
-      });
+      };
     }
 
     const discountPercent = this.computeDiscountPercent(quotation);
     const requiredRole = await this.approvalMatrixService.resolveRequiredRole('Quotation', discountPercent);
-    if (requiredRole && !actorRoles.includes(requiredRole.name)) {
-      throw new BadRequestException({
-        code: 'APPROVAL_REQUIRED',
-        message: `This quotation's discount (${discountPercent.toFixed(1)}%) requires approval from ${requiredRole.name}.`,
-        discountPercent,
-        requiredRole: requiredRole.name,
-      });
+    if (!requiredRole || actorRoles.includes(requiredRole.name)) {
+      return null;
     }
+    if (forSending) {
+      const baseRole = await this.approvalMatrixService.resolveRequiredRole('Quotation', 0);
+      if (baseRole?.name === requiredRole.name) {
+        return null;
+      }
+    }
+    return {
+      code: 'APPROVAL_REQUIRED',
+      message: `This quotation's discount (${discountPercent.toFixed(1)}%) requires approval from ${requiredRole.name}.`,
+      discountPercent,
+      requiredRole: requiredRole.name,
+    };
+  }
+
+  // Sending (and keeping a sent link live) needs the pricing to be within
+  // what the sender may set, or covered by an approval of these exact
+  // prices — otherwise the customer's own acceptance would bypass the
+  // Approval Matrix entirely.
+  private async pricingNeedsApproval(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+    actorRoles: string[],
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    if (!(await this.approvalBlock(quotation, actorRoles, { forSending: true }))) {
+      return false;
+    }
+    return !(await this.hasApprovalFor(quotation, client));
+  }
+
+  private async hasApprovalFor(
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    const approved = await client.quotationApprovalRequest.findFirst({
+      where: { quotationId: quotation.id, status: 'APPROVED', pricingKey: this.pricingKey(quotation) },
+      select: { id: true },
+    });
+    return approved !== null;
+  }
+
+  // The prices an approval is for: every item's unit price and the flat
+  // discount. Any change makes it a different key, so an approval never
+  // carries over to prices nobody approved.
+  private pricingKey(quotation: {
+    items: { productId: string; unitPrice: number }[];
+    discount: number;
+  }): string {
+    const items = quotation.items.map((item) => `${item.productId}:${item.unitPrice}`).sort();
+    return `${items.join(',')}|discount:${quotation.discount}`;
+  }
+
+  // Whether the quotation's prices are no longer the ones an approval
+  // request was raised for. Requests from before pricingKey existed are
+  // compared by what they recorded: the discount % and below-minimum flag.
+  private pricingChangedSince(
+    request: { pricingKey: string | null; discountPercent: number | null; belowMinPrice: boolean },
+    quotation: Prisma.QuotationGetPayload<{ include: typeof QUOTATION_DETAIL_INCLUDE }>,
+  ): boolean {
+    if (request.pricingKey) {
+      return request.pricingKey !== this.pricingKey(quotation);
+    }
+    const belowMin = quotation.items.some(
+      (item) => item.product.minPrice != null && item.unitPrice < item.product.minPrice,
+    );
+    return (
+      this.computeDiscountPercent(quotation) > (request.discountPercent ?? 0) + 1e-6 ||
+      (belowMin && !request.belowMinPrice)
+    );
   }
 
   // Highest per-item discount % against that item's own product
@@ -800,13 +934,18 @@ export class QuotationsService {
   // eventual decision reflects the pricing that was actually requested even
   // if the quotation's items are edited afterwards.
   async requestApproval(id: string, dto: RequestQuotationApprovalDto, actor: QuotationActor = {}) {
+    const purpose = dto.purpose ?? 'ACCEPT';
     const quotation = await this.findOne(id);
-
-    const existingPending = await this.prisma.quotationApprovalRequest.findFirst({
-      where: { quotationId: id, status: 'PENDING' },
-    });
-    if (existingPending) {
-      throw new ConflictException('An approval request is already pending for this quotation');
+    if (quotation.status === 'ACCEPTED') {
+      throw new BadRequestException('This quotation has already been accepted — there is nothing left to approve.');
+    }
+    if (purpose === 'SEND') {
+      if (quotation.status === 'EXPIRED') {
+        throw new BadRequestException('An expired quotation cannot be sent.');
+      }
+      if (!(await this.pricingNeedsApproval(quotation, actor.roles ?? []))) {
+        throw new BadRequestException('This quotation can already be sent — no approval is needed.');
+      }
     }
 
     const belowMinPrice = quotation.items.some(
@@ -814,15 +953,29 @@ export class QuotationsService {
     );
     const discountPercent = this.computeDiscountPercent(quotation);
 
-    const request = await this.prisma.quotationApprovalRequest.create({
-      data: {
-        quotationId: id,
-        requestedBy: actor.name,
-        requestedByUserId: actor.id,
-        reason: dto.reason,
-        discountPercent,
-        belowMinPrice,
-      },
+    // Locking the quotation row makes the "already pending" check and the
+    // insert one step — two quick clicks can't both create a request.
+    const request = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Quotation" WHERE id = ${id} FOR UPDATE`;
+      const existingPending = await tx.quotationApprovalRequest.findFirst({
+        where: { quotationId: id, status: 'PENDING' },
+        select: { id: true },
+      });
+      if (existingPending) {
+        throw new ConflictException('An approval request is already pending for this quotation');
+      }
+      return tx.quotationApprovalRequest.create({
+        data: {
+          quotationId: id,
+          requestedBy: actor.name,
+          requestedByUserId: actor.id,
+          reason: dto.reason,
+          discountPercent,
+          belowMinPrice,
+          purpose,
+          pricingKey: this.pricingKey(quotation),
+        },
+      });
     });
 
     await this.auditLogService
@@ -831,7 +984,7 @@ export class QuotationsService {
         recordId: id,
         action: 'Approval Requested',
         actorName: actor.name,
-        newValue: { discountPercent, belowMinPrice, reason: dto.reason },
+        newValue: { discountPercent, belowMinPrice, reason: dto.reason, purpose },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
 
@@ -843,7 +996,7 @@ export class QuotationsService {
       {
         type: 'QUOTATION_APPROVAL_REQUESTED',
         title: `Approval requested for ${quotation.quotationNumber}`,
-        body: `${actor.name ?? 'A user'} asked for approval${dto.reason ? `: ${dto.reason}` : '.'}`,
+        body: `${actor.name ?? 'A user'} asked for approval${purpose === 'SEND' ? ' to send it' : ''}${dto.reason ? `: ${dto.reason}` : '.'}`,
         link: '/quotations/approvals',
       },
       actor.id,
@@ -862,18 +1015,39 @@ export class QuotationsService {
     return request;
   }
 
-  listApprovalRequests(status?: string) {
-    return this.prisma.quotationApprovalRequest.findMany({
+  // Each request carries `requiredApprover` — the role that may decide it
+  // (besides Administrator), as decideApprovalRequest() checks — so the
+  // inbox can disable Approve/Reject for anyone else instead of letting
+  // them try and fail. Resolved once per distinct discount/below-minimum
+  // combination, not once per row.
+  async listApprovalRequests(status?: string) {
+    const requests = await this.prisma.quotationApprovalRequest.findMany({
       where: status ? { status } : undefined,
       include: { quotation: { include: QUOTATION_DETAIL_INCLUDE } },
       orderBy: { requestedAt: 'desc' },
     });
+    const resolved = new Map<string, Promise<string>>();
+    return Promise.all(
+      requests.map(async (request) => {
+        const key = `${request.belowMinPrice}|${request.discountPercent ?? 0}`;
+        if (!resolved.has(key)) {
+          resolved.set(key, this.resolveRequiredApproverName(request));
+        }
+        return { ...request, requiredApprover: await resolved.get(key)! };
+      }),
+    );
   }
 
   // Deciding a request is the ONLY path past assertCanAccept()'s block
-  // besides fixing the price. Approving performs the ACCEPTED transition
-  // (and its full cascade) directly — the requester never has to separately
-  // click "Approve" again afterwards.
+  // besides fixing the price. Approving an ACCEPT request performs the
+  // ACCEPTED transition directly — the requester never has to separately
+  // click "Approve" again afterwards; approving a SEND request only
+  // approves the pricing, which sendQuotation() then honours. Approval is
+  // refused if the prices changed after the request (it would otherwise
+  // approve prices nobody asked about). The claim and the acceptance
+  // happen in one transaction under the quotation's row lock, so two
+  // approvers deciding at once can't both succeed, and a failed acceptance
+  // leaves the request PENDING.
   async decideApprovalRequest(
     requestId: string,
     dto: DecideQuotationApprovalDto,
@@ -894,19 +1068,60 @@ export class QuotationsService {
       const requiredRoleName = await this.resolveRequiredApproverName(request);
       if (!(actor.roles ?? []).includes(requiredRoleName)) {
         throw new ForbiddenException(
-          `Only ${requiredRoleName} or Administrator can decide this approval request`,
+          requiredRoleName === 'Administrator'
+            ? 'Only an Administrator can decide this approval request'
+            : `Only ${requiredRoleName} or Administrator can decide this approval request`,
         );
       }
     }
 
-    await this.prisma.quotationApprovalRequest.update({
-      where: { id: requestId },
-      data: {
-        status: dto.approve ? 'APPROVED' : 'REJECTED',
-        decidedBy: actor.name,
-        decidedAt: new Date(),
-        decisionRemarks: dto.remarks,
-      },
+    const { accepted, previousStatus } = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Quotation" WHERE id = ${request.quotationId} FOR UPDATE`;
+      let current: { status: QuotationStatus } | null = null;
+      if (dto.approve) {
+        const quotation = await tx.quotation.findUnique({
+          where: { id: request.quotationId },
+          include: QUOTATION_DETAIL_INCLUDE,
+        });
+        if (!quotation) {
+          throw new NotFoundException('Quotation not found');
+        }
+        if (quotation.status === 'ACCEPTED') {
+          throw new ConflictException('This quotation has already been accepted. Reject this request instead.');
+        }
+        if (request.purpose === 'SEND' && quotation.status === 'EXPIRED') {
+          throw new BadRequestException('This quotation has expired and cannot be sent. Reject this request instead.');
+        }
+        if (this.pricingChangedSince(request, quotation)) {
+          throw new ConflictException(
+            "This quotation's prices have changed since approval was requested. Reject this request — the requester can ask again for the current prices.",
+          );
+        }
+        current = quotation;
+      }
+
+      const claimed = await tx.quotationApprovalRequest.updateMany({
+        where: { id: requestId, status: 'PENDING' },
+        data: {
+          status: dto.approve ? 'APPROVED' : 'REJECTED',
+          decidedBy: actor.name,
+          decidedAt: new Date(),
+          decisionRemarks: dto.remarks,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('This approval request has already been decided');
+      }
+
+      if (!dto.approve || request.purpose !== 'ACCEPT') {
+        return { accepted: null, previousStatus: null };
+      }
+      const acceptedQuotation = await tx.quotation.update({
+        where: { id: request.quotationId },
+        data: { status: 'ACCEPTED' },
+        include: QUOTATION_DETAIL_INCLUDE,
+      });
+      return { accepted: acceptedQuotation, previousStatus: current?.status ?? null };
     });
 
     await this.auditLogService
@@ -948,9 +1163,16 @@ export class QuotationsService {
       return { status: 'REJECTED' as const };
     }
 
-    const { quotation, salesOrder } = await this.performAccept(request.quotationId, actor.name);
+    if (accepted) {
+      await this.recordAccepted(request.quotationId, actor.name, previousStatus);
+    }
     await notifyRequester();
-    return { status: 'APPROVED' as const, quotation, salesOrder };
+    return {
+      status: 'APPROVED' as const,
+      purpose: request.purpose,
+      quotation: accepted,
+      salesOrder: null as { id: string; salesOrderNumber: string } | null,
+    };
   }
 
   // QA bug-fix pass (TC-088): this used to also automatically create a
@@ -968,24 +1190,29 @@ export class QuotationsService {
   // by both updateStatus() (the normal self-approval path) and
   // decideApprovalRequest() (the escalated path) so there is exactly one
   // place the ACCEPTED transition itself happens.
-  private async performAccept(quotationId: string, actorName?: string) {
+  private async performAccept(quotationId: string, actorName?: string, previousStatus?: QuotationStatus) {
     const quotation = await this.prisma.quotation.update({
       where: { id: quotationId },
       data: { status: 'ACCEPTED' },
       include: QUOTATION_DETAIL_INCLUDE,
     });
 
+    await this.recordAccepted(quotationId, actorName, previousStatus ?? null);
+
+    return { quotation, salesOrder: null as { id: string; salesOrderNumber: string } | null };
+  }
+
+  private async recordAccepted(quotationId: string, actorName: string | undefined, previousStatus: QuotationStatus | null) {
     await this.auditLogService
       .record({
         module: 'Quotation',
         recordId: quotationId,
         action: 'Status Changed',
         actorName,
+        ...(previousStatus ? { oldValue: { status: previousStatus } } : {}),
         newValue: { status: 'ACCEPTED' },
       })
       .catch((error) => this.logger.error('AuditLog record failed', error));
-
-    return { quotation, salesOrder: null as { id: string; salesOrderNumber: string } | null };
   }
 
   // Send Quotation (requirement #6): generates the PDF, sends the email
@@ -1006,6 +1233,15 @@ export class QuotationsService {
     const quotation = await this.findOne(id);
     if (['ACCEPTED', 'EXPIRED'].includes(quotation.status)) {
       throw new BadRequestException(`A quotation with status ${quotation.status} cannot be sent`);
+    }
+    // The customer's acceptance through the link needs no further internal
+    // approval, so the pricing must be approved before it goes out: within
+    // what the sender may set (approvalBlock(), sending rules), or covered
+    // by an approval of these exact prices. Same structured 400 as
+    // accepting, so the dialog can offer "Request Approval".
+    if (await this.pricingNeedsApproval(quotation, actor.roles ?? [])) {
+      const block = (await this.approvalBlock(quotation, actor.roles ?? [], { forSending: true }))!;
+      throw new BadRequestException({ ...block, message: `${block.message} Request approval before sending it.` });
     }
 
     // Lead-sourced quotations (customer null, leadId set) have no

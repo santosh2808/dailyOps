@@ -184,6 +184,12 @@ describe('Quotation approval notifications', () => {
   function make(request: Record<string, unknown> = {}) {
     const notifications = { notifyUsers: jest.fn(), notifyPermissionHolders: jest.fn() };
     const prisma: any = {
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      quotation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'q1', status: 'SENT', discount: 0, items: [] }),
+        update: jest.fn().mockResolvedValue({ id: 'q1', status: 'ACCEPTED' }),
+      },
       quotationApprovalRequest: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'r1' }),
@@ -191,11 +197,13 @@ describe('Quotation approval notifications', () => {
           id: 'r1',
           quotationId: 'q1',
           status: 'PENDING',
+          purpose: 'ACCEPT',
+          pricingKey: '|discount:0',
           requestedByUserId: 'u-exec',
           quotation: { quotationNumber: 'Q-7' },
           ...request,
         }),
-        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -250,17 +258,16 @@ describe('Quotation approval notifications', () => {
   });
 
   it('an approval notifies the requester only after the quotation is accepted', async () => {
-    const { svc, notifications } = make();
-    const accept = jest.spyOn(svc, 'performAccept').mockResolvedValue({ quotation: {}, salesOrder: null });
+    const { svc, prisma, notifications } = make();
     await svc.decideApprovalRequest('r1', { approve: true }, approver);
-    expect(accept).toHaveBeenCalled();
+    expect(prisma.quotation.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'ACCEPTED' } }));
     expect(notifications.notifyUsers.mock.calls[0][1]).toMatchObject({
       type: 'QUOTATION_APPROVAL_APPROVED',
       title: 'Approval for Q-7 granted',
     });
 
     notifications.notifyUsers.mockClear();
-    accept.mockRejectedValue(new Error('accept failed'));
+    prisma.quotation.update.mockRejectedValue(new Error('accept failed'));
     await expect(svc.decideApprovalRequest('r1', { approve: true }, approver)).rejects.toThrow('accept failed');
     expect(notifications.notifyUsers).not.toHaveBeenCalled();
   });

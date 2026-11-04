@@ -382,6 +382,24 @@ export default function QuotationDetails() {
                     <strong>Resend the quotation</strong> to update what the customer sees.
                   </div>
                 )}
+              {/* Same situation once the customer's link has been withdrawn
+                  — e.g. re-pricing a sent quotation to prices that need
+                  approval moves it back to READY (QuotationsService.update()).
+                  The customer still has the old email but can no longer
+                  accept it, so say that and what to do next. */}
+              {(quotation.status === "READY" || quotation.status === "DRAFT") &&
+                quotation.sentAt &&
+                !quotation.publicToken && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    ⚠ This quotation was sent earlier, but its customer link has been withdrawn — the
+                    customer can no longer accept the copy they received
+                    {quotation.sentSnapshot && quotation.sentSnapshot.grandTotal !== quotation.grandTotal
+                      ? ` (${formatCurrency(quotation.sentSnapshot.grandTotal)}; the current total is ${formatCurrency(quotation.grandTotal)})`
+                      : ""}
+                    . <strong>Send the quotation again</strong> to give them the current version — if
+                    the prices need approval, Send will ask you to request it first.
+                  </div>
+                )}
 
               {/* Lead Management Phase 1 (requirement #12), extended by the
                   Customer Quotation Acceptance workflow (requirement #15) —
