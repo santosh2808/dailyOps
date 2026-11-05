@@ -405,7 +405,7 @@ function GlobalFiltersBar({ filters, onChange, executiveOptions, productOptions,
           <Select
             value={filters.year ?? ""}
             onChange={(e) => onChange({ ...filters, year: e.target.value ? Number(e.target.value) : undefined })}
-            className="w-24"
+            className="w-32"
           >
             <option value="">All Years</option>
             {yearOptions(currentYear).map((y) => (
