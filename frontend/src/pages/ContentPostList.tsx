@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ExternalLink, ImageOff, Pencil, Plus, RefreshCw, Star } from "lucide-react";
+import { ExternalLink, ImageOff, Pencil, Plus, Star } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -151,9 +151,6 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <ContentFiltersBar type={type} websites={websites} filters={filters} onChange={setFilters} />
             <div className="app-page-actions flex shrink-0 flex-wrap gap-2">
-              <Button variant="outline" size="icon" title="Refresh list" aria-label="Refresh list" onClick={fetchPosts} disabled={loading}>
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              </Button>
               {hasPermission("Content", "Create") && (
                 <Button onClick={() => navigate(newPostUrl)}>
                   <Plus className="mr-2 h-4 w-4" />
