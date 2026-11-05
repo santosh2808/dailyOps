@@ -19,7 +19,12 @@ import TaxInvoiceFiltersBar, {
 } from "@/components/tax-invoices/TaxInvoiceFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
-import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
+import {
+  MobileRecordList,
+  RecordSortSelect,
+  ResponsiveRecords,
+  type RecordSort,
+} from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listTaxInvoices } from "@/api/tax-invoices";
@@ -138,6 +143,22 @@ export default function TaxInvoiceList() {
     );
   }
 
+  // Phones: the cards' sort dropdown sits beside the Filters button
+  // (one row) instead of above the cards.
+  const mobileSort: RecordSort = {
+    options: [
+      { value: "invoiceNumber", label: "Invoice Number" },
+      { value: "grandTotal", label: "Grand Total" },
+      { value: "invoiceDate", label: "Invoice Date" },
+    ],
+    by: sortBy,
+    order: sortOrder,
+    onChange: (by, order) => {
+      setSortBy(by as SortableColumn);
+      setSortOrder(order);
+    },
+  };
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -145,7 +166,11 @@ export default function TaxInvoiceList() {
         <Topbar title="Tax Invoices" />
         <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
-            <TaxInvoiceFiltersBar filters={filters} onChange={setFilters} />
+            <TaxInvoiceFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={<RecordSortSelect sort={mobileSort} />}
+            />
           </div>
 
           <p className="mb-3 text-xs text-muted-foreground">
@@ -262,19 +287,6 @@ export default function TaxInvoiceList() {
                 loading={loading}
                 loadingText="Loading tax invoices..."
                 emptyText="No tax invoices found."
-                sort={{
-                  options: [
-                    { value: "invoiceNumber", label: "Invoice Number" },
-                    { value: "grandTotal", label: "Grand Total" },
-                    { value: "invoiceDate", label: "Invoice Date" },
-                  ],
-                  by: sortBy,
-                  order: sortOrder,
-                  onChange: (by, order) => {
-                    setSortBy(by as SortableColumn);
-                    setSortOrder(order);
-                  },
-                }}
               />
             }
           />
