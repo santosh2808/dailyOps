@@ -20,9 +20,11 @@ import ComplaintFiltersBar, {
 import DeleteComplaintConfirmDialog from "@/components/complaints/DeleteComplaintConfirmDialog";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -278,7 +280,7 @@ export default function ComplaintList() {
         {complaint.source.replace(/_/g, " ")}
       </Badge>
     );
-    return { invoiceDisplay, originText, warrantyBadge, sourceBadge };
+    return { invoiceDisplay, originText, customerName, warrantyBadge, sourceBadge };
   }
 
   // Row actions, shared by the table's Actions cell and the mobile card.
@@ -308,6 +310,21 @@ export default function ComplaintList() {
     );
   }
 
+  const pageActions = (
+    <>
+      <Button variant="outline" onClick={handleExport} disabled={exporting}>
+        {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
+        {exporting ? "Exporting..." : "Export Excel"}
+      </Button>
+      {hasPermission("Complaint", "Create") && (
+        <Button onClick={() => navigate("/complaints/new")}>
+          <Plus className="mr-2 h-4 w-4" />
+          Log Complaint
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -323,19 +340,33 @@ export default function ComplaintList() {
           {/* QA fix ("There is overlap on screen in complete app") — see
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <ComplaintFiltersBar filters={filters} onChange={setFilters} />
-            <div className="app-page-actions flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleExport} disabled={exporting}>
-                {exporting ? <Spinner className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
-                {exporting ? "Exporting..." : "Export Excel"}
-              </Button>
-              {hasPermission("Complaint", "Create") && (
-                <Button onClick={() => navigate("/complaints/new")}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Log Complaint
-                </Button>
-              )}
-            </div>
+            {/* md+: the buttons sit on the right of the search row (like
+                Materials); phones: Log Complaint + ⋮ (Export Excel) in the
+                Filters row, same as Leads. */}
+            <ComplaintFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              actions={pageActions}
+              mobileActions={
+                <MobileActionBar
+                  layout="inline"
+                  primary={
+                    hasPermission("Complaint", "Create")
+                      ? { label: "Log Complaint", shortLabel: "Log", icon: Plus, onSelect: () => navigate("/complaints/new") }
+                      : null
+                  }
+                  more={[
+                    {
+                      label: exporting ? "Exporting..." : "Export Excel",
+                      icon: Download,
+                      onSelect: handleExport,
+                      disabled: exporting,
+                      busy: exporting,
+                    },
+                  ]}
+                />
+              }
+            />
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
@@ -387,6 +418,10 @@ export default function ComplaintList() {
                         one combined "Origin" column — a Source badge stacked
                         above the sales order + customer (or reporter) text. */}
                     <TableHead className="hidden md:table-cell">Origin</TableHead>
+                    {/* md+: the customer (or caller) shown in its own column
+                        instead of under the Origin badge; phone cards keep the
+                        combined Origin field. */}
+                    <TableHead className="hidden md:table-cell">Customer / Caller</TableHead>
                     <TableHead className="hidden lg:table-cell">Invoice / Warranty</TableHead>
                     {/* Bug fix (TC-059): who/which department this complaint is
                         assigned to, and how long it's been open/took to resolve. */}
@@ -409,7 +444,7 @@ export default function ComplaintList() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
                           <Spinner /> Loading complaints...
                         </span>
@@ -417,13 +452,13 @@ export default function ComplaintList() {
                     </TableRow>
                   ) : complaints.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                         No complaints found. Click "Log Complaint" to create one.
                       </TableCell>
                     </TableRow>
                   ) : (
                     complaints.map((complaint) => {
-                      const { invoiceDisplay, originText, warrantyBadge, sourceBadge } =
+                      const { invoiceDisplay, customerName, warrantyBadge, sourceBadge } =
                         complaintRowDisplay(complaint);
                       return (
                         <TableRow
@@ -447,10 +482,11 @@ export default function ComplaintList() {
                           <TableCell className="hidden md:table-cell">
                             <div className="space-y-1">
                               {sourceBadge}
-                              <div>
-                                <TruncatedText text={originText} />
-                              </div>
+                              {complaint.salesOrder && <div>{complaint.salesOrder.salesOrderNumber}</div>}
                             </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <TruncatedText text={customerName} />
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             <div className="space-y-1">
@@ -547,8 +583,8 @@ export default function ComplaintList() {
               {/* Bug fix (TC-061): page-size selector — resets to page 1 on change. */}
               <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
                 Rows per page
-                <select
-                  className="flex h-8 rounded-md border border-input bg-background px-2 text-sm"
+                <Select
+                  className="h-8 w-auto py-0 pl-2"
                   value={pageSize}
                   onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 >
@@ -557,7 +593,7 @@ export default function ComplaintList() {
                       {size}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <Button
                 variant="outline"

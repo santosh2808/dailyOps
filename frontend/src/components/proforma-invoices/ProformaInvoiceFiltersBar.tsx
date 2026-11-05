@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -15,6 +16,8 @@ export interface ProformaInvoiceFilters {
 interface ProformaInvoiceFiltersBarProps {
   filters: ProformaInvoiceFilters;
   onChange: (filters: ProformaInvoiceFilters) => void;
+  // Phone-only control shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyProformaInvoiceFilters: ProformaInvoiceFilters = {
@@ -24,7 +27,7 @@ export const emptyProformaInvoiceFilters: ProformaInvoiceFilters = {
   dateTo: "",
 };
 
-export default function ProformaInvoiceFiltersBar({ filters, onChange }: ProformaInvoiceFiltersBarProps) {
+export default function ProformaInvoiceFiltersBar({ filters, onChange, mobileActions }: ProformaInvoiceFiltersBarProps) {
   // A from/to date pair counts as one filter.
   const activeFilterCount = [
     filters.status,
@@ -49,6 +52,7 @@ export default function ProformaInvoiceFiltersBar({ filters, onChange }: Proform
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyProformaInvoiceFilters, search: filters.search })}
       >
         <Select

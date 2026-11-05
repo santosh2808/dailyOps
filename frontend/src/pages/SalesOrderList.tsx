@@ -29,6 +29,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { deleteSalesOrder, listSalesOrders } from "@/api/sales-orders";
 import type { SalesOrder, SalesOrderStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 const PAGE_SIZE = 20;
 
@@ -457,7 +458,7 @@ export default function SalesOrderList() {
                           <TruncatedText text={salesOrder.customer?.companyName ?? "—"} />
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">{salesOrder.quotation?.quotationNumber ?? "—"}</TableCell>
-                        <TableCell className="hidden xl:table-cell">{salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—"}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{salesOrder.jobExecutionOrders?.[0] ? jeoDisplayNumber(salesOrder.jobExecutionOrders[0].jeoNumber) : "—"}</TableCell>
                         <TableCell className="hidden lg:table-cell">{salesOrder.createdBy ?? "—"}</TableCell>
                         <TableCell>
                           <SalesOrderStatusBadge status={salesOrder.status} />
@@ -486,7 +487,7 @@ export default function SalesOrderList() {
                 fields={[
                   { label: "Customer", render: (salesOrder) => salesOrder.customer?.companyName ?? "—" },
                   { label: "Quotation", render: (salesOrder) => salesOrder.quotation?.quotationNumber ?? "—" },
-                  { label: "JEO", render: (salesOrder) => salesOrder.jobExecutionOrders?.[0]?.jeoNumber ?? "—" },
+                  { label: "JEO", render: (salesOrder) => (salesOrder.jobExecutionOrders?.[0] ? jeoDisplayNumber(salesOrder.jobExecutionOrders[0].jeoNumber) : "—") },
                   { label: "Sales Executive", render: (salesOrder) => salesOrder.createdBy ?? "—" },
                   { label: "Grand Total", render: (salesOrder) => formatCurrency(salesOrder.grandTotal) },
                   { label: "Delivery Date", render: (salesOrder) => formatDate(salesOrder.deliveryDate) },

@@ -58,6 +58,9 @@ model User {
   // Content posts
   authoredContentPosts ContentPost[] @relation("ContentPostAuthor")
   updatedContentPosts  ContentPost[] @relation("ContentPostUpdatedBy")
+
+  // In-app notifications (the Topbar bell) addressed to this user.
+  notifications Notification[]
 }
 
 // Enterprise RBAC — additive models only; nothing above this comment was
@@ -2103,15 +2106,15 @@ model ProductionChecklist {
   completedAt         DateTime?
 }
 
-// Additive: State-wise JEO numbering. Each Indian state can have its own
-// numbering series (e.g. Telangana JEOs numbered 4000, 4001, 4002...,
-// Andhra Pradesh JEOs numbered 5000, 5001...) instead of the original
-// global JEO-YYYY-NNNNNN scheme. Configured by an Administrator via
-// Administration -> State Series Codes (StateSeriesCodesModule) — states
-// with no row here simply keep using the original JEO-YYYY-NNNNNN scheme
-// (see JobExecutionOrdersService.generateJeoNumber()), so nothing breaks
-// for a state nobody's configured a series for yet, and more states can be
-// added later without a code change.
+// Additive: State-wise JEO numbering. Each Indian state has its own
+// numbering series (e.g. Telangana 4000, Andhra Pradesh 5000), and a JEO's
+// number is its state's seriesStart plus its Sales Order's sequence
+// (Telangana + SO-2026-000004 → JEO-2026-4004, shown as 4004 — see
+// JobExecutionOrdersService.generateJeoNumber()). Configured by an
+// Administrator via Administration -> State Series Codes
+// (StateSeriesCodesModule); a state with no row yet is given the next
+// free series automatically by its first JEO
+// (StateSeriesCodesService.seriesForState()).
 model StateSeriesCode {
   id          String   @id @default(uuid())
   // One of INDIA_STATES (see common/india-states.ts) — validated at the DTO
@@ -2119,14 +2122,9 @@ model StateSeriesCode {
   // single source of truth as Customer.state/Lead.state.
   state       String   @unique
   seriesStart Int
-  // The next number that will be assigned to this state's next JEO —
-  // starts equal to seriesStart and is atomically incremented (via a
-  // single `UPDATE ... SET "nextNumber" = "nextNumber" + 1` from
-  // StateSeriesCodesService.claimNextNumber()) every time a JEO is
-  // generated for a customer in this state. Tracking this as a running
-  // counter avoids re-parsing every existing JobExecutionOrder.jeoNumber
-  // string back into an integer on every single JEO creation (old rows use
-  // the JEO-YYYY-NNNNNN format, new ones are plain numbers).
+  // No longer used: it was this state's running JEO counter, before JEO
+  // numbers were matched to Sales Order numbers. Kept (set to seriesStart
+  // on new rows) so existing data and the column stay untouched.
   nextNumber  Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -2393,10 +2391,20 @@ model QuotationApprovalRequest {
   quotationId     String
   quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   requestedBy     String?
+  // Who asked, so they can be notified of the decision. Null for requests
+  // made before notifications existed.
+  requestedByUserId String?
   requestedAt     DateTime  @default(now())
   reason          String?
   discountPercent Float?
   belowMinPrice   Boolean   @default(false)
+  // ACCEPT: approve and accept the quotation internally (the original
+  // purpose). SEND: approve its pricing so it can be sent to the customer,
+  // whose own acceptance then needs no further approval.
+  purpose         String    @default("ACCEPT")
+  // The exact prices requested (QuotationsService.pricingKey()) — an
+  // approval only ever covers these; null on requests made before this.
+  pricingKey      String?
   status          String    @default("PENDING")
   decidedBy       String?
   decidedAt       DateTime?
@@ -2462,6 +2470,27 @@ model LeadReassignmentRequest {
 
   @@index([leadId])
   @@index([status])
+}
+
+// In-app notifications — the Topbar bell. One row per recipient, written by
+// NotificationsService when something needs that user's attention (a
+// reassignment or quotation approval awaiting their decision, the outcome of
+// their own request, a lead assigned to them). `link` is an in-app path the
+// bell opens. Purely informational: nothing reads these rows to decide what
+// a user may do, so a missed or extra row never changes a workflow.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 // Leads that arrive on their own from ad platforms (Meta lead ads, Google Ads

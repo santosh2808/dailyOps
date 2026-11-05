@@ -30,7 +30,7 @@ import { DecideQuotationApprovalDto } from './dto/decide-quotation-approval.dto'
 // payload (see JwtStrategy.validate), never from the request body — same
 // convention as SalesOrdersController.create()'s createdBy.
 function actorFrom(req: any): QuotationActor {
-  return { name: req.user?.name, roles: req.user?.roles ?? [] };
+  return { id: req.user?.id, name: req.user?.name, roles: req.user?.roles ?? [] };
 }
 
 @ApiTags('quotations')
@@ -95,8 +95,8 @@ export class QuotationsController {
 
   @Patch(':id')
   @RequirePermission('Quotation', 'Edit')
-  update(@Param('id') id: string, @Body() dto: UpdateQuotationDto) {
-    return this.quotationsService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateQuotationDto, @Req() req: any) {
+    return this.quotationsService.update(id, dto, actorFrom(req));
   }
 
   // Status transitions (including moving a quotation to ACCEPTED) are

@@ -123,11 +123,20 @@ export async function sendJeoFactoryNotification(id: string, payload: SendJeoPay
   return res.data;
 }
 
+// Opens the JEO PDF through a short-lived signed link rather than a blob:
+// URL, so the browser's PDF viewer downloads it as "JEO <number>.pdf"
+// instead of a random id (see the backend's jeo-pdf-link.ts). The tab is
+// opened before the request, while the click still counts as a user
+// action — browsers (Safari especially) block window.open after an await.
 export async function openJeoPdf(id: string) {
-  const res = await api.get(`/api/v1/job-execution-orders/${id}/pdf`, { responseType: "blob" });
-  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-  window.open(url, "_blank");
-  // Revoke after a delay rather than immediately — the new tab needs time
-  // to actually load the blob URL before it's invalidated.
-  setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  const tab = window.open("", "_blank");
+  try {
+    const res = await api.post<{ url: string }>(`/api/v1/job-execution-orders/${id}/pdf-link`);
+    const url = new URL(res.data.url, new URL(api.defaults.baseURL ?? "", window.location.href)).toString();
+    if (tab) tab.location.href = url;
+    else window.open(url, "_blank");
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
 }

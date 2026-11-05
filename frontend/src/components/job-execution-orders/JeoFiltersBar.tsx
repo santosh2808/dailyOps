@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -16,6 +17,8 @@ export interface JeoFilters {
 interface JeoFiltersBarProps {
   filters: JeoFilters;
   onChange: (filters: JeoFilters) => void;
+  // Phone-only control shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyJeoFilters: JeoFilters = {
@@ -26,7 +29,7 @@ export const emptyJeoFilters: JeoFilters = {
   dateTo: "",
 };
 
-export default function JeoFiltersBar({ filters, onChange }: JeoFiltersBarProps) {
+export default function JeoFiltersBar({ filters, onChange, mobileActions }: JeoFiltersBarProps) {
   // A from/to date pair counts as one filter.
   const activeFilterCount = [
     filters.status,
@@ -52,6 +55,7 @@ export default function JeoFiltersBar({ filters, onChange }: JeoFiltersBarProps)
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyJeoFilters, search: filters.search })}
       >
         <Select

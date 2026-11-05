@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -26,6 +26,10 @@ export interface ComplaintFilters {
 interface ComplaintFiltersBarProps {
   filters: ComplaintFilters;
   onChange: (filters: ComplaintFilters) => void;
+  // md and up: the page's action buttons, on the right of the search row.
+  actions?: ReactNode;
+  // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyComplaintFilters: ComplaintFilters = {
@@ -50,7 +54,7 @@ const emptyOptions: ComplaintFilterOptions = {
   warrantyVerificationStatuses: [],
 };
 
-export default function ComplaintFiltersBar({ filters, onChange }: ComplaintFiltersBarProps) {
+export default function ComplaintFiltersBar({ filters, onChange, actions, mobileActions }: ComplaintFiltersBarProps) {
   // Bug fix (TC-057): populated from a Complaint-permission-scoped endpoint
   // (see ComplaintsService.getFilterOptions()) rather than
   // listDepartments()/listAssignableUsers()/listFormWebsites(), since those
@@ -81,19 +85,23 @@ export default function ComplaintFiltersBar({ filters, onChange }: ComplaintFilt
   }
 
   return (
-    <div className="space-y-3">
-      <div className="relative w-full md:max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by complaint no., caller name/phone/email, invoice, enquiry ref, subject, or customer"
-          className="pl-9"
-          value={filters.search}
-          onChange={(e) => update("search", e.target.value)}
-        />
+    <div className="space-y-3 md:w-full">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by complaint no., caller name/phone/email, invoice, enquiry ref, subject, or customer"
+            className="pl-9"
+            value={filters.search}
+            onChange={(e) => update("search", e.target.value)}
+          />
+        </div>
+        {actions && <div className="app-page-actions flex shrink-0 flex-wrap gap-2 max-md:hidden">{actions}</div>}
       </div>
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyComplaintFilters, search: filters.search })}
       >
         <Select

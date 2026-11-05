@@ -12,7 +12,7 @@ function setup() {
     lead: { findFirst: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
   };
-  const svc = new LeadsService(prisma, {} as any, {} as any, {} as any);
+  const svc = new LeadsService(prisma, {} as any, {} as any, {} as any, {} as any);
   jest.spyOn(svc as any, 'generateLeadNumber').mockResolvedValue('LD-000001');
   jest.spyOn(svc as any, 'logHistory').mockResolvedValue(undefined);
   jest.spyOn(svc as any, 'notifyLeadAssigned').mockResolvedValue(undefined);

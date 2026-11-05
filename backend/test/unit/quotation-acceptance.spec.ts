@@ -12,7 +12,7 @@ describe('Quotation acceptance', () => {
 
     const svc = new QuotationsService(
       prisma as any, salesOrders as any, invoices as any, jeos as any, {} as any,
-      {} as any, {} as any, audit as any, {} as any, {} as any,
+      {} as any, {} as any, audit as any, {} as any, {} as any, {} as any,
     );
 
     const result = await (svc as any).performAccept('q1', 'Tester');

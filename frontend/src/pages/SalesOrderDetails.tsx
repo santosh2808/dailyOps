@@ -57,6 +57,7 @@ import {
 } from "@/api/job-execution-orders";
 import { createTaxInvoice, listTaxInvoices, type TaxInvoicePayload } from "@/api/tax-invoices";
 import type { EmailHistoryEntry, ProformaInvoice, SalesOrder, SalesOrderStatus } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -357,7 +358,7 @@ export default function SalesOrderDetails() {
                         className="underline underline-offset-2"
                         onClick={() => navigate(`/job-execution-orders/${salesOrder.jobExecutionOrders![0].id}`)}
                       >
-                        {salesOrder.jobExecutionOrders[0].jeoNumber}
+                        {jeoDisplayNumber(salesOrder.jobExecutionOrders[0].jeoNumber)}
                       </button>
                     ) : (
                       "Not generated yet"

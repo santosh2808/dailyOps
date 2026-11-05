@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -11,19 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { requestQuotationApproval, type QuotationApprovalErrorBody } from "@/api/quotations";
+import { type QuotationApprovalErrorBody } from "@/api/quotations";
 import { STATUS_OPTIONS } from "./quotationOptions";
+import QuotationApprovalBlockedPanel from "./QuotationApprovalBlockedPanel";
 import type { Quotation, QuotationStatus } from "@/types";
 
 interface ChangeQuotationStatusDialogProps {
@@ -33,22 +24,12 @@ interface ChangeQuotationStatusDialogProps {
   onConfirm: (status: QuotationStatus) => Promise<void>;
 }
 
-function formatCurrency(value?: number | null) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 export default function ChangeQuotationStatusDialog({
   open,
   onOpenChange,
   quotation,
   onConfirm,
 }: ChangeQuotationStatusDialogProps) {
-  const navigate = useNavigate();
   const [status, setStatus] = useState<QuotationStatus>("DRAFT");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -59,17 +40,12 @@ export default function ChangeQuotationStatusDialog({
   // the specifics (entered/minimum/difference, or the required role) plus
   // "Update Price" / "Request Approval" actions instead of a generic error.
   const [blockedBy, setBlockedBy] = useState<QuotationApprovalErrorBody | null>(null);
-  const [requestReason, setRequestReason] = useState("");
-  const [requestingApproval, setRequestingApproval] = useState(false);
-  const [approvalRequested, setApprovalRequested] = useState(false);
 
   useEffect(() => {
     if (open && quotation) {
       setStatus(quotation.status);
       setError("");
       setBlockedBy(null);
-      setRequestReason("");
-      setApprovalRequested(false);
     }
   }, [open, quotation]);
 
@@ -92,30 +68,6 @@ export default function ChangeQuotationStatusDialog({
       }
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  function handleUpdatePrice() {
-    if (!quotation) return;
-    onOpenChange(false);
-    navigate(`/quotations/${quotation.id}/edit`);
-  }
-
-  async function handleRequestApproval() {
-    if (!quotation) return;
-    setRequestingApproval(true);
-    setError("");
-    try {
-      await requestQuotationApproval(quotation.id, requestReason || undefined);
-      setApprovalRequested(true);
-      toast.success("Approval request submitted.");
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.message || "Could not submit the approval request. Please try again.";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setRequestingApproval(false);
     }
   }
 
@@ -215,77 +167,14 @@ export default function ChangeQuotationStatusDialog({
               </Button>
             </DialogFooter>
           </>
-        ) : approvalRequested ? (
-          <>
-            <p className="text-sm text-emerald-700">
-              Approval request submitted. It now appears in the Approvals inbox for the
-              required approver to decide.
-            </p>
-            <DialogFooter>
-              <Button type="button" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </>
         ) : (
-          <>
-            {blockedBy.code === "PRICE_BELOW_MINIMUM" ? (
-              <div className="space-y-3">
-                <p className="text-sm text-destructive">{blockedBy.message}</p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Entered</TableHead>
-                      <TableHead>Minimum</TableHead>
-                      <TableHead>Difference</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {blockedBy.items?.map((item) => (
-                      <TableRow key={item.productId}>
-                        <TableCell>{item.productName}</TableCell>
-                        <TableCell>{formatCurrency(item.enteredPrice)}</TableCell>
-                        <TableCell>{formatCurrency(item.minimumPrice)}</TableCell>
-                        <TableCell className="text-destructive">
-                          {formatCurrency(item.difference)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <p className="text-sm text-destructive">{blockedBy.message}</p>
-            )}
-
-            <div className="mt-3 space-y-2">
-              <Label htmlFor="approval-reason">Reason for approval (optional)</Label>
-              <Textarea
-                id="approval-reason"
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                placeholder="Explain why this quotation should be approved as-is..."
-              />
-            </div>
-
-            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setBlockedBy(null)}>
-                Back
-              </Button>
-              {blockedBy.code === "PRICE_BELOW_MINIMUM" && (
-                <Button type="button" variant="outline" onClick={handleUpdatePrice}>
-                  Update Price
-                </Button>
-              )}
-              <Button type="button" onClick={handleRequestApproval} disabled={requestingApproval}>
-                {requestingApproval && <Spinner className="mr-2 h-4 w-4" />}
-                {requestingApproval ? "Submitting..." : "Request Approval"}
-              </Button>
-            </DialogFooter>
-          </>
+          <QuotationApprovalBlockedPanel
+            quotationId={quotation.id}
+            blockedBy={blockedBy}
+            purpose="ACCEPT"
+            onBack={() => setBlockedBy(null)}
+            onClose={() => onOpenChange(false)}
+          />
         )}
       </DialogContent>
     </Dialog>

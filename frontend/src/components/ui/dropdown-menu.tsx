@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // Lightweight, dependency-free dropdown menu (no @radix-ui in this project —
@@ -14,9 +14,35 @@ interface DropdownMenuProps {
   className?: string;
 }
 
+// Closest the menu may come to the screen edge.
+const VIEWPORT_MARGIN = 8;
+
 export function DropdownMenu({ trigger, children, align = "end", className }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
+  const [shiftX, setShiftX] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // On a phone the trigger can wrap to the far edge of a button row (e.g.
+  // the ⋮ on the detail pages lands on the left), where an "end"-aligned
+  // menu would open off-screen. Nudge it back inside the viewport before
+  // it paints. Measured from offsetLeft/offsetWidth, which the zoom-in
+  // animation's transform doesn't affect. A menu that already fits (every
+  // desktop layout) gets no shift, so it opens exactly where it did.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const menu = menuRef.current;
+    if (!open || !root || !menu) {
+      setShiftX(0);
+      return;
+    }
+    const left = root.getBoundingClientRect().left + menu.offsetLeft;
+    const right = left + menu.offsetWidth;
+    const maxRight = document.documentElement.clientWidth - VIEWPORT_MARGIN;
+    if (left < VIEWPORT_MARGIN) setShiftX(VIEWPORT_MARGIN - left);
+    else if (right > maxRight) setShiftX(Math.max(maxRight - right, VIEWPORT_MARGIN - left));
+    else setShiftX(0);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +67,7 @@ export function DropdownMenu({ trigger, children, align = "end", className }: Dr
       <span onClick={() => setOpen((o) => !o)}>{trigger}</span>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
           // onClick here closes the menu after any item's own onSelect has
           // already run (React bubbles inner-to-outer), without every item
@@ -51,6 +78,9 @@ export function DropdownMenu({ trigger, children, align = "end", className }: Dr
             align === "end" ? "right-0" : "left-0",
             className
           )}
+          // The CSS translate property, not transform, so it composes with
+          // the animate-in transform instead of being overridden by it.
+          style={shiftX ? { translate: `${shiftX}px 0` } : undefined}
         >
           {children}
         </div>

@@ -103,4 +103,28 @@ describeDb('migrated database schema', () => {
     const idx = await db.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'SalesOrder'`);
     expect(idx.rows.map((x) => x.indexdef).join('\n')).toMatch(/CREATE UNIQUE INDEX .*\("trackingToken"\)/);
   });
+
+  it('has per-user in-app notifications, removed with their user', async () => {
+    const n = await columns('Notification');
+    for (const c of ['userId', 'type', 'title', 'createdAt']) {
+      expect(n.get(c)?.is_nullable).toBe('NO');
+    }
+    for (const c of ['body', 'link', 'readAt']) {
+      expect(n.get(c)?.is_nullable).toBe('YES');
+    }
+    const fk = await db.query(
+      `SELECT rc.delete_rule FROM information_schema.referential_constraints rc
+       JOIN information_schema.table_constraints tc ON tc.constraint_name = rc.constraint_name
+       WHERE tc.table_name = 'Notification'`,
+    );
+    expect(fk.rows.map((r) => r.delete_rule)).toEqual(['CASCADE']);
+    expect((await columns('QuotationApprovalRequest')).get('requestedByUserId')?.is_nullable).toBe('YES');
+  });
+
+  it('records what a quotation approval request is for and the exact prices, existing requests defaulting to ACCEPT', async () => {
+    const r = await columns('QuotationApprovalRequest');
+    expect(r.get('purpose')?.is_nullable).toBe('NO');
+    expect(r.get('purpose')?.column_default).toMatch(/'ACCEPT'/);
+    expect(r.get('pricingKey')?.is_nullable).toBe('YES');
+  });
 });

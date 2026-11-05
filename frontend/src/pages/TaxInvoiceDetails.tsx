@@ -36,6 +36,7 @@ import {
   updateTaxInvoiceStatus,
 } from "@/api/tax-invoices";
 import type { EmailHistoryEntry, TaxInvoice, TaxInvoiceStatus } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -155,7 +156,7 @@ export default function TaxInvoiceDetails() {
                         className="underline underline-offset-2"
                         onClick={() => navigate(`/job-execution-orders/${invoice.jeo!.id}`)}
                       >
-                        {invoice.jeo.jeoNumber}
+                        {jeoDisplayNumber(invoice.jeo.jeoNumber)}
                       </button>
                     ) : (
                       "—"

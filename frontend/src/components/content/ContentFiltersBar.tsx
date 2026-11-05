@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -21,6 +22,9 @@ interface ContentFiltersBarProps {
   websites: ContentWebsiteOption[];
   filters: ContentFilters;
   onChange: (filters: ContentFilters) => void;
+  // Phones only: the page's main action, placed after the website select in
+  // the Filters row (see FilterPanel's mobileActions).
+  mobileActions?: ReactNode;
 }
 
 export const emptyContentFilters: ContentFilters = {
@@ -32,7 +36,7 @@ export const emptyContentFilters: ContentFilters = {
   sort: "updated_desc",
 };
 
-export default function ContentFiltersBar({ type, websites, filters, onChange }: ContentFiltersBarProps) {
+export default function ContentFiltersBar({ type, websites, filters, onChange, mobileActions }: ContentFiltersBarProps) {
   const activeFilterCount = [
     filters.topic,
     filters.featured,
@@ -43,23 +47,30 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
     onChange({ ...filters, [key]: value });
   }
 
+  function websiteSelect(className: string) {
+    return (
+      <Select
+        className={className}
+        aria-label="Website"
+        value={filters.websiteId}
+        onChange={(e) => update("websiteId", e.target.value)}
+      >
+        <option value="">All websites</option>
+        {websites.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+
+  // md and up: search, website and every FilterPanel control share one row.
+  // Phones: search on its own row, then Filters toggle + website + main action.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 md:flex md:flex-wrap md:items-center md:gap-2 md:space-y-0">
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          className="w-48"
-          aria-label="Website"
-          value={filters.websiteId}
-          onChange={(e) => update("websiteId", e.target.value)}
-        >
-          <option value="">All websites</option>
-          {websites.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </Select>
-        <div className="relative w-full md:max-w-sm">
+        <div className="relative w-full md:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by title or URL name"
@@ -68,10 +79,17 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
             onChange={(e) => update("search", e.target.value)}
           />
         </div>
+        <div className="max-md:hidden">{websiteSelect("w-48")}</div>
       </div>
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="min-w-0 flex-1">{websiteSelect("h-9")}</div>
+            {mobileActions}
+          </div>
+        }
         onClear={() => onChange({ ...filters, topic: "", featured: "" })}
       >
         <Select className="w-44" aria-label={type === "BLOG" ? "Category" : "Industry"} value={filters.topic} onChange={(e) => update("topic", e.target.value)}>

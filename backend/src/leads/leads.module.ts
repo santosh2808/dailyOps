@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MailerModule } from '../mailer/mailer.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { LeadsController } from './leads.controller';
 import { LeadsService } from './leads.service';
 import { LeadFollowUpReminderService } from './lead-followup-reminder.service';
@@ -8,7 +9,7 @@ import { LeadAccessService } from './lead-access.service';
 import { SiteVisitPhotoStorage } from './site-visit-photo-storage';
 
 @Module({
-  imports: [MailerModule, WhatsAppModule],
+  imports: [MailerModule, WhatsAppModule, NotificationsModule],
   controllers: [LeadsController],
   // LeadFollowUpReminderService is registered as a provider only (not
   // exported) — its @Cron job runs on its own once ScheduleModule.forRoot()

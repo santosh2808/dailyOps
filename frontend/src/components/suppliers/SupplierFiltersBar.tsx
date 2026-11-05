@@ -35,9 +35,10 @@ export default function SupplierFiltersBar({ filters, onChange, mobileActions }:
     onChange({ ...filters, [key]: value });
   }
 
+  // md and up: only two filters, so they sit beside the search box.
   return (
-    <div className="space-y-3">
-      <div className="relative w-full md:max-w-sm">
+    <div className="space-y-3 md:flex md:flex-wrap md:items-center md:gap-2 md:space-y-0">
+      <div className="relative w-full md:w-96">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by code, name, contact, phone, email, or GST number"

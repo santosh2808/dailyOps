@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -15,6 +16,8 @@ export interface TaxInvoiceFilters {
 interface TaxInvoiceFiltersBarProps {
   filters: TaxInvoiceFilters;
   onChange: (filters: TaxInvoiceFilters) => void;
+  // Phone-only control shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyTaxInvoiceFilters: TaxInvoiceFilters = {
@@ -24,7 +27,7 @@ export const emptyTaxInvoiceFilters: TaxInvoiceFilters = {
   dateTo: "",
 };
 
-export default function TaxInvoiceFiltersBar({ filters, onChange }: TaxInvoiceFiltersBarProps) {
+export default function TaxInvoiceFiltersBar({ filters, onChange, mobileActions }: TaxInvoiceFiltersBarProps) {
   // A from/to date pair counts as one filter.
   const activeFilterCount = [
     filters.status,
@@ -49,6 +52,7 @@ export default function TaxInvoiceFiltersBar({ filters, onChange }: TaxInvoiceFi
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyTaxInvoiceFilters, search: filters.search })}
       >
         <Select

@@ -501,6 +501,25 @@ export interface Lead {
   reassignmentRequested?: boolean;
 }
 
+// In-app notifications (the Topbar bell) — see NotificationsController.
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  // In-app path to open, e.g. /leads/reassignments.
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+// Polled by NotificationsContext. A pending count is only present when the
+// user can open that approvals page.
+export interface NotificationSummary {
+  unreadCount: number;
+  pending: { leadReassignments?: number; quotationApprovals?: number };
+}
+
 export type LeadReassignmentStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export interface LeadReassignmentRequest {
@@ -893,6 +912,12 @@ export interface QuotationApprovalRequest {
   reason?: string | null;
   discountPercent?: number | null;
   belowMinPrice: boolean;
+  // SEND: approving it lets the quotation be sent; ACCEPT: approving it
+  // accepts the quotation.
+  purpose: "ACCEPT" | "SEND";
+  // The role that may decide it, besides Administrator (always
+  // "Administrator" for a below-minimum price). Sent by the inbox list.
+  requiredApprover?: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   decidedBy?: string | null;
   decidedAt?: string | null;

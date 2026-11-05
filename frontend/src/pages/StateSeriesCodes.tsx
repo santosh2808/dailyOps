@@ -3,7 +3,6 @@ import { Plus, Trash2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -129,9 +128,9 @@ export default function StateSeriesCodes() {
         <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Job Execution Orders for customers in a listed state are numbered from that state's
-              Series Start (e.g. Telangana JEOs run 4000, 4001, 4002...). States not listed here
-              still get JEO numbers using the original JEO-YYYY-NNNNNN format.
+              A Job Execution Order's number is its state's Series Start plus its Sales Order's
+              number (e.g. Telangana 4000 + SO-2026-000004 → JEO 4004). A state not listed here is
+              added automatically, with the next free series, the first time it needs a JEO.
             </p>
             <Button onClick={() => setFormOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -175,7 +174,6 @@ export default function StateSeriesCodes() {
                     </TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Series Start</TableHead>
-                    <TableHead>Next JEO Number</TableHead>
                     <TableHead>Added</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -183,7 +181,7 @@ export default function StateSeriesCodes() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
                           <Spinner /> Loading state series codes...
                         </span>
@@ -191,9 +189,9 @@ export default function StateSeriesCodes() {
                     </TableRow>
                   ) : codes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                        No state series configured yet. Every state currently uses the original
-                        JEO-YYYY-NNNNNN numbering.
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        No state series configured yet. Each state gets one automatically with its
+                        first JEO.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -208,9 +206,6 @@ export default function StateSeriesCodes() {
                         </TableCell>
                         <TableCell className="font-medium text-slate-900">{code.state}</TableCell>
                         <TableCell>{code.seriesStart}</TableCell>
-                        <TableCell>
-                          <Badge variant="muted">{code.nextNumber}</Badge>
-                        </TableCell>
                         <TableCell>{new Date(code.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">{seriesActions(code)}</div>
@@ -230,13 +225,12 @@ export default function StateSeriesCodes() {
                 meta={(code) => `Added ${new Date(code.createdAt).toLocaleDateString()}`}
                 fields={[
                   { label: "Series Start", render: (code) => code.seriesStart },
-                  { label: "Next JEO Number", render: (code) => <Badge variant="muted">{code.nextNumber}</Badge> },
                   { label: "Added", render: (code) => new Date(code.createdAt).toLocaleDateString() },
                 ]}
                 actions={seriesActions}
                 loading={loading}
                 loadingText="Loading state series codes..."
-                emptyText="No state series configured yet. Every state currently uses the original JEO-YYYY-NNNNNN numbering."
+                emptyText="No state series configured yet. Each state gets one automatically with its first JEO."
                 selection={{
                   selected: selectedIds,
                   onToggle: toggleSelected,
@@ -263,8 +257,8 @@ export default function StateSeriesCodes() {
           <>
             Are you sure you want to delete the series for{" "}
             <span className="font-medium text-slate-900">{selected?.state}</span>? JEOs already
-            generated keep their numbers; future JEOs for this state will fall back to the
-            original JEO-YYYY-NNNNNN numbering until a new series is added.
+            generated keep their numbers; the state's next JEO will be given a new series
+            automatically unless you add one first.
           </>
         }
         confirmLabel="Delete"
@@ -276,7 +270,7 @@ export default function StateSeriesCodes() {
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}
         title={`Delete ${selectedIds.size} series?`}
-        description="JEOs already generated keep their numbers; future JEOs for these states will fall back to the original JEO-YYYY-NNNNNN numbering until a new series is added."
+        description="JEOs already generated keep their numbers; each state's next JEO will be given a new series automatically unless you add one first."
         confirmLabel="Delete"
         confirmingLabel="Deleting..."
         onConfirm={handleBulkDeleteConfirm}

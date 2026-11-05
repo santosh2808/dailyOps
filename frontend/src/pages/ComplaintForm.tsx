@@ -22,6 +22,7 @@ import {
   type InvoiceLookupResult,
 } from "@/api/complaints";
 import type { JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 interface FormState {
   // QA fix (JEO Number field): replaces salesOrderId as the field this form
@@ -207,7 +208,7 @@ export default function ComplaintForm() {
                       <Input
                         value={
                           selectedJeo
-                            ? `${selectedJeo.jeoNumber} — ${selectedJeo.customer?.companyName ?? selectedJeo.salesOrder?.customer?.companyName ?? ""}`
+                            ? `${jeoDisplayNumber(selectedJeo.jeoNumber)} — ${selectedJeo.customer?.companyName ?? selectedJeo.salesOrder?.customer?.companyName ?? ""}`
                             : form.jeoId
                         }
                         disabled

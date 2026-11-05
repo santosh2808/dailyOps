@@ -17,6 +17,7 @@ import { toast } from "@/lib/toast";
 import { HANGING_STRUCTURE_OPTIONS, PRIORITY_OPTIONS } from "./jeoOptions";
 import { updateJobExecutionOrder, type UpdateJeoPayload } from "@/api/job-execution-orders";
 import type { HangingStructureType, JeoPriority, JobExecutionOrder } from "@/types";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 interface EditJeoDialogProps {
   open: boolean;
@@ -105,7 +106,7 @@ export default function EditJeoDialog({ open, onOpenChange, jeo, onSaved }: Edit
         <DialogHeader>
           <DialogTitle>Edit Job Execution Order</DialogTitle>
           <DialogDescription>
-            Correct <span className="font-medium text-slate-900">{jeo.jeoNumber}</span>'s details
+            Correct <span className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</span>'s details
             below. If the factory notification already went out, use "Resend to Factory" afterward
             so production gets the corrected PDF.
           </DialogDescription>

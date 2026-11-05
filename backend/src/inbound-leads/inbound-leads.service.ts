@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadsService } from '../leads/leads.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ParsedAdLead, parseGoogleColumns, parseMetaFieldData } from './ad-lead-parsers';
 
 type Provider = 'META' | 'GOOGLE_ADS';
@@ -28,6 +29,7 @@ export class InboundLeadsService {
   constructor(
     private prisma: PrismaService,
     private leadsService: LeadsService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async processLead(
@@ -54,6 +56,15 @@ export class InboundLeadsService {
         create: { provider, externalId, status, leadId: lead.id, payload: payload as Prisma.InputJsonValue },
         update: { status, leadId: lead.id, error: null },
       });
+      if (!duplicateOf) {
+        // Ad leads arrive unassigned — tell the people who assign leads.
+        await this.notificationsService.notifyPermissionHolders('Lead', 'Approve', {
+          type: 'NEW_UNASSIGNED_LEAD',
+          title: `New lead ${lead.leadNumber} from ${PLATFORM_LABEL[provider]}`,
+          body: `${[parsed.name, parsed.company].filter(Boolean).join(' · ') || 'No name given'} — unassigned.`,
+          link: `/leads/${lead.id}`,
+        });
+      }
       return duplicateOf ? 'duplicate' : 'created';
     } catch (err) {
       const message = (err as Error)?.message ?? 'Unknown error';

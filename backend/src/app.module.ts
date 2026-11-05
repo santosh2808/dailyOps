@@ -38,6 +38,7 @@ import { ApprovalRequestsModule } from './approval-requests/approval-requests.mo
 import { ApprovalDecisionsModule } from './approval-requests/approval-decisions.module';
 import { ContentModule } from './content/content.module';
 import { PublicContentModule } from './public-content/public-content.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -99,6 +100,8 @@ import { PublicContentModule } from './public-content/public-content.module';
     // Website content
     ContentModule,
     PublicContentModule,
+    // In-app notifications (the Topbar bell).
+    NotificationsModule,
   ],
 })
 export class AppModule {}

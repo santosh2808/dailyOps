@@ -20,12 +20,18 @@ import JeoFiltersBar, {
 } from "@/components/job-execution-orders/JeoFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
-import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
+import {
+  MobileRecordList,
+  RecordSortSelect,
+  ResponsiveRecords,
+  type RecordSort,
+} from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listJobExecutionOrders } from "@/api/job-execution-orders";
 import type { JobExecutionOrder, JeoStatus } from "@/types";
 import { useSessionFilters } from "@/hooks/useSessionFilters";
+import { jeoDisplayNumber } from "@/lib/jeoNumber";
 
 const PAGE_SIZE = 20;
 
@@ -144,6 +150,22 @@ export default function JobExecutionOrderList() {
     );
   }
 
+  // Phones: the cards' sort dropdown sits beside the Filters button
+  // (one row) instead of above the cards.
+  const mobileSort: RecordSort = {
+    options: [
+        { value: "jeoNumber", label: "JEO Number" },
+        { value: "priority", label: "Priority" },
+        { value: "deliveryDate", label: "Delivery Date" },
+    ],
+    by: sortBy,
+    order: sortOrder,
+    onChange: (by, order) => {
+      setSortBy(by as SortableColumn);
+      setSortOrder(order);
+    },
+  };
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -153,7 +175,11 @@ export default function JobExecutionOrderList() {
         <Topbar title="Job Execution Orders" />
         <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
-            <JeoFiltersBar filters={filters} onChange={setFilters} />
+            <JeoFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={<RecordSortSelect sort={mobileSort} />}
+            />
           </div>
 
           <p className="mb-3 text-xs text-muted-foreground">
@@ -223,7 +249,7 @@ export default function JobExecutionOrderList() {
                         className="cursor-pointer"
                         onClick={() => navigate(`/job-execution-orders/${jeo.id}`)}
                       >
-                        <TableCell className="font-medium text-slate-900">{jeo.jeoNumber}</TableCell>
+                        <TableCell className="font-medium text-slate-900">{jeoDisplayNumber(jeo.jeoNumber)}</TableCell>
                         <TableCell>
                           <TruncatedText text={jeo.customer?.companyName ?? "—"} />
                         </TableCell>
@@ -249,7 +275,7 @@ export default function JobExecutionOrderList() {
               <MobileRecordList
                 rows={jeos}
                 getKey={(jeo) => jeo.id}
-                title={(jeo) => jeo.jeoNumber}
+                title={(jeo) => jeoDisplayNumber(jeo.jeoNumber)}
                 badge={(jeo) => <JeoStatusBadge status={jeo.status} />}
                 subtitle={(jeo) => jeo.customer?.companyName ?? "—"}
                 meta={(jeo) =>
@@ -266,19 +292,6 @@ export default function JobExecutionOrderList() {
                 loading={loading}
                 loadingText="Loading job execution orders..."
                 emptyText="No job execution orders found."
-                sort={{
-                  options: [
-                    { value: "jeoNumber", label: "JEO Number" },
-                    { value: "priority", label: "Priority" },
-                    { value: "deliveryDate", label: "Delivery Date" },
-                  ],
-                  by: sortBy,
-                  order: sortOrder,
-                  onChange: (by, order) => {
-                    setSortBy(by as SortableColumn);
-                    setSortOrder(order);
-                  },
-                }}
               />
             }
           />

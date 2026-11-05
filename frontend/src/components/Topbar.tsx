@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import NotificationBell from "@/components/NotificationBell";
 
 interface TopbarProps {
   title?: string;
@@ -77,6 +78,7 @@ export default function Topbar({ title = "Dashboard", showBackButton = false }: 
       </div>
 
       <div className="flex flex-shrink-0 items-center gap-3">
+        <NotificationBell />
         {/* Name/role are the first thing to go on a narrow phone screen —
             the avatar (with initials + full name/role as a hover tooltip)
             is enough identity there; the title above already needs the

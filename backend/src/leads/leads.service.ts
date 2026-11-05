@@ -37,6 +37,9 @@ import { LeadProductInputDto } from './dto/lead-product-input.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 import { INDIA_STATES } from '../common/india-states';
+import { jeoDisplayNumber } from '../common/jeo-number';
+import { NotificationsService } from '../notifications/notifications.service';
+import { notificationEmailTemplate } from '../notifications/notification-emails';
 
 const LEAD_NUMBER_PREFIX = 'LD-';
 const LEAD_NUMBER_PAD = 6;
@@ -238,6 +241,7 @@ export class LeadsService {
     private mailerService: MailerService,
     private whatsAppService: WhatsAppService,
     private siteVisitPhotoStorage: SiteVisitPhotoStorage,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Notifies a user directly when a Lead is assigned to them — manual
@@ -248,10 +252,26 @@ export class LeadsService {
   // gated behind the other, so a missing email doesn't block the WhatsApp
   // message and a missing phone doesn't block the email. Never throws
   // (MailerService/WhatsAppService themselves don't).
+  //
+  // actorUserId: whoever made the assignment — someone assigning a lead to
+  // themselves gets no in-app notification about it (email/WhatsApp are
+  // unchanged).
   private async notifyLeadAssigned(
     userId: string,
     lead: { id: string; leadNumber: string; title: string; companyName: string; contactPerson: string; phone: string },
+    actorUserId?: string,
   ): Promise<void> {
+    await this.notificationsService.notifyUsers(
+      [userId],
+      {
+        type: 'LEAD_ASSIGNED',
+        title: `Lead ${lead.leadNumber} assigned to you`,
+        body: [lead.companyName, lead.contactPerson].filter(Boolean).join(' · ') || null,
+        link: `/leads/${lead.id}`,
+      },
+      actorUserId,
+    );
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { name: true, email: true, phone: true },
@@ -642,7 +662,7 @@ export class LeadsService {
           return created;
         });
         if (lead.assignedToUserId) {
-          await this.notifyLeadAssigned(lead.assignedToUserId, lead);
+          await this.notifyLeadAssigned(lead.assignedToUserId, lead, creator?.id);
         }
         return lead;
       } catch (error) {
@@ -889,7 +909,7 @@ export class LeadsService {
       assignedToUserId &&
       assignedToUserId !== existing.assignedToUserId
     ) {
-      await this.notifyLeadAssigned(assignedToUserId, updated);
+      await this.notifyLeadAssigned(assignedToUserId, updated, viewer?.id);
     }
 
     return reassignmentRequest ? { ...updated, reassignmentRequested: true } : updated;
@@ -898,7 +918,12 @@ export class LeadsService {
   // ---- Reassignment approval -------------------------------------------
 
   private async createReassignmentRequest(
-    existing: { id: string; assignedToUserId: string | null; assignedToUser?: { name: string } | null },
+    existing: {
+      id: string;
+      leadNumber: string;
+      assignedToUserId: string | null;
+      assignedToUser?: { name: string } | null;
+    },
     toUserId: string | null,
     viewer?: LeadViewer,
     actorName?: string,
@@ -939,6 +964,29 @@ export class LeadsService {
         performedBy: actorName,
       },
     });
+    // Everyone who can approve it (Lead.Approve — the Lead Reassignments
+    // page's own permission), in the app and by email.
+    await this.notificationsService.notifyPermissionHolders(
+      'Lead',
+      'Approve',
+      {
+        type: 'LEAD_REASSIGNMENT_REQUESTED',
+        title: `Reassignment requested for ${existing.leadNumber}`,
+        body: `${actorName ?? 'A user'} asked to move it to ${toUserName ?? 'Unassigned'}.`,
+        link: '/leads/reassignments',
+      },
+      viewer?.id,
+      {
+        ...notificationEmailTemplate('LEAD_REASSIGNMENT_REQUESTED'),
+        vars: {
+          leadNumber: existing.leadNumber,
+          requestedBy: actorName ?? 'A user',
+          fromUser: existing.assignedToUser?.name ?? 'Unassigned',
+          toUser: toUserName ?? 'Unassigned',
+        },
+        mailerLink: { module: 'Lead', leadId: existing.id },
+      },
+    );
     return request;
   }
 
@@ -961,7 +1009,10 @@ export class LeadsService {
     approver: { id?: string; name?: string },
     note?: string,
   ) {
-    const request = await this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
+    const request = await this.prisma.leadReassignmentRequest.findUnique({
+      where: { id: requestId },
+      include: { lead: { select: { leadNumber: true } } },
+    });
     if (!request) throw new NotFoundException('Reassignment request not found');
     if (request.status !== 'PENDING') {
       throw new BadRequestException(`This request was already ${request.status.toLowerCase()}.`);
@@ -1007,6 +1058,34 @@ export class LeadsService {
         },
       });
     }
+
+    // Tell whoever asked, in the app and by email. Once approved the lead is
+    // no longer theirs (and a
+    // Sales Executive can only open their own leads), so that link goes to
+    // the lead list instead of the lead.
+    await this.notificationsService.notifyUsers(
+      [request.requestedByUserId],
+      {
+        type: approve ? 'LEAD_REASSIGNMENT_APPROVED' : 'LEAD_REASSIGNMENT_REJECTED',
+        title: `Reassignment of ${request.lead.leadNumber} ${approve ? 'approved' : 'rejected'}`,
+        body: approve
+          ? `${approver.name ?? 'A manager'} moved it to ${request.toUserName ?? 'Unassigned'}.${note ? ` Note: ${note}` : ''}`
+          : `${approver.name ?? 'A manager'} kept it with you.${note ? ` Note: ${note}` : ''}`,
+        link: approve ? '/leads' : `/leads/${request.leadId}`,
+      },
+      approver.id,
+      {
+        ...notificationEmailTemplate('LEAD_REASSIGNMENT_DECIDED'),
+        vars: {
+          leadNumber: request.lead.leadNumber,
+          decision: approve ? 'approved' : 'rejected',
+          decidedBy: approver.name ?? 'A manager',
+          toUser: request.toUserName ?? 'Unassigned',
+          decisionNote: note ? `Note: ${note}` : '',
+        },
+        mailerLink: { module: 'Lead', leadId: request.leadId },
+      },
+    );
     return this.prisma.leadReassignmentRequest.findUnique({ where: { id: requestId } });
   }
 
@@ -1732,7 +1811,7 @@ export class LeadsService {
             entries.push({
               id: `jeo-${jeo.jeoNumber}`,
               action: 'JEO_GENERATED' as LeadHistoryAction,
-              description: `Job Execution Order ${jeo.jeoNumber} generated`,
+              description: `Job Execution Order ${jeoDisplayNumber(jeo.jeoNumber)} generated`,
               performedBy: null,
               createdAt: jeo.createdAt,
             });
