@@ -28,6 +28,8 @@ interface ComplaintFiltersBarProps {
   onChange: (filters: ComplaintFilters) => void;
   // md and up: the page's action buttons, on the right of the search row.
   actions?: ReactNode;
+  // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
+  mobileActions?: ReactNode;
 }
 
 export const emptyComplaintFilters: ComplaintFilters = {
@@ -52,7 +54,7 @@ const emptyOptions: ComplaintFilterOptions = {
   warrantyVerificationStatuses: [],
 };
 
-export default function ComplaintFiltersBar({ filters, onChange, actions }: ComplaintFiltersBarProps) {
+export default function ComplaintFiltersBar({ filters, onChange, actions, mobileActions }: ComplaintFiltersBarProps) {
   // Bug fix (TC-057): populated from a Complaint-permission-scoped endpoint
   // (see ComplaintsService.getFilterOptions()) rather than
   // listDepartments()/listAssignableUsers()/listFormWebsites(), since those
@@ -99,6 +101,7 @@ export default function ComplaintFiltersBar({ filters, onChange, actions }: Comp
 
       <FilterPanel
         activeCount={activeFilterCount}
+        mobileActions={mobileActions}
         onClear={() => onChange({ ...emptyComplaintFilters, search: filters.search })}
       >
         <Select

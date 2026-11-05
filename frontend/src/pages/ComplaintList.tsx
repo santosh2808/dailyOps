@@ -24,6 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import TruncatedText from "@/components/shared/TruncatedText";
+import MobileActionBar from "@/components/shared/MobileActionBar";
 import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/lib/toast";
@@ -340,9 +341,32 @@ export default function ComplaintList() {
               LeadList.tsx's identical fix for the full reasoning. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             {/* md+: the buttons sit on the right of the search row (like
-                Materials); phones keep them in their own row here. */}
-            <ComplaintFiltersBar filters={filters} onChange={setFilters} actions={pageActions} />
-            <div className="app-page-actions flex flex-wrap gap-2 md:hidden">{pageActions}</div>
+                Materials); phones: Log Complaint + ⋮ (Export Excel) in the
+                Filters row, same as Leads. */}
+            <ComplaintFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              actions={pageActions}
+              mobileActions={
+                <MobileActionBar
+                  layout="inline"
+                  primary={
+                    hasPermission("Complaint", "Create")
+                      ? { label: "Log Complaint", shortLabel: "Log", icon: Plus, onSelect: () => navigate("/complaints/new") }
+                      : null
+                  }
+                  more={[
+                    {
+                      label: exporting ? "Exporting..." : "Export Excel",
+                      icon: Download,
+                      onSelect: handleExport,
+                      disabled: exporting,
+                      busy: exporting,
+                    },
+                  ]}
+                />
+              }
+            />
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
