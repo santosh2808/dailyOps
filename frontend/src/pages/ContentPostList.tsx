@@ -149,8 +149,21 @@ export default function ContentPostList({ type }: { type: ContentPostType }) {
         <Topbar title={config.plural} />
         <main className="app-shell-main app-shell-main-list">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <ContentFiltersBar type={type} websites={websites} filters={filters} onChange={setFilters} />
-            <div className="app-page-actions flex shrink-0 flex-wrap gap-2">
+            <ContentFiltersBar
+              type={type}
+              websites={websites}
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={
+                hasPermission("Content", "Create") && (
+                  <Button size="sm" className="shrink-0" aria-label={`New ${config.label}`} onClick={() => navigate(newPostUrl)}>
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    New
+                  </Button>
+                )
+              }
+            />
+            <div className="app-page-actions flex shrink-0 flex-wrap gap-2 max-md:hidden">
               {hasPermission("Content", "Create") && (
                 <Button onClick={() => navigate(newPostUrl)}>
                   <Plus className="mr-2 h-4 w-4" />
