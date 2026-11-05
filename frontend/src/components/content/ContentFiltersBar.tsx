@@ -43,9 +43,21 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
     onChange({ ...filters, [key]: value });
   }
 
+  // md and up: search, website and every FilterPanel control share one row.
+  // Phones keep the stacked layout (website + search row, then the Filters
+  // toggle); max-md:order-last keeps the website select first there.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 md:flex md:flex-wrap md:items-center md:gap-2 md:space-y-0">
       <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-md:order-last md:w-64">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by title or URL name"
+            className="pl-9"
+            value={filters.search}
+            onChange={(e) => update("search", e.target.value)}
+          />
+        </div>
         <Select
           className="w-48"
           aria-label="Website"
@@ -59,15 +71,6 @@ export default function ContentFiltersBar({ type, websites, filters, onChange }:
             </option>
           ))}
         </Select>
-        <div className="relative w-full md:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by title or URL name"
-            className="pl-9"
-            value={filters.search}
-            onChange={(e) => update("search", e.target.value)}
-          />
-        </div>
       </div>
 
       <FilterPanel
