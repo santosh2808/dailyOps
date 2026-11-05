@@ -34,7 +34,7 @@ import { useNotifications } from "@/context/NotificationsContext";
 // now always the separate "Create Sales Order" action on Quotation/Customer
 // Details, same as every other acceptance route.
 
-const STATUS_FILTERS = ["PENDING", "APPROVED", "REJECTED", ""] as const;
+const STATUS_FILTERS = ["", "PENDING", "APPROVED", "REJECTED"] as const;
 
 function purposeLabel(request: QuotationApprovalRequest) {
   return request.purpose === "SEND" ? "To send to customer" : "To accept";
@@ -72,7 +72,7 @@ export default function QuotationApprovals() {
   const userRoles = user?.roles ?? [];
   const { refresh: refreshNotifications } = useNotifications();
   const canApprove = hasPermission("Quotation", "Approve");
-  const [statusFilter, setStatusFilter] = useState<string>("PENDING");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [requests, setRequests] = useState<QuotationApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

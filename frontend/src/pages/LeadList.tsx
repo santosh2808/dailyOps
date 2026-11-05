@@ -300,7 +300,9 @@ export default function LeadList() {
               the viewport. sm:flex-wrap lets the button group drop to its own
               line instead of squeezing the filters bar into an impossible
               width. Same fix applied to every other list page with this
-              filters-bar + action-buttons header pattern. */}
+              filters-bar + action-buttons header pattern. On this page the
+              md+ buttons now sit on the right of the search row instead
+              (LeadFiltersBar's actions prop), like Materials. */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <LeadFiltersBar
               filters={filters}
@@ -325,28 +327,30 @@ export default function LeadList() {
                   ]}
                 />
               }
+              actions={
+                <>
+                  {/* QA fix (TC-074 re-fail): real lead data export. */}
+                  <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
+                    {downloadingData ? (
+                      <Spinner className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    {downloadingData ? "Downloading..." : "Download Data"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setImportOpen(true)}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Import Leads
+                  </Button>
+                  {hasPermission("Lead", "Create") && (
+                    <Button onClick={() => navigate("/leads/new")}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Lead
+                    </Button>
+                  )}
+                </>
+              }
             />
-            <div className="app-page-actions flex flex-wrap gap-2 shrink-0 max-md:hidden">
-              {/* QA fix (TC-074 re-fail): real lead data export. */}
-              <Button variant="outline" onClick={handleDownloadData} disabled={downloadingData}>
-                {downloadingData ? (
-                  <Spinner className="mr-2 h-4 w-4" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {downloadingData ? "Downloading..." : "Download Data"}
-              </Button>
-              <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Import Leads
-              </Button>
-              {hasPermission("Lead", "Create") && (
-                <Button onClick={() => navigate("/leads/new")}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Lead
-                </Button>
-              )}
-            </div>
           </div>
 
           {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

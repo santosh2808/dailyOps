@@ -58,12 +58,46 @@ interface MobileRecordListProps<T> {
   };
   // Mirrors the table's sortable column headers, driving the page's own
   // sortBy/sortOrder state (cards have no column headers to click).
-  sort?: {
-    options: RecordSortOption[];
-    by: string;
-    order: "asc" | "desc";
-    onChange: (by: string, order: "asc" | "desc") => void;
-  };
+  sort?: RecordSort;
+}
+
+export interface RecordSort {
+  options: RecordSortOption[];
+  by: string;
+  order: "asc" | "desc";
+  onChange: (by: string, order: "asc" | "desc") => void;
+}
+
+// The cards' sort dropdown. Rendered by MobileRecordList when given `sort`;
+// a page can instead place it elsewhere on phones (e.g. in its Filters row).
+export function RecordSortSelect({ sort }: { sort: RecordSort }) {
+  return (
+    <Select
+      className="h-9 w-auto max-w-[14rem] text-sm"
+      aria-label="Sort by"
+      value={`${sort.by}:${sort.order}`}
+      onChange={(e) => {
+        const [by, order] = e.target.value.split(":");
+        sort.onChange(by, order as "asc" | "desc");
+      }}
+    >
+      {/* Page default sort that isn't one of the header-sortable
+          columns (e.g. invoiceDate) — shown, not re-selectable. */}
+      {!sort.options.some((o) => o.value === sort.by) && (
+        <option value={`${sort.by}:${sort.order}`} disabled>
+          Default order
+        </option>
+      )}
+      {sort.options.flatMap((o) => [
+        <option key={`${o.value}:asc`} value={`${o.value}:asc`}>
+          {o.label} ↑
+        </option>,
+        <option key={`${o.value}:desc`} value={`${o.value}:desc`}>
+          {o.label} ↓
+        </option>,
+      ])}
+    </Select>
+  );
 }
 
 export function MobileRecordList<T>({
@@ -109,33 +143,7 @@ export function MobileRecordList<T>({
           ) : (
             <span />
           )}
-          {sort && (
-            <Select
-              className="h-9 w-auto max-w-[14rem] text-sm"
-              aria-label="Sort by"
-              value={`${sort.by}:${sort.order}`}
-              onChange={(e) => {
-                const [by, order] = e.target.value.split(":");
-                sort.onChange(by, order as "asc" | "desc");
-              }}
-            >
-              {/* Page default sort that isn't one of the header-sortable
-                  columns (e.g. invoiceDate) — shown, not re-selectable. */}
-              {!sort.options.some((o) => o.value === sort.by) && (
-                <option value={`${sort.by}:${sort.order}`} disabled>
-                  Default order
-                </option>
-              )}
-              {sort.options.flatMap((o) => [
-                <option key={`${o.value}:asc`} value={`${o.value}:asc`}>
-                  {o.label} ↑
-                </option>,
-                <option key={`${o.value}:desc`} value={`${o.value}:desc`}>
-                  {o.label} ↓
-                </option>,
-              ])}
-            </Select>
-          )}
+          {sort && <RecordSortSelect sort={sort} />}
         </div>
       )}
 

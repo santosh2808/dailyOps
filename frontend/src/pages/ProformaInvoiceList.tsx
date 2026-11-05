@@ -19,7 +19,12 @@ import ProformaInvoiceFiltersBar, {
 } from "@/components/proforma-invoices/ProformaInvoiceFiltersBar";
 import { Spinner } from "@/components/ui/spinner";
 import TruncatedText from "@/components/shared/TruncatedText";
-import { MobileRecordList, ResponsiveRecords } from "@/components/shared/MobileRecordList";
+import {
+  MobileRecordList,
+  RecordSortSelect,
+  ResponsiveRecords,
+  type RecordSort,
+} from "@/components/shared/MobileRecordList";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { listProformaInvoices } from "@/api/proforma-invoices";
@@ -140,6 +145,22 @@ export default function ProformaInvoiceList() {
     );
   }
 
+  // Phones: the cards' sort dropdown sits beside the Filters button
+  // (one row) instead of above the cards.
+  const mobileSort: RecordSort = {
+    options: [
+        { value: "invoiceNumber", label: "Invoice Number" },
+        { value: "grandTotal", label: "Grand Total" },
+        { value: "validUntil", label: "Valid Until" },
+    ],
+    by: sortBy,
+    order: sortOrder,
+    onChange: (by, order) => {
+      setSortBy(by as SortableColumn);
+      setSortOrder(order);
+    },
+  };
+
   return (
     <div className="app-shell bg-app-grid">
       <Sidebar />
@@ -147,7 +168,11 @@ export default function ProformaInvoiceList() {
         <Topbar title="Proforma Invoices" />
         <main className="app-shell-main app-shell-main-list">
           <div className="mb-4">
-            <ProformaInvoiceFiltersBar filters={filters} onChange={setFilters} />
+            <ProformaInvoiceFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              mobileActions={<RecordSortSelect sort={mobileSort} />}
+            />
           </div>
 
           <p className="mb-3 text-xs text-muted-foreground">
@@ -265,19 +290,6 @@ export default function ProformaInvoiceList() {
                 loading={loading}
                 loadingText="Loading proforma invoices..."
                 emptyText="No proforma invoices found."
-                sort={{
-                  options: [
-                    { value: "invoiceNumber", label: "Invoice Number" },
-                    { value: "grandTotal", label: "Grand Total" },
-                    { value: "validUntil", label: "Valid Until" },
-                  ],
-                  by: sortBy,
-                  order: sortOrder,
-                  onChange: (by, order) => {
-                    setSortBy(by as SortableColumn);
-                    setSortOrder(order);
-                  },
-                }}
               />
             }
           />
