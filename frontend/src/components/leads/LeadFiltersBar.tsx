@@ -27,6 +27,8 @@ interface LeadFiltersBarProps {
   onChange: (filters: LeadFilters) => void;
   // Phone-only main action + ⋮ menu shown in the Filters row (see FilterPanel).
   mobileActions?: ReactNode;
+  // md and up: the page's action buttons, on the right of the search row.
+  actions?: ReactNode;
 }
 
 export const emptyLeadFilters: LeadFilters = {
@@ -41,7 +43,7 @@ export const emptyLeadFilters: LeadFilters = {
   followUp: "",
 };
 
-export default function LeadFiltersBar({ filters, onChange, mobileActions }: LeadFiltersBarProps) {
+export default function LeadFiltersBar({ filters, onChange, mobileActions, actions }: LeadFiltersBarProps) {
   // Lead Assignment enhancement: this filter used to be free text; it's now
   // a select over the same active Sales Executive/Sales Manager users the
   // Lead Assignment picker itself uses, since assignment is now a real user
@@ -70,15 +72,18 @@ export default function LeadFiltersBar({ filters, onChange, mobileActions }: Lea
   }
 
   return (
-    <div className="space-y-3">
-      <div className="relative w-full md:max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by lead #, company, contact, email, phone, or title"
-          className="pl-9"
-          value={filters.search}
-          onChange={(e) => update("search", e.target.value)}
-        />
+    <div className="space-y-3 md:w-full">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by lead #, company, contact, email, phone, or title"
+            className="pl-9"
+            value={filters.search}
+            onChange={(e) => update("search", e.target.value)}
+          />
+        </div>
+        {actions && <div className="app-page-actions flex shrink-0 flex-wrap gap-2 max-md:hidden">{actions}</div>}
       </div>
 
       <FilterPanel
