@@ -313,13 +313,14 @@ export default function Products() {
                     <TableHead>Category</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Price</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
                           <Spinner /> Loading products...
                         </span>
@@ -327,7 +328,7 @@ export default function Products() {
                     </TableRow>
                   ) : products.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                         No products found. Click "Add Product" to create one.
                       </TableCell>
                     </TableRow>
@@ -336,17 +337,17 @@ export default function Products() {
                       <TableRow key={product.id}>
                         <TableCell className="font-medium text-slate-900">
                           <TruncatedText text={product.name} />
-                          {!product.isActive && (
-                            <Badge variant="muted" className="ml-2">
-                              Inactive
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant="orange">{product.category}</Badge>
                         </TableCell>
                         <TableCell>{product.sku || "—"}</TableCell>
                         <TableCell>{formatPrice(product.price)}</TableCell>
+                        <TableCell>
+                          <Badge variant={product.isActive ? "success" : "destructive"}>
+                            {product.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">{productActions(product)}</div>
                         </TableCell>
