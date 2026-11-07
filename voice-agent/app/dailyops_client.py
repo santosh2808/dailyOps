@@ -1,26 +1,34 @@
-"""D.O.T. AI Lead Assistant — Phase 3B. A small, best-effort HTTP client the
-voice-agent uses at the end of a call to report Meera's qualification result
-back to the EXISTING DailyOps Phase 3A backend endpoint
-(`POST /api/v1/leads/:id/ai-call-history`).
+"""D.O.T. call-result write-back — the voice-agent's single call into
+DailyOps: submit one finished call's result, identified by Exotel's
+CallSid, to `POST /api/v1/telephony/voice-agent/call-results`.
 
-Deliberately minimal and self-contained:
-- No new backend code, no new DailyOps auth mechanism — logs in as an
-  ordinary DailyOps user (a dedicated service account, created manually via
-  Admin > Users) through the existing, unmodified `POST /auth/login`.
-- No retry engine, no queue, no persistence. If a call to DailyOps fails
-  (network error, 401, 404, 400, ...), it is logged and swallowed — this
-  module NEVER raises out to agent.py, since a DailyOps reporting failure
-  must never affect (or crash) the live voice call it happened during, and
-  by the time this runs the call has already ended anyway.
-- Never logs API keys, passwords, bearer tokens, phone numbers, or full
-  response bodies — only status codes, lead ids, and enum values, matching
-  this codebase's existing diagnostic-logging convention (see sarvam_stt.py
-  / session.py's "log length/counts, never payload content" pattern).
+Replaces the earlier Phase 3B client, which logged in as an ordinary
+DailyOps employee (and treated the login's HTTP 201 as a failure, so no
+result was ever saved) and then guessed the lead by searching phone
+numbers. Now:
+
+- Auth is a shared service key in the `X-Voice-Agent-Key` header
+  (VOICE_AGENT_SERVICE_KEY, same value on both services). No login, no JWT,
+  no user — the key only works on this one DailyOps route.
+- The call is identified by CallSid only. DailyOps decides which lead (if
+  any) the result belongs to; this client never sends a phone number.
+- Any 2xx (200 or 201) is success.
+- Transient failures (network error, timeout, 408/425/429, 5xx) are retried
+  a bounded number of times with backoff. Permanent failures (400, 401,
+  403, 404, 409, 413, 422) are not retried. DailyOps treats a repeated
+  submission for the same CallSid as a no-op, so a retry after an
+  ambiguous failure can never create a duplicate.
+- Never raises to the caller (the call has already ended; a reporting
+  failure must not crash anything), and never logs the key, the request
+  body, or response bodies — only the CallSid, attempt number and status.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from dataclasses import dataclass
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -28,135 +36,116 @@ from .config import Settings
 
 logger = logging.getLogger("voice-agent.dailyops")
 
+RESULT_PATH = "/api/v1/telephony/voice-agent/call-results"
+SERVICE_KEY_HEADER = "X-Voice-Agent-Key"
+
 _TIMEOUT_SECONDS = 10.0
+MAX_ATTEMPTS = 4
+# Delay before attempt 2, 3, 4. Total worst case ~14 s of waiting plus
+# request timeouts — bounded, never indefinite.
+BACKOFF_SECONDS = (1.0, 3.0, 10.0)
+_RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+
+@dataclass(frozen=True)
+class SubmitResult:
+    delivered: bool
+    attempts: int
+    status_code: int | None = None
+    # True when the final failure was a transient one that ran out of
+    # attempts (as opposed to a permanent rejection like 401/404).
+    gave_up_after_retries: bool = False
 
 
 class DailyOpsClient:
-    """One instance per voice-agent process (created lazily, reused across
-    calls). Holds a cached JWT in memory only — never persisted to disk."""
-
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ):
         self._settings = settings
-        self._token: str | None = None
+        # Injectable for tests (httpx.MockTransport) — production uses the
+        # default network transport.
+        self._transport = transport
+        self._sleep = sleep
 
-    async def _login(self) -> str | None:
-        assert self._settings.dailyops_configured
-        url = f"{self._settings.dailyops_api_base_url}/auth/login"
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                resp = await client.post(
-                    url,
-                    json={
-                        "identifier": self._settings.dailyops_api_username,
-                        "password": self._settings.dailyops_api_password,
-                    },
-                )
-            if resp.status_code != 200:
-                logger.error("DailyOps login failed: status=%d", resp.status_code)
-                return None
-            token = (resp.json() or {}).get("accessToken")
-            if not token:
-                logger.error("DailyOps login response had no accessToken")
-                return None
-            self._token = token
-            logger.info("DailyOps login succeeded")
-            return token
-        except Exception as exc:  # noqa: BLE001 — never crash the caller over a login failure
-            logger.error("DailyOps login request failed: %s", exc)
-            return None
+    async def submit_call_result(self, payload: dict) -> SubmitResult:
+        call_sid = payload.get("callSid")
+        if not self._settings.dailyops_configured:
+            logger.info("DailyOps result submission not configured — skipping (call_sid=%s)", call_sid)
+            return SubmitResult(delivered=False, attempts=0)
 
-    async def _ensure_token(self) -> str | None:
-        if self._token:
-            return self._token
-        return await self._login()
+        url = f"{self._settings.dailyops_api_base_url}{RESULT_PATH}"
+        headers = {SERVICE_KEY_HEADER: self._settings.dailyops_service_key or ""}
 
-    async def _authed_request(self, method: str, path: str, **kwargs) -> httpx.Response | None:
-        """One request, with exactly one relogin-and-retry if the cached
-        token has expired (401) — no further retries beyond that."""
-        token = await self._ensure_token()
-        if not token:
-            return None
-
-        url = f"{self._settings.dailyops_api_base_url}{path}"
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                resp = await client.request(method, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
-        except Exception as exc:  # noqa: BLE001 — network error, DNS, timeout, etc.
-            logger.error("DailyOps request failed: method=%s path=%s error=%s", method, path, exc)
-            return None
-
-        if resp.status_code == 401:
-            logger.info("DailyOps token expired/invalid — re-logging in once")
-            self._token = None
-            token = await self._ensure_token()
-            if not token:
-                return None
+        last_status: int | None = None
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            retryable = False
             try:
-                async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                    resp = await client.request(method, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
-            except Exception as exc:  # noqa: BLE001
-                logger.error("DailyOps retry request failed: method=%s path=%s error=%s", method, path, exc)
-                return None
+                async with httpx.AsyncClient(
+                    timeout=_TIMEOUT_SECONDS, transport=self._transport, follow_redirects=False
+                ) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                last_status = resp.status_code
+                if 200 <= resp.status_code < 300:
+                    logger.info(
+                        "DailyOps call result delivered: call_sid=%s outcome=%s http_status=%d attempt=%d",
+                        call_sid,
+                        payload.get("outcome"),
+                        resp.status_code,
+                        attempt,
+                    )
+                    return SubmitResult(delivered=True, attempts=attempt, status_code=resp.status_code)
+                retryable = resp.status_code in _RETRYABLE_STATUS
+                if 300 <= resp.status_code < 400:
+                    # Redirects are deliberately NOT followed: that would send
+                    # the service key to wherever the redirect points.
+                    logger.error(
+                        "DailyOps call result got a redirect (http_status=%d, call_sid=%s) — set "
+                        "DAILYOPS_API_BASE_URL to the final https:// URL; redirects are not followed",
+                        resp.status_code,
+                        call_sid,
+                    )
+                logger.warning(
+                    "DailyOps call result rejected: call_sid=%s http_status=%d attempt=%d retryable=%s",
+                    call_sid,
+                    resp.status_code,
+                    attempt,
+                    retryable,
+                )
+            except httpx.TransportError as exc:  # connect error, timeout, DNS, reset...
+                retryable = True
+                logger.warning(
+                    "DailyOps call result request failed: call_sid=%s attempt=%d error=%s",
+                    call_sid,
+                    attempt,
+                    type(exc).__name__,
+                )
+            except Exception as exc:  # noqa: BLE001 — never raise out of end-of-call reporting
+                logger.error(
+                    "DailyOps call result request error: call_sid=%s attempt=%d error=%s",
+                    call_sid,
+                    attempt,
+                    type(exc).__name__,
+                )
+                return SubmitResult(delivered=False, attempts=attempt, status_code=last_status)
 
-        return resp
-
-    async def find_lead_by_phone(self, phone: str) -> str | None:
-        """Looks up a Lead via the existing, unmodified
-        `GET /api/v1/leads?search=<phone>` endpoint. Returns the most
-        recently created matching Lead's id, or None if there is no match
-        (or the lookup itself failed) — logged either way, never raised."""
-        resp = await self._authed_request(
-            "GET",
-            "/api/v1/leads",
-            params={"search": phone, "page": 1, "limit": 5, "sortBy": "createdAt", "sortOrder": "desc"},
-        )
-        if resp is None:
-            return None
-        if resp.status_code != 200:
-            logger.error("DailyOps lead lookup failed: status=%d", resp.status_code)
-            return None
-
-        body = resp.json() or {}
-        rows = body.get("data") if isinstance(body, dict) else None
-        if rows is None and isinstance(body, list):
-            rows = body
-        if not rows:
-            logger.info("DailyOps lead lookup: no matching Lead found for caller phone number")
-            return None
-
-        # Most recent match — see the sortBy/sortOrder above, but sort
-        # defensively again client-side in case the endpoint ignores those
-        # params (its documented default order is unspecified).
-        def _created_at(row: dict) -> str:
-            return row.get("createdAt") or ""
-
-        rows_sorted = sorted(rows, key=_created_at, reverse=True)
-        lead_id = rows_sorted[0].get("id")
-        logger.info("DailyOps lead lookup: matched a Lead (count=%d)", len(rows))
-        return lead_id
-
-    async def submit_ai_qualification(self, lead_id: str, payload: dict) -> bool:
-        """POSTs to the existing, unmodified
-        `POST /api/v1/leads/:id/ai-call-history` endpoint using the Phase
-        3A DTO's own field names (status/qualification/summary/quantity/
-        application/city/state/timeline/siteVisitRequested/
-        callbackRequested/callbackAt/...). Returns True on a 2xx response,
-        False otherwise — never raises."""
-        resp = await self._authed_request("POST", f"/api/v1/leads/{lead_id}/ai-call-history", json=payload)
-        if resp is None:
-            return False
-        if 200 <= resp.status_code < 300:
-            logger.info(
-                "DailyOps qualification submitted: lead_id=%s status=%s qualification=%s",
-                lead_id,
-                payload.get("status"),
-                payload.get("qualification"),
-            )
-            return True
+            if not retryable:
+                logger.error(
+                    "DailyOps call result NOT delivered (permanent rejection): call_sid=%s http_status=%s",
+                    call_sid,
+                    last_status,
+                )
+                return SubmitResult(delivered=False, attempts=attempt, status_code=last_status)
+            if attempt < MAX_ATTEMPTS:
+                await self._sleep(BACKOFF_SECONDS[attempt - 1])
 
         logger.error(
-            "DailyOps qualification submission rejected: lead_id=%s http_status=%d",
-            lead_id,
-            resp.status_code,
+            "DailyOps call result NOT delivered after %d attempts: call_sid=%s last_http_status=%s",
+            MAX_ATTEMPTS,
+            call_sid,
+            last_status,
         )
-        return False
+        return SubmitResult(delivered=False, attempts=MAX_ATTEMPTS, status_code=last_status, gave_up_after_retries=True)

@@ -15,7 +15,7 @@ from .config import Settings
 from .dailyops_client import DailyOpsClient
 from .prompts import CLOSING, GREETING
 from .qualification import extract_qualification
-from .sarvam_llm import generate_reply
+from .sarvam_llm import generate_reply_with_status
 from .sarvam_stt import SarvamSttSession
 from .sarvam_tts import synthesize_speech
 from .session import ExotelSession
@@ -24,6 +24,10 @@ logger = logging.getLogger("voice-agent.agent")
 
 _GOODBYE_MARK = "goodbye_complete"
 _MARK_WAIT_TIMEOUT_SECONDS = 5
+# Upper bound on the one post-call Sarvam LLM extraction. Without it a hung
+# Sarvam request would hold the result (and this handler) forever. On
+# timeout the result is still submitted — honestly, with no qualification.
+EXTRACTION_TIMEOUT_SECONDS = 20
 
 
 class CallAgent:
@@ -40,13 +44,20 @@ class CallAgent:
         self._ended = asyncio.Event()
         self._mark_events: dict[str, asyncio.Event] = {}
 
-        # Phase 3B: captured from Exotel's "start" event, used only at
-        # end-of-call to look up the Lead and log the call — never used to
-        # change how the live conversation itself behaves.
-        self._from_number: str | None = None
+        # D.O.T. call-result write-back: captured from Exotel's "start"
+        # event and used only at end-of-call to report this call's result to
+        # DailyOps, identified by CallSid. The caller's phone number is
+        # deliberately NOT kept — DailyOps decides which lead (if any) the
+        # result belongs to from its own record of the call.
         self._call_sid: str | None = None
+        self._account_sid: str | None = None
         self._call_started_at: datetime | None = None
-        self._qualification_submitted = False
+        self._result_submitted = False
+        # Which components failed during the call ("stt", "llm", "tts",
+        # "agent"). Any in-call failure makes the reported outcome
+        # AGENT_ERROR, so a technical failure is never reported as an
+        # answered/qualified call.
+        self._agent_errors: set[str] = set()
 
     async def run(self) -> None:
         if not self._settings.sarvam_configured:
@@ -66,11 +77,8 @@ class CallAgent:
                     self._sample_rate = event.start.sample_rate or 8000
                     self._call_start = time.monotonic()
                     self._call_started_at = datetime.now(timezone.utc)
-                    # Phase 3B: kept only for the end-of-call DailyOps lookup/
-                    # log — never logged with the actual number, and never
-                    # used anywhere in the live conversation logic below.
-                    self._from_number = event.start.from_number
                     self._call_sid = event.start.call_sid
+                    self._account_sid = event.start.account_sid
                     logger.info(
                         "Call started: call_sid=%s stream_sid=%s sample_rate=%s",
                         event.start.call_sid,
@@ -87,6 +95,7 @@ class CallAgent:
                         logger.info("STT start returned successfully")
                     except BaseException:  # noqa: BLE001 — diagnostic visibility only; always re-raised below
                         logger.exception("STT start failed")
+                        self._agent_errors.add("stt")
                         raise
                     asyncio.create_task(self._watch_stt_events(), name="stt-event-watcher")
                     asyncio.create_task(self._watch_time_budget(), name="call-time-budget")
@@ -105,7 +114,9 @@ class CallAgent:
                     await self._stt.send_pcm(event.audio)
 
                 elif event.kind == "dtmf":
-                    logger.info("DTMF digit received: %s (ignored in Phase 2B)", event.digit)
+                    # The digit itself is not logged — callers may key in
+                    # account or phone numbers.
+                    logger.info("DTMF digit received (ignored)")
 
                 elif event.kind == "mark" and event.mark_name:
                     waiter = self._mark_events.get(event.mark_name)
@@ -117,6 +128,7 @@ class CallAgent:
                     break
         except Exception:  # noqa: BLE001 — Step 9: handle errors, never let one crash the process
             logger.exception("Unhandled error in call session")
+            self._agent_errors.add("agent")
         finally:
             await self._cleanup()
 
@@ -127,6 +139,12 @@ class CallAgent:
                 event = await asyncio.wait_for(self._stt.events.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
+
+            if self._ended.is_set():
+                # The call is over: anything STT reports now (e.g. an error
+                # from flushing/closing its socket at hang-up) is not an
+                # in-call failure and must not change the reported outcome.
+                break
 
             if event.kind == "speech_start":
                 # Barge-in (Step 9 "handle customer interruption where
@@ -139,6 +157,7 @@ class CallAgent:
                 await self._handle_user_turn(event.text)
             elif event.kind == "error":
                 logger.warning("STT error event: %s", event.text)
+                self._agent_errors.add("stt")
 
     async def _watch_time_budget(self) -> None:
         while not self._ended.is_set():
@@ -168,7 +187,9 @@ class CallAgent:
         # the first) goes straight to the LLM — the old canned
         # affirmative-word special case was specific to the Phase 2B test
         # script's yes/no opener and no longer applies.
-        reply_text = await generate_reply(self._settings, self._history)
+        reply_text, llm_ok = await generate_reply_with_status(self._settings, self._history)
+        if not llm_ok:
+            self._agent_errors.add("llm")
 
         self._history.append({"role": "assistant", "content": reply_text})
         # TEMPORARY DIAGNOSTIC: same visibility as the greeting task below —
@@ -206,6 +227,10 @@ class CallAgent:
             # TEMPORARY DIAGNOSTIC: reached only on normal (non-cancelled,
             # non-exception) completion of the loop above.
             logger.info("TTS speak completed: total_bytes=%d", total_bytes)
+            if total_bytes == 0:
+                # Sarvam answered with an error/empty stream (sarvam_tts.py
+                # only logs ErrorResponse) — the customer heard nothing.
+                self._agent_errors.add("tts")
         except asyncio.CancelledError:
             # Expected on barge-in (see _watch_stt_events) — not an error, but
             # still logged so a cancellation is never confused with silence.
@@ -216,6 +241,7 @@ class CallAgent:
             # full traceback and then re-raised" requirement — logger.exception()
             # captures the current exception's traceback automatically.
             logger.exception("TTS speak failed with an unhandled exception: total_bytes_sent_so_far=%d", total_bytes)
+            self._agent_errors.add("tts")
             raise
         finally:
             await agen.aclose()
@@ -247,7 +273,10 @@ class CallAgent:
             self._speaking_task.cancel()
             await self._session.send_clear()
 
-        await self._speak(CLOSING)
+        try:
+            await self._speak(CLOSING)
+        except Exception:  # noqa: BLE001 — already recorded by _speak(); still hang up below
+            logger.warning("Closing line could not be spoken — ending the call anyway")
 
         mark_event = asyncio.Event()
         self._mark_events[_GOODBYE_MARK] = mark_event
@@ -266,64 +295,80 @@ class CallAgent:
             self._speaking_task.cancel()
         if self._stt:
             await self._stt.close()
-        await self._submit_qualification()
+        await self._submit_result()
         logger.info("Call session cleaned up")
 
-    async def _submit_qualification(self) -> None:
-        """Phase 3B: best-effort, run-once, end-of-call report to the
-        existing DailyOps Phase 3A endpoint. Never raises — any failure
-        here is logged and swallowed, since by this point the call is
-        already over and there is nothing left to protect. This never
-        touches Lead.status (the DailyOps endpoint itself never writes
-        that field — see leads.service.ts's addAiCallLog()).
+    def _call_outcome(self) -> str:
+        """What happened on the agent's side of this answered call. Kept
+        separate from Meera's qualification of the lead:
+          AGENT_ERROR            — STT/LLM/TTS or the agent itself failed
+                                   during the call; never qualified.
+          NO_CONVERSATION        — connected, but the customer said nothing
+                                   the agent heard.
+          CONVERSATION_COMPLETED — a conversation happened with no failures.
         """
-        if self._qualification_submitted:
+        if self._agent_errors:
+            return "AGENT_ERROR"
+        if not any(turn.get("role") == "user" for turn in self._history):
+            return "NO_CONVERSATION"
+        return "CONVERSATION_COMPLETED"
+
+    async def _build_result_payload(self) -> dict:
+        ended_at = datetime.now(timezone.utc)
+        outcome = self._call_outcome()
+        payload: dict = {
+            "callSid": self._call_sid,
+            "accountSid": self._account_sid,
+            "outcome": outcome,
+            "startedAt": self._call_started_at.isoformat() if self._call_started_at else None,
+            "endedAt": ended_at.isoformat(),
+            "durationSeconds": (
+                max(0, round((ended_at - self._call_started_at).total_seconds())) if self._call_started_at else None
+            ),
+        }
+        agent_errors = set(self._agent_errors)
+        if outcome == "CONVERSATION_COMPLETED":
+            try:
+                extracted = await asyncio.wait_for(
+                    extract_qualification(self._settings, self._history), timeout=EXTRACTION_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Qualification extraction timed out after %ss (call_sid=%s)", EXTRACTION_TIMEOUT_SECONDS, self._call_sid
+                )
+                extracted = None
+            if extracted is None:
+                # The conversation happened but the post-call extraction
+                # failed: report it honestly — no qualification, no guessed
+                # COLD — and note the LLM failure for troubleshooting.
+                agent_errors.add("llm")
+            else:
+                payload.update(extracted)
+        if agent_errors:
+            payload["agentErrors"] = sorted(agent_errors)
+        return {k: v for k, v in payload.items() if v is not None}
+
+    async def _submit_result(self) -> None:
+        """Best-effort, run-once, end-of-call report to DailyOps, identified
+        by CallSid. Never raises — by this point the call is already over.
+        DailyOps (not this agent) decides which lead, if any, the result
+        belongs to, and never changes Lead.status/priority/assignment.
+        """
+        if self._result_submitted:
             return
-        self._qualification_submitted = True
+        self._result_submitted = True
 
         if not self._settings.dailyops_configured:
-            logger.info("DailyOps API not configured — skipping qualification submission")
+            logger.info("DailyOps result submission not configured — skipping (call_sid=%s)", self._call_sid)
             return
-
-        if not self._from_number:
-            logger.info("No caller phone number captured for this call — skipping DailyOps submission")
+        if not self._call_sid:
+            # Without the CallSid the result can't be tied to a call, and
+            # it is never guessed from a phone number.
+            logger.warning("No CallSid captured for this call — result not submitted")
             return
 
         try:
-            client = DailyOpsClient(self._settings)
-
-            if not self._history:
-                # Call connected but no conversation happened (e.g. dropped
-                # immediately) — nothing to qualify, but still worth a
-                # minimal log entry using the existing ANSWERED status
-                # rather than inventing a new one.
-                payload = {
-                    "status": "ANSWERED",
-                    "externalCallId": self._call_sid,
-                    "startedAt": self._call_started_at.isoformat() if self._call_started_at else None,
-                    "endedAt": datetime.now(timezone.utc).isoformat(),
-                }
-            else:
-                result = await extract_qualification(self._settings, self._history)
-                payload = {
-                    **result,
-                    "externalCallId": self._call_sid,
-                    "startedAt": self._call_started_at.isoformat() if self._call_started_at else None,
-                    "endedAt": datetime.now(timezone.utc).isoformat(),
-                }
-
-            # Drop keys with a None value entirely rather than sending
-            # explicit nulls for optional DTO fields — smaller diff from
-            # "field simply not provided", and avoids any ambiguity around
-            # how an optional-but-present-as-null field is handled server
-            # side.
-            payload = {k: v for k, v in payload.items() if v is not None}
-
-            lead_id = await client.find_lead_by_phone(self._from_number)
-            if not lead_id:
-                logger.info("No matching Lead found for this call's phone number — skipping DailyOps submission")
-                return
-
-            await client.submit_ai_qualification(lead_id, payload)
+            payload = await self._build_result_payload()
+            await DailyOpsClient(self._settings).submit_call_result(payload)
         except Exception:  # noqa: BLE001 — end-of-call reporting must never raise out of _cleanup()
-            logger.exception("Unhandled error while submitting qualification to DailyOps")
+            logger.exception("Unhandled error while submitting the call result to DailyOps (call_sid=%s)", self._call_sid)

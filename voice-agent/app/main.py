@@ -19,6 +19,7 @@ backend/docs/voice-agent-architecture.md for the full picture.
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import FastAPI, WebSocket
 
@@ -51,6 +52,14 @@ async def on_startup() -> None:
     # only, never the API key — so a stale/deprecated LLM model is visible
     # in the logs at process start without needing a live call first.
     logger.info("LLM model configured: %s", settings.sarvam_llm_model)
+    # D.O.T. call-result write-back: whether results will be reported to
+    # DailyOps (a boolean only — never the URL's credentials or the key).
+    logger.info("DailyOps call-result submission configured: %s", settings.dailyops_configured)
+    if os.environ.get("DAILYOPS_API_USERNAME") or os.environ.get("DAILYOPS_API_PASSWORD"):
+        logger.warning(
+            "DAILYOPS_API_USERNAME/DAILYOPS_API_PASSWORD are set but no longer used — "
+            "the voice-agent now authenticates with VOICE_AGENT_SERVICE_KEY. Remove them."
+        )
 
 
 @app.websocket("/ws/exotel")

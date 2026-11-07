@@ -1,0 +1,10 @@
+# Keep local secrets and dev artefacts out of every Docker build context —
+# the image only needs requirements.txt and app/ (see Dockerfile).
+.env
+.env.*
+!.env.example
+tests/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

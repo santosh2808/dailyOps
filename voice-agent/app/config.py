@@ -10,7 +10,7 @@ sessions with a clear log message rather than crashing on first connect.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -52,7 +52,8 @@ class Settings:
     # matching DailyOps-side SARVAM_ENABLED/SARVAM_API_KEY convention. This
     # service reads its OWN copy of these (it is a separate deployable
     # process, per Phase 2A's voice-agent-architecture.md), never DailyOps's.
-    sarvam_api_key: str | None
+    # repr=False: a secret must never appear if Settings is ever logged.
+    sarvam_api_key: str | None = field(repr=False)
     sarvam_stt_model: str
     sarvam_llm_model: str
     sarvam_tts_model: str
@@ -75,18 +76,16 @@ class Settings:
     # is going, so a stuck/looping test can never run indefinitely.
     max_call_seconds: int
 
-    # Phase 3B — D.O.T. AI Lead Assistant qualification reporting. The
-    # voice-agent is a separate deployable process from the DailyOps
-    # backend (see Phase 2A's voice-agent-architecture.md), so it holds its
-    # own copy of a base URL + credentials for a dedicated DailyOps service
-    # account (created manually via Admin > Users on the backend — this
-    # process never creates it). All three are optional: if any is unset,
-    # dailyops_configured is False and the voice-agent simply skips
-    # submitting qualification results at end-of-call, logging why, with
-    # zero effect on the live Exotel/STT/LLM/TTS conversation itself.
+    # D.O.T. call-result write-back. The voice-agent is a separate
+    # deployable process from the DailyOps backend, so it holds its own copy
+    # of the DailyOps base URL and the shared service key
+    # (VOICE_AGENT_SERVICE_KEY, same value as the backend's). Both optional:
+    # if either is unset, dailyops_configured is False and the agent skips
+    # result submission at end-of-call, logging why, with zero effect on the
+    # live Exotel/STT/LLM/TTS conversation itself. Replaces the old
+    # DAILYOPS_API_USERNAME/PASSWORD employee login.
     dailyops_api_base_url: str | None
-    dailyops_api_username: str | None
-    dailyops_api_password: str | None
+    dailyops_service_key: str | None = field(repr=False)
 
     @property
     def sarvam_configured(self) -> bool:
@@ -94,7 +93,7 @@ class Settings:
 
     @property
     def dailyops_configured(self) -> bool:
-        return bool(self.dailyops_api_base_url and self.dailyops_api_username and self.dailyops_api_password)
+        return bool(self.dailyops_api_base_url and self.dailyops_service_key)
 
 
 def load_settings() -> Settings:
@@ -116,13 +115,10 @@ def load_settings() -> Settings:
         port=int(os.environ.get("VOICE_AGENT_PORT", "8000")),
         websocket_url=os.environ.get("VOICE_AGENT_WEBSOCKET_URL", "").strip() or None,
         max_call_seconds=int(os.environ.get("VOICE_AGENT_MAX_CALL_SECONDS", "120")),
-        # Phase 3B: DailyOps API base URL, e.g. "http://localhost:4000" (no
-        # trailing slash, no /api/v1 suffix — dailyops_client.py appends
-        # the exact paths it needs). Username/password are the dedicated
-        # AI service-account's DailyOps login credentials.
+        # DailyOps API base URL, e.g. "http://localhost:4000" (no trailing
+        # slash, no /api/v1 suffix — dailyops_client.py appends the path).
         dailyops_api_base_url=os.environ.get("DAILYOPS_API_BASE_URL", "").strip().rstrip("/") or None,
-        dailyops_api_username=os.environ.get("DAILYOPS_API_USERNAME", "").strip() or None,
-        dailyops_api_password=os.environ.get("DAILYOPS_API_PASSWORD") or None,
+        dailyops_service_key=os.environ.get("VOICE_AGENT_SERVICE_KEY", "").strip() or None,
     )
 
 

@@ -11,24 +11,26 @@ conversational path at all. This runs exactly once, after the call has
 ended, against the full transcript already collected in agent.py's
 self._history. Same model/client construction as generate_reply() (no LLM
 model configuration change), just a different, extraction-only prompt.
+
+D.O.T. call-result write-back: this module no longer invents a result when
+extraction fails (it used to report QUALIFIED/COLD with a misleading
+"transcript available in logs" summary). It returns None instead, and
+passes the LLM's values through as-is — DailyOps validates every field on
+its own and records anything invalid, rather than this module silently
+coercing it (e.g. an unknown qualification is no longer turned into COLD).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sarvamai import AsyncSarvamAI
 
 from .config import Settings
 
 logger = logging.getLogger("voice-agent.qualification")
-
-# Mirrors backend Prisma enum AiQualification (HOT/WARM/COLD/NOT_INTERESTED)
-# and AiLeadStatus (only QUALIFIED/NOT_INTERESTED are ever emitted here —
-# ANSWERED/FAILED/etc. are set directly by agent.py for calls that never
-# produced a real conversation, not by this extraction step).
-_VALID_QUALIFICATIONS = {"HOT", "WARM", "COLD", "NOT_INTERESTED"}
 
 _EXTRACTION_SYSTEM_PROMPT = """You just finished listening to a phone call transcript between "Meera", a \
 voice assistant for Spyro Fans (an Indian HVLS industrial fan company), and a \
@@ -85,55 +87,51 @@ two boolean fields).
 """
 
 
-def _safe_bool(value) -> bool:
-    return bool(value) if isinstance(value, bool) else False
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
-def _safe_int(value) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+def _date_context(now: datetime | None = None) -> str:
+    """Tells the LLM today's date in India and the required offset, so a
+    spoken "call me tomorrow at 5" becomes an absolute IST time instead of
+    a guessed year or a time with no timezone (DailyOps also reads a time
+    without an offset as IST, and rejects past times)."""
+    today = (now or datetime.now(timezone.utc)).astimezone(_IST)
+    return (
+        f"Today is {today:%A, %Y-%m-%d} in India (IST, UTC+05:30). "
+        "If you give callbackAt, it must be a future date-time with the +05:30 offset, "
+        'e.g. "2026-01-15T17:00:00+05:30".\n\n'
+    )
 
 
-def _safe_str(value) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
+# Keys the extraction prompt asks for — the only ones passed on to DailyOps.
+EXTRACTED_KEYS = (
+    "qualification",
+    "summary",
+    "quantity",
+    "application",
+    "city",
+    "state",
+    "timeline",
+    "siteVisitRequested",
+    "callbackRequested",
+    "callbackAt",
+)
 
 
-async def extract_qualification(settings: Settings, history: list[dict[str, str]]) -> dict:
-    """Returns a dict already shaped as the Phase 3A DTO's fields
-    (status/qualification/summary/quantity/application/city/state/
-    timeline/siteVisitRequested/callbackRequested/callbackAt). Never
-    raises — falls back to a safe, mostly-empty COLD result (logged) if
-    the LLM call or JSON parsing fails, since a bad extraction must never
-    block the caller (agent.py's _cleanup()) from finishing."""
-    fallback = {
-        "status": "QUALIFIED",
-        "qualification": "COLD",
-        "summary": "Automated qualification extraction failed; call transcript available in logs only.",
-        "quantity": None,
-        "application": None,
-        "city": None,
-        "state": None,
-        "timeline": None,
-        "siteVisitRequested": False,
-        "callbackRequested": False,
-        "callbackAt": None,
-    }
-
+async def extract_qualification(settings: Settings, history: list[dict[str, str]]) -> dict | None:
+    """Returns the extracted fields (only EXTRACTED_KEYS, values as the LLM
+    gave them, strings trimmed, empty/null values omitted), or None if
+    extraction could not be done (no history, LLM failure, non-JSON or
+    non-object output). Never raises — end-of-call cleanup must always
+    finish."""
     if not history:
-        return fallback
+        return None
 
     client = AsyncSarvamAI(api_subscription_key=settings.sarvam_api_key)
     transcript_lines = [f'{turn.get("role", "user")}: {turn.get("content", "")}' for turn in history]
     messages = [
         {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
-        {"role": "user", "content": "Transcript:\n" + "\n".join(transcript_lines)},
+        {"role": "user", "content": _date_context() + "Transcript:\n" + "\n".join(transcript_lines)},
     ]
 
     try:
@@ -142,11 +140,16 @@ async def extract_qualification(settings: Settings, history: list[dict[str, str]
         content = getattr(choice.message, "content", None) if hasattr(choice, "message") else None
         if not content:
             logger.error("Qualification extraction: empty LLM response")
-            return fallback
+            return None
     except Exception as exc:  # noqa: BLE001 — never crash end-of-call cleanup over this
-        logger.error("Qualification extraction: LLM call failed: %s", exc)
-        return fallback
+        logger.error("Qualification extraction: LLM call failed: %s", type(exc).__name__)
+        return None
 
+    return parse_extraction(content)
+
+
+def parse_extraction(content: str) -> dict | None:
+    """Pure parsing step, split out for unit tests."""
     raw = content.strip()
     # Defensive: strip a markdown code fence if the model added one anyway.
     if raw.startswith("```"):
@@ -159,29 +162,19 @@ async def extract_qualification(settings: Settings, history: list[dict[str, str]
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         logger.error("Qualification extraction: LLM did not return valid JSON (len=%d)", len(raw))
-        return fallback
+        return None
+    if not isinstance(parsed, dict):
+        logger.error("Qualification extraction: LLM JSON was not an object")
+        return None
 
-    qualification = str(parsed.get("qualification") or "").strip().upper()
-    if qualification not in _VALID_QUALIFICATIONS:
-        logger.warning("Qualification extraction: unrecognized qualification value — defaulting to COLD")
-        qualification = "COLD"
-
-    # Deterministic status<->qualification pairing (do not trust the LLM to
-    # get this right on its own): NOT_INTERESTED qualification always means
-    # AiLeadStatus.NOT_INTERESTED; HOT/WARM/COLD always mean QUALIFIED (the
-    # call was successfully completed and qualified, whatever the outcome).
-    status = "NOT_INTERESTED" if qualification == "NOT_INTERESTED" else "QUALIFIED"
-
-    return {
-        "status": status,
-        "qualification": qualification,
-        "summary": _safe_str(parsed.get("summary")),
-        "quantity": _safe_int(parsed.get("quantity")),
-        "application": _safe_str(parsed.get("application")),
-        "city": _safe_str(parsed.get("city")),
-        "state": _safe_str(parsed.get("state")),
-        "timeline": _safe_str(parsed.get("timeline")),
-        "siteVisitRequested": _safe_bool(parsed.get("siteVisitRequested")),
-        "callbackRequested": _safe_bool(parsed.get("callbackRequested")),
-        "callbackAt": _safe_str(parsed.get("callbackAt")),
-    }
+    result: dict = {}
+    for key in EXTRACTED_KEYS:
+        value = parsed.get(key)
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                continue
+        if value is None:
+            continue
+        result[key] = value
+    return result

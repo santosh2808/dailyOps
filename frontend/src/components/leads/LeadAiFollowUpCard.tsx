@@ -9,7 +9,7 @@ import { LANGUAGE_SOURCE_LABELS, preferredLanguageLabel } from "./aiOptions";
 import { toast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/errors";
 import { getLeadAiCallHistory } from "@/api/leads";
-import type { Lead, LeadAiCallLog } from "@/types";
+import type { Lead, LeadAiCallLog, LeadAiFieldSuggestion } from "@/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -30,6 +30,75 @@ function formatDuration(seconds?: number | null) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}m ${s}s`;
+}
+
+const SUGGESTION_FIELD_LABELS: Record<LeadAiFieldSuggestion["field"], string> = {
+  city: "City",
+  state: "State",
+  quantity: "Quantity",
+  application: "Application",
+  timeline: "Timeline",
+};
+
+function sameValue(a: unknown, b: unknown) {
+  const norm = (v: unknown) => String(v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return norm(a) === norm(b);
+}
+
+function isBlank(v: unknown) {
+  return v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+}
+
+// fieldSuggestions is stored JSON — only well-formed entries for a known
+// field are shown (anything else is ignored rather than crashing the card).
+function isSuggestion(value: unknown): value is LeadAiFieldSuggestion {
+  if (!value || typeof value !== "object") return false;
+  const s = value as Partial<LeadAiFieldSuggestion>;
+  return (
+    typeof s.field === "string" &&
+    Object.prototype.hasOwnProperty.call(SUGGESTION_FIELD_LABELS, s.field) &&
+    (typeof s.aiValue === "string" || typeof s.aiValue === "number") &&
+    !isBlank(s.aiValue)
+  );
+}
+
+// AI values that weren't applied because the lead already had a different
+// value. Hidden once the lead's current value matches (i.e. a salesperson
+// has applied it by editing the lead) — nothing to review any more.
+function pendingSuggestions(call: LeadAiCallLog, lead: Lead): LeadAiFieldSuggestion[] {
+  if (!Array.isArray(call.fieldSuggestions)) return [];
+  const seen = new Set<string>();
+  return call.fieldSuggestions.filter((s): s is LeadAiFieldSuggestion => {
+    if (!isSuggestion(s) || seen.has(s.field)) return false;
+    seen.add(s.field);
+    return !sameValue(lead[s.field], s.aiValue);
+  });
+}
+
+// Read-only note under one call in D.O.T. Call History. Always compares with
+// the lead's CURRENT value (not the value at call time), so it never shows
+// a stale "lead has …".
+function UnappliedSuggestions({ call, lead }: { call: LeadAiCallLog; lead: Lead }) {
+  const suggestions = pendingSuggestions(call, lead);
+  if (suggestions.length === 0) return null;
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-input p-2">
+      <p className="text-xs font-medium text-slate-900">D.O.T. heard different details — not applied to this lead</p>
+      <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+        {suggestions.map((s) => {
+          const current = lead[s.field];
+          return (
+            <li key={s.field} className="[overflow-wrap:anywhere]">
+              <span className="font-medium text-slate-900">{SUGGESTION_FIELD_LABELS[s.field]}:</span>{" "}
+              {String(s.aiValue)}{" "}
+              <span>{isBlank(current) ? "(lead field is now empty)" : `(lead has ${String(current)})`}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-xs text-muted-foreground">Edit the lead to apply any of these.</p>
+    </div>
+  );
 }
 
 // D.O.T. AI Lead Assistant Phase 1 — "D.O.T. AI Follow-up" section + Call
@@ -164,6 +233,7 @@ export default function LeadAiFollowUpCard({ lead, refreshKey }: LeadAiFollowUpC
                       {call.language && <span>Language: {preferredLanguageLabel(call.language)}</span>}
                     </div>
                     {call.summary && <p className="mt-1 text-sm text-muted-foreground">{call.summary}</p>}
+                    <UnappliedSuggestions call={call} lead={lead} />
                   </li>
                 ))}
               </ol>

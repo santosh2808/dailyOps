@@ -58,9 +58,10 @@ export class CreateLeadAiCallLogDto {
   summary?: string;
 
   // Phase 3A — the structured requirement Meera collects during the call.
-  // Rolled up onto Lead.quantity/application/timeline (see addAiCallLog())
-  // and also kept here as a per-call snapshot, same treatment as
-  // qualification/summary above. Never touches Lead.status.
+  // Fills Lead.quantity/application/timeline only where the Lead's value is
+  // empty (see writeAiCallResultToLead()); a conflicting value is kept as a
+  // suggestion instead of overwriting. Always kept here as a per-call
+  // snapshot, same as qualification/summary above. Never touches Lead.status.
   @ApiPropertyOptional({ example: 5, description: 'Number of HVLS fans discussed on this call.' })
   @IsOptional()
   @IsInt()
@@ -79,8 +80,9 @@ export class CreateLeadAiCallLogDto {
 
   // city/state reuse the existing Lead.city/Lead.state columns (no
   // duplicate fields) — see CreateLeadDto for the same INDIA_STATES
-  // validation on state. Optional here: only overwrites the Lead's
-  // existing value when the AI call actually reports one.
+  // validation on state. Optional here. Fills the Lead's value only when it
+  // is empty; never overwrites an existing one (a conflicting value is kept
+  // as a suggestion on the call log instead).
   @ApiPropertyOptional({ example: 'Hyderabad' })
   @IsOptional()
   @IsString()

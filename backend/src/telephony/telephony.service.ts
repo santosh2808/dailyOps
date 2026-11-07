@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { TelephonyTestCallStatus } from '@prisma/client';
+import { Prisma, TelephonyTestCallStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { toInteraktPhoneParts } from '../whatsapp/normalize-phone';
 import { TestCallDto } from './dto/test-call.dto';
@@ -32,6 +32,30 @@ const DEFAULT_EXOTEL_BASE_URL = 'https://api.exotel.com';
 // just long enough to stop an accidental double-click from placing two
 // simultaneous calls to the same phone.
 const REPEAT_CALL_COOLDOWN_MS = 60_000;
+
+// The Telephony Test endpoints' response contract: exactly the columns the
+// test call record had before the D.O.T. call-result write-back. The newer
+// aiResult* columns (AI summary, suggestions, matched lead) are stored on
+// the same row but deliberately NOT returned by these general admin
+// endpoints — see VoiceAgentCallResultService for how they are written.
+const TEST_CALL_PUBLIC_SELECT = {
+  id: true,
+  phone: true,
+  leadId: true,
+  status: true,
+  providerCallId: true,
+  providerStatus: true,
+  errorMessage: true,
+  recordingRef: true,
+  initiatedBy: true,
+  initiatedAt: true,
+  ringingAt: true,
+  answeredAt: true,
+  completedAt: true,
+  durationSeconds: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.TelephonyTestCallSelect;
 
 @Injectable()
 export class TelephonyService {
@@ -86,7 +110,7 @@ export class TelephonyService {
     return this.prisma.telephonyTestCall.findMany({
       orderBy: { createdAt: 'desc' },
       take,
-      include: { lead: { select: { id: true, leadNumber: true, companyName: true } } },
+      select: { ...TEST_CALL_PUBLIC_SELECT, lead: { select: { id: true, leadNumber: true, companyName: true } } },
     });
   }
 
@@ -149,6 +173,7 @@ export class TelephonyService {
       const updated = await this.prisma.telephonyTestCall.update({
         where: { id: testCall.id },
         data: { providerCallId, providerStatus: 'in-progress' },
+        select: TEST_CALL_PUBLIC_SELECT,
       });
       return updated;
     } catch (error) {
@@ -161,6 +186,7 @@ export class TelephonyService {
       return this.prisma.telephonyTestCall.update({
         where: { id: testCall.id },
         data: { status: 'FAILED', errorMessage },
+        select: TEST_CALL_PUBLIC_SELECT,
       });
     }
   }

@@ -503,7 +503,10 @@ model Lead {
   // Additive: D.O.T. AI Lead Assistant Phase 3A — the structured requirement
   // info Meera collects during a qualification call. city/state are NOT
   // duplicated here — the AI call log rolls up into the existing Lead.city/
-  // Lead.state columns above instead (see LeadsService.addAiCallLog()).
+  // Lead.state columns above instead (see writeAiCallResultToLead() in
+  // src/leads/ai-call-result.ts). An AI value only FILLS an empty field; it
+  // never overwrites one a person entered (a conflicting value is kept as a
+  // suggestion on LeadAiCallLog.fieldSuggestions instead).
   // Nullable/no default: unset until an AI call actually reports them, same
   // convention as aiSummary above. quantity is the fan count discussed, not
   // a duplicate of LeadProduct.quantity (that's the sales-side line-item
@@ -709,7 +712,8 @@ model LeadAiCallLog {
   // Additive: D.O.T. AI Lead Assistant Phase 3A — per-call snapshot of the
   // structured requirement Meera reported on THIS call, mirroring how
   // qualification/summary above are kept per-call as well as rolled up onto
-  // the parent Lead. city/state are deliberately not duplicated here — see
+  // the parent Lead (requirement fields only where the Lead's were empty).
+  // Always the AI's value, applied or not. city/state are not duplicated here — see
   // Lead.quantity/application/timeline comment above.
   quantity        Int?
   application     String?
@@ -719,10 +723,48 @@ model LeadAiCallLog {
   transcriptRef   String?
   recordingRef    String?
   performedBy     String?
+  // D.O.T. call-result write-back (Phase 0): AI-reported values that
+  // conflicted with a non-empty value already on the Lead, so they were NOT
+  // written to the Lead. Kept here for a salesperson to review and apply by
+  // editing the lead. Shape: [{ field, aiValue, leadValue }]. Null when
+  // nothing conflicted.
+  fieldSuggestions Json?
   createdAt       DateTime          @default(now())
 
   @@index([leadId])
   @@index([externalCallId])
+}
+
+// D.O.T. call-result write-back (Phase 0) — what the voice-agent itself
+// reports happened on its side of an answered call. Kept separate from
+// TelephonyTestCallStatus (Exotel's view of the call: ringing/busy/...) and
+// from AiQualification (Meera's read on the lead).
+enum VoiceAgentCallOutcome {
+  // A conversation took place and no Sarvam/agent component failed.
+  CONVERSATION_COMPLETED
+  // Connected, but the customer never said anything the agent heard.
+  NO_CONVERSATION
+  // STT/LLM/TTS or the agent itself failed — never qualified.
+  AGENT_ERROR
+}
+
+// How a manual test call's AI result was (or was not) attached to a Lead —
+// approved Decision 15: attach only when the lead is unambiguous.
+enum TelephonyResultLeadMatch {
+  // The test call was started for a specific lead (TelephonyTestCall.leadId).
+  EXPLICIT_LEAD
+  // Exactly one active lead has this number as its primary or alternate phone.
+  SINGLE_MATCH
+  // No active lead has this phone number — result kept on the test call only.
+  NO_MATCH
+  // More than one active lead has this phone number — kept on the test call only.
+  MULTIPLE_MATCHES
+  // The explicitly linked lead was deleted or is closed (WON/LOST) — kept on
+  // the test call only.
+  LEAD_UNAVAILABLE
+  // The explicitly linked lead is active, but neither its primary nor its
+  // alternate phone is the number that was dialled — kept on the test call only.
+  EXPLICIT_LEAD_PHONE_MISMATCH
 }
 
 // D.O.T. AI Lead Assistant Phase 2A — Telephony Test Foundation.
@@ -770,6 +812,22 @@ model TelephonyTestCall {
   answeredAt      DateTime?
   completedAt     DateTime?
   durationSeconds Int?
+  // D.O.T. call-result write-back (Phase 0). Set once, by the voice-agent's
+  // service-authenticated result submission matched on providerCallId
+  // (Exotel CallSid). aiResultReceivedAt doubles as the idempotency marker:
+  // a repeated submission for the same call finds it already set and
+  // changes nothing. An answered call with this still null is a call whose
+  // result never arrived.
+  aiResultReceivedAt DateTime?
+  aiResultOutcome    VoiceAgentCallOutcome?
+  // The sanitized result, including any fields rejected as invalid and why.
+  aiResult           Json?
+  aiResultLeadMatch  TelephonyResultLeadMatch?
+  // Lead the result was written to (EXPLICIT_LEAD / SINGLE_MATCH only).
+  // Plain scalar, deliberately NOT `leadId` above: leadId means "the lead
+  // this test call was started for" and is what the Telephony Test page
+  // displays, which this phase must not change.
+  aiResultLeadId     String?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 

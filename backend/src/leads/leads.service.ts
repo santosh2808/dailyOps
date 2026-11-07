@@ -31,6 +31,7 @@ import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { UpdateLeadAiDto } from './dto/update-lead-ai.dto';
 import { CreateLeadAiCallLogDto } from './dto/create-lead-ai-call-log.dto';
+import { writeAiCallResultToLead } from './ai-call-result';
 import { QueryLeadDto } from './dto/query-lead.dto';
 import { canViewAllLeads, leadVisibilityWhere, mustSelfAssignNewLeads, type LeadViewer } from './lead-visibility';
 import { LeadProductInputDto } from './dto/lead-product-input.dto';
@@ -2223,14 +2224,22 @@ export class LeadsService {
   // it automatically (see CreateLeadAiCallLogDto's comment) — it exists so
   // the AI Follow-up UI + Timeline can be exercised end-to-end with
   // manually-entered test data ahead of the actual telephony integration.
+  //
+  // D.O.T. call-result write-back (Phase 0): the actual write now lives in
+  // writeAiCallResultToLead() (shared with the voice-agent's result path),
+  // which fills only EMPTY city/state/quantity/application/timeline and keeps
+  // a conflicting AI value as a suggestion on the call log instead of
+  // overwriting what a person entered. Same endpoint, DTO, permission and
+  // response shape as before.
   async addAiCallLog(id: string, dto: CreateLeadAiCallLogDto, actorName?: string) {
     await this.findOne(id);
     return this.prisma.$transaction(async (tx) => {
-      await tx.leadAiCallLog.create({
-        data: {
-          leadId: id,
-          externalCallId: dto.externalCallId,
+      await writeAiCallResultToLead(
+        tx,
+        id,
+        {
           status: dto.status,
+          externalCallId: dto.externalCallId,
           startedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
           endedAt: dto.endedAt ? new Date(dto.endedAt) : undefined,
           durationSeconds: dto.durationSeconds,
@@ -2240,53 +2249,17 @@ export class LeadsService {
           quantity: dto.quantity,
           application: dto.application,
           timeline: dto.timeline,
+          city: dto.city,
+          state: dto.state,
+          siteVisitRequested: dto.siteVisitRequested,
+          callbackRequested: dto.callbackRequested,
+          callbackAt: dto.callbackAt !== undefined ? (dto.callbackAt ? new Date(dto.callbackAt) : null) : undefined,
           transcriptRef: dto.transcriptRef,
           recordingRef: dto.recordingRef,
-          performedBy: actorName,
         },
-      });
-
-      const updated = await tx.lead.update({
-        where: { id },
-        data: {
-          aiStatus: dto.status,
-          aiCallAttempts: { increment: 1 },
-          lastAiCallAt: dto.startedAt ? new Date(dto.startedAt) : new Date(),
-          ...(dto.qualification !== undefined ? { aiQualification: dto.qualification } : {}),
-          ...(dto.summary !== undefined ? { aiSummary: dto.summary } : {}),
-          // Phase 3A — structured requirement rollup, same "only write if the
-          // caller actually sent it" pattern as every field in this block.
-          // city/state deliberately go to the existing Lead.city/Lead.state
-          // columns (no new duplicate fields) rather than anywhere else.
-          ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
-          ...(dto.application !== undefined ? { application: dto.application } : {}),
-          ...(dto.timeline !== undefined ? { timeline: dto.timeline } : {}),
-          ...(dto.city !== undefined ? { city: dto.city } : {}),
-          ...(dto.state !== undefined ? { state: dto.state } : {}),
-          ...(dto.siteVisitRequested !== undefined ? { aiSiteVisitRequested: dto.siteVisitRequested } : {}),
-          ...(dto.callbackRequested !== undefined ? { aiCallbackRequested: dto.callbackRequested } : {}),
-          ...(dto.callbackAt !== undefined ? { aiCallbackAt: dto.callbackAt ? new Date(dto.callbackAt) : null } : {}),
-          // A language the call was actually conducted in is a direct
-          // customer signal — always outranks the state-based default, and
-          // is recorded as AI_DETECTED (not CUSTOMER — nobody typed this in
-          // directly) so a later explicit customer statement can still
-          // override it via updateAi()'s languageSource passthrough.
-          ...(dto.language !== undefined
-            ? { preferredLanguage: dto.language, languageSource: LanguageSource.AI_DETECTED }
-            : {}),
-        },
-        include: LEAD_DETAIL_INCLUDE,
-      });
-
-      await this.logHistory(
-        tx,
-        id,
-        'AI_CALL_LOGGED',
-        `D.O.T. call logged — status ${dto.status}${dto.qualification ? `, qualification ${dto.qualification}` : ''}${dto.quantity ? `, quantity ${dto.quantity}` : ''}`,
         actorName,
       );
-
-      return updated;
+      return tx.lead.findUniqueOrThrow({ where: { id }, include: LEAD_DETAIL_INCLUDE });
     });
   }
 

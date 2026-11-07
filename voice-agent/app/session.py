@@ -77,7 +77,9 @@ class ExotelSession:
                 logger.info("WAITING FOR EXOTEL FRAME")
                 raw = await self._ws.receive_text()
                 logger.info("EXOTEL FRAME RECEIVED: length=%d", len(raw))
-                logger.info("EXOTEL RAW FRAME PREFIX: %s", raw[:200])
+                # The raw frame content is deliberately NOT logged: Exotel's
+                # "start" frame carries the caller's and callee's full phone
+                # numbers (and media frames carry call audio).
                 try:
                     message = json.loads(raw)
                 except json.JSONDecodeError:

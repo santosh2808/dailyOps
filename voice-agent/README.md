@@ -111,3 +111,53 @@ This has not been exercised against a live Sarvam account end-to-end in
 this environment; verify it with your own Sarvam credentials before
 relying on it, and watch the service logs for `Sarvam STT send failed`
 warnings during your first real test call.
+
+## Call results → DailyOps
+
+After each answered call the agent submits the result to DailyOps at
+`POST /api/v1/telephony/voice-agent/call-results`, identified by Exotel's
+**CallSid** (DailyOps matches it to the call it placed; the agent never
+searches leads by phone number and never sends one). Authentication is the
+shared `VOICE_AGENT_SERVICE_KEY` (same value on the backend), sent in the
+`X-Voice-Agent-Key` header — not an employee login.
+
+- Any 2xx is success. Network errors, timeouts, 408/425/429 and 5xx are
+  retried, up to 4 attempts in total; other 4xx are not retried.
+- Redirects are **not** followed (that would send the key elsewhere): set
+  `DAILYOPS_API_BASE_URL` to the final `https://` URL.
+- The post-call qualification extraction is capped at 20 seconds; on
+  timeout the result is still submitted, with no qualification.
+- The reported `outcome` is `CONVERSATION_COMPLETED`, `NO_CONVERSATION`, or
+  `AGENT_ERROR`.
+
+**Known trade-off (strict failure rule, kept on purpose for Phase 0).** Any
+STT/LLM/TTS or agent failure *during* the call — even a single transient
+one, such as one LLM turn falling back to "Sorry, could you say that
+again?" — makes the outcome `AGENT_ERROR`. Extraction is then skipped and no
+AI data from that call is applied to the lead, so a technical failure can
+never become a qualification, but a mostly-good call with one glitch yields
+no qualification either. Revisit (e.g. distinguish fatal from transient
+errors, or keep a partial extraction for review only) once real-call data
+shows how often this happens.
+
+## Tests
+
+All tests are simulated — no Exotel, Sarvam or DailyOps calls. Run them in
+the deployed Python version with networking disabled, mounting **only**
+`app/` and `tests/` read-only, so a local `.env` with real keys is never
+visible to the test process (`app/config.py` loads `.env` at import time):
+
+```bash
+cd voice-agent
+# .dockerignore keeps .env out of the build context; only requirements are copied.
+docker build -t dailyops-voice-agent-test -f - . <<'DOCKERFILE'
+FROM python:3.11-slim
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+WORKDIR /src
+DOCKERFILE
+docker run --rm --network none \
+  -v "$PWD/app":/src/app:ro -v "$PWD/tests":/src/tests:ro \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  dailyops-voice-agent-test python -m pytest -q -p no:cacheprovider tests
+```

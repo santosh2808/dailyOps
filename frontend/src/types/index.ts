@@ -471,6 +471,11 @@ export interface Lead {
   aiSiteVisitRequested: boolean;
   aiCallbackRequested: boolean;
   aiCallbackAt?: string | null;
+  // Requirement fields D.O.T. may fill when empty (always returned by the
+  // backend; typed here so AI suggestions can be compared against them).
+  quantity?: number | null;
+  application?: string | null;
+  timeline?: string | null;
   // Lead re-engagement: set once at creation only (immutable — see
   // UpdateLeadDto on the backend). previousLead is the closed Lost lead this
   // one is a follow-up on; reengagedLeads is the reverse direction, so a
@@ -580,7 +585,17 @@ export interface LeadAiCallLog {
   transcriptRef?: string | null;
   recordingRef?: string | null;
   performedBy?: string | null;
+  // AI values that differed from what was already on the lead, so they were
+  // NOT applied — shown for a salesperson to review.
+  // Stored JSON — validated before display (see LeadAiFollowUpCard).
+  fieldSuggestions?: unknown;
   createdAt: string;
+}
+
+export interface LeadAiFieldSuggestion {
+  field: "city" | "state" | "quantity" | "application" | "timeline";
+  aiValue: string | number;
+  leadValue: string | number;
 }
 
 // D.O.T. AI Lead Assistant Phase 1 — foundation-only settings singleton.
